@@ -105,9 +105,10 @@ fn decode(path: &str) -> Option<(u32, Vec<u8>)> {
     Some((out, rgba))
 }
 
-/// Texture handle for the art file `name`, or -1 when the name is not a plain
-/// PNG file name or the file cannot be decoded. The first call decodes and
-/// uploads; later calls return the cached handle.
+/// Texture handle for the art file `name`, -1 when the name is not a plain
+/// PNG file name or the file cannot be decoded, or -2 while the file is being
+/// decoded on a worker thread (`jobs`); the guest asks again on a later
+/// frame. Once decoded, the handle is cached per name.
 pub unsafe fn texture(ui: &mut pocketjs_core::Ui, name: &str) -> i32 {
     if !valid_name(name) {
         return -1;
@@ -115,8 +116,16 @@ pub unsafe fn texture(ui: &mut pocketjs_core::Ui, name: &str) -> i32 {
     if let Some((_, handle)) = CACHE.iter().find(|(cached, _)| cached == name) {
         return *handle;
     }
-    let handle = match decode(&format!("{}/{name}", dir())) {
-        Some((side, rgba)) => {
+    let path = format!("{}/{name}", dir());
+    let poll = crate::jobs::poll(&format!("art:{name}"), move || {
+        decode(&path).map(|(side, rgba)| (side, side, rgba))
+    });
+    let pixels = match poll {
+        crate::jobs::Poll::Pending => return crate::jobs::PENDING,
+        crate::jobs::Poll::Ready(pixels) => pixels,
+    };
+    let handle = match pixels {
+        Some((side, _, rgba)) => {
             let handle = ui.upload_texture_flags(
                 &rgba,
                 side,

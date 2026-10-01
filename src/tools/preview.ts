@@ -50,6 +50,11 @@ const TITLES: [id: string, title: string][] = [
   ["SAVEMGR00", "Save Manager"],
   ["PLUGLOAD1", "Plugin Loader"],
   ["TINYSYNTH", "Tiny Synth"],
+  // A large category, to check that a long list scrolls like a short one.
+  ...Array.from({ length: 120 }, (_, index): [string, string] => [
+    `HBREW${String(index).padStart(4, "0")}`,
+    `Homebrew Sample ${index + 1}`,
+  ]),
 ];
 
 const ICON_COLORS: [string, string][] = [
@@ -240,6 +245,14 @@ function installNet(ops: Record<string, unknown>): void {
 
 function installHost(ops: Record<string, unknown>): void {
   installNet(ops);
+  // Like the Vita host, the first requests for a picture answer -2 ("still
+  // decoding") and a later one answers with the handle.
+  const asked = new Map<string, number>();
+  const stillDecoding = (key: string): boolean => {
+    const count = (asked.get(key) ?? 0) + 1;
+    asked.set(key, count);
+    return count < 4;
+  };
   // A downloaded candidate gets a generated picture, numbered by its id.
   const art = new Map<string, number>();
   // Accent per texture handle, as the Vita host keeps it.
@@ -249,6 +262,7 @@ function installHost(ops: Record<string, unknown>): void {
   ops.__appArt = (name: string): number => {
     let handle = art.get(name);
     if (handle === undefined) {
+      if (stillDecoding(`art:${name}`)) return -2;
       const index = Number(name.replace(/\D/g, "")) || 0;
       handle = uploadImage(ops, iconPixels(index, `S ${index % 100}`), 128, 128);
       accents.set(handle, iconAccent(index));
@@ -271,6 +285,7 @@ function installHost(ops: Record<string, unknown>): void {
     if (index < 0 || index % 5 === 4) return -1;
     let handle = handles.get(id);
     if (handle === undefined) {
+      if (stillDecoding(`icon:${id}`)) return -2;
       handle = uploadImage(ops, iconPixels(index, TITLES[index][1]), 128, 128);
       accents.set(handle, iconAccent(index));
       handles.set(id, handle);
@@ -280,6 +295,7 @@ function installHost(ops: Record<string, unknown>): void {
   // Like the Vita host, a picture is uploaded on request. Every fourth title
   // has none, to show the fallback.
   const backdrops = new Map<string, number>();
+
   ops.__appBackdrop = (id: string, file = ""): number => {
     const title = TITLES.findIndex(([known]) => known === id);
     // A file from the backdrops folder is numbered by the digits in its name.
@@ -288,6 +304,7 @@ function installHost(ops: Record<string, unknown>): void {
     const key = file || id;
     let handle = backdrops.get(key);
     if (handle === undefined) {
+      if (stillDecoding(`backdrop:${key}`)) return -2;
       handle = uploadImage(ops, backdropPixels(index), 512, 256);
       backdrops.set(key, handle);
     }
@@ -372,6 +389,16 @@ const SHOTS: Shot[] = [
     name: "34-dynamic-list",
     steps: [BTN.SELECT, BTN.LEFT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 5), [0, 40]],
   },
+  // Deep into a category of 125 titles, in each view.
+  { name: "35-long-shelf", steps: [...tap(BTN.RTRIGGER, 2), [BTN.RIGHT, 420], [0, 30]] },
+  {
+    name: "36-long-grid",
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RTRIGGER, 2), [BTN.DOWN, 150], BTN.RIGHT, [0, 30]],
+  },
+  {
+    name: "37-long-list",
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.RTRIGGER, 2), [BTN.DOWN, 300], BTN.UP, [0, 30]],
+  },
   // Holding RIGHT for a second repeats the move.
   { name: "12-hold-repeat", steps: [[BTN.RIGHT, 60]] },
   // Launch from another category, start again: the selection comes back.
@@ -386,6 +413,13 @@ function advance(world: SimWorld, mask: number, frames: number): void {
     world.frame(mask);
     for (let t = 0; t < world.ticksPerFrame; t++) world.tick();
   }
+}
+
+/** Nodes in a DevTools tree snapshot. */
+function countNodes(tree: unknown): number {
+  if (!tree || typeof tree !== "object") return 0;
+  const children = (tree as { k?: unknown[] }).k ?? [];
+  return 1 + children.reduce<number>((sum, child) => sum + countNodes(child), 0);
 }
 
 async function capture(shot: Shot): Promise<void> {
@@ -419,10 +453,12 @@ async function capture(shot: Shot): Promise<void> {
   }
   // Let transitions and springs settle before the frame is read.
   advance(world, 0, 50);
+
   const file = join(OUT, `${shot.name}.png`);
   await Bun.write(file, encodePNG(world.render(), W * SCALE, H * SCALE));
+  // The tree probe advances the world a frame, so it runs after the frame is read.
   files.dispose();
-  console.log(`  ${file.slice(ROOT.length + 1)}`);
+  console.log(`  ${file.slice(ROOT.length + 1)}  (${countNodes(world.getTree())} nodes)`);
 }
 
 const filters = Bun.argv.slice(2);

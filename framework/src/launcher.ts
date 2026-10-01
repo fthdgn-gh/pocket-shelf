@@ -57,7 +57,8 @@ export function closeApp(output: string): boolean {
 }
 
 /** Texture handle of a listed native app's icon, -1 when the host has no
- *  icon for it or does not implement the op. Bind it under a name with the
+ *  icon for it or does not implement the op, -2 while the host decodes it
+ *  (ask again on a later frame). Bind it under a name with the
  *  renderer's registerTexture(key, handle) and reference it as <Image src={key}>. */
 export function appIcon(output: string): number {
   return getOps().appIcon?.(output) ?? -1;

@@ -304,6 +304,8 @@ export const OP = {
   //                texture handle of a listed app's icon (PSM_8888, bilinear),
   //                decoded host-side on first request and cached per output.
   //                -1 = unknown output, no icon, or an undecodable image.
+  //                -2 = the host is decoding it on a worker thread; the guest
+  //                asks again on a later frame.
 } as const;
 
 // ---------------------------------------------------------------------------

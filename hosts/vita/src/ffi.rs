@@ -883,7 +883,7 @@ unsafe extern "C" fn js_installed_table(
     JS_NewStringLen(ctx, value.as_ptr(), value.len())
 }
 
-/// ui.appIcon(titleId) -> texture handle | -1 (spec op 52).
+/// ui.appIcon(titleId) -> texture handle | -1 | -2 (spec op 57).
 #[cfg(feature = "installed-apps")]
 unsafe extern "C" fn js_installed_icon(
     ctx: *mut JSContext,
@@ -897,10 +897,11 @@ unsafe extern "C" fn js_installed_icon(
     JS_NewInt32(ctx, handle)
 }
 
-/// ui.__appBackdrop(titleId, file) -> texture handle | -1. Host extra (not a
-/// spec op): the title's full-screen picture, or the named PNG from the data
-/// folder's `backdrops` directory when `file` is not empty. Decoded on
-/// request, and held until the guest passes the handle to
+/// ui.__appBackdrop(titleId, file) -> texture handle | -1 | -2. Host extra
+/// (not a spec op): the title's full-screen picture, or the named PNG from
+/// the data folder's `backdrops` directory when `file` is not empty. It is
+/// decoded on a worker thread: -2 means "not ready, ask again on a later
+/// frame". The handle is held until the guest passes it to
 /// `__appBackdropFree`.
 #[cfg(feature = "installed-apps")]
 unsafe extern "C" fn js_app_backdrop(
@@ -1007,7 +1008,7 @@ unsafe extern "C" fn js_net_close(
     JS_NewInt32(ctx, 0)
 }
 
-/// ui.__appArt(fileName) -> texture handle | -1. Host extra (not a spec op):
+/// ui.__appArt(fileName) -> texture handle | -1 | -2. Host extra (not a spec op):
 /// decodes a PNG from the launcher's art folder.
 #[cfg(all(feature = "installed-apps", feature = "data-fs"))]
 unsafe extern "C" fn js_app_art(

@@ -28,7 +28,8 @@ export function pageSize(view: ViewMode): number {
 export function iconRadius(view: ViewMode): number {
   if (view === "grid") return GRID_COLUMNS * 2;
   if (view === "list") return LIST_ROWS + 2;
-  return 2;
+  // Two full tiles show on each side of the selected one, and part of a third.
+  return 3;
 }
 
 /**

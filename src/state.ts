@@ -12,6 +12,7 @@ import {
   type Category,
 } from "./categories.ts";
 import {
+  TEXTURE_PENDING,
   acquireBackdrop,
   artAccent,
   artTexture,
@@ -49,6 +50,12 @@ export const MENU_VISIBLE = 7;
 
 /** Frames the selection rests on a title before its backdrop is loaded (0.25 s at 60 per second). */
 const BACKDROP_DELAY = 15;
+
+/** Frames between two requests for a backdrop the host is still decoding. */
+const BACKDROP_RETRY = 2;
+
+/** Frames between two requests for the icons the host is still decoding. */
+const ICON_RETRY = 2;
 
 /** Rows in the per-title editor: category, title, box art, backdrop, SteamGridDB, reset. */
 export const EDITOR_ROWS = 6;
@@ -215,22 +222,31 @@ export function createLauncherState(catalog: Catalog) {
   const iconBox = (id: string): BoxColors | undefined => (iconBoxOn() ? boxes()[id] : undefined);
   const loadedSource = new Map<string, string>();
   const registeredKeys = new Set<string>();
+  // Whether an icon near the selection is still being decoded by the host.
+  let iconsPending = false;
+  let iconWait = 0;
   // The strongest color of each loaded icon, as 0xRRGGBB (Dynamic theme).
   const iconColors = new Map<string, number | undefined>();
   const loadIcon = (game: Game) => {
     const source = game.art ? `art:${game.art}` : "app";
     if (loadedSource.get(game.id) === source) return;
-    loadedSource.set(game.id, source);
     let handle = -1;
     let key = "";
     if (game.art) {
       handle = artTexture(game.art);
       key = `art.${game.art}`;
     }
-    if (handle < 0) {
+    if (handle === -1) {
       handle = appIcon(game.id);
       key = `installed.${game.id}`;
     }
+    if (handle === TEXTURE_PENDING) {
+      // The host is decoding it. The tile shows the title's initials until
+      // `frame` asks again and gets the icon.
+      iconsPending = true;
+      return;
+    }
+    loadedSource.set(game.id, source);
     if (handle < 0) {
       setIcons(({ [game.id]: _removed, ...rest }) => rest);
       setBoxes(({ [game.id]: _removed, ...rest }) => rest);
@@ -378,6 +394,11 @@ export function createLauncherState(catalog: Catalog) {
     const id = game?.id;
     const file = game?.backdrop;
     const handle = id && native && file !== NO_BACKDROP ? acquireBackdrop(id, file ?? "") : -1;
+    if (handle === TEXTURE_PENDING) {
+      // The host is decoding it. The picture on screen stays until it is ready.
+      backdropWait = BACKDROP_RETRY;
+      return;
+    }
     if (handle < 0) {
       clearBackdrop();
       return;
@@ -404,6 +425,12 @@ export function createLauncherState(catalog: Catalog) {
   const frame = () => {
     pumpNet();
     pumpBackdrops();
+    online.frame();
+    if (iconsPending && ++iconWait >= ICON_RETRY) {
+      iconWait = 0;
+      iconsPending = false;
+      loadIconsAround();
+    }
     blendDynamicColor();
     if (backdropWait > 0 && --backdropWait === 0) loadBackdrop();
   };
@@ -603,15 +630,8 @@ export function createLauncherState(catalog: Catalog) {
     if (pickerKind() === "backdrop") {
       // Row 0 goes back to the title's own picture, row 1 draws none.
       const name = row === 0 ? undefined : row === 1 ? NO_BACKDROP : artFiles()[row - 2];
-      if (name && name !== NO_BACKDROP) {
-        // Load it once to check that the host can read it.
-        const handle = acquireBackdrop(game.id, name);
-        if (handle < 0) {
-          setArtNote("That image could not be read (PNG, up to about 1920x1080).");
-          return;
-        }
-        releaseBackdrop(handle);
-      }
+      // The host decodes the file in the background. One it cannot read
+      // leaves the title without a backdrop.
       patchOverride(game.id, { backdrop: name });
       setArtOpen(false);
       return;
@@ -619,10 +639,8 @@ export function createLauncherState(catalog: Catalog) {
     // Row 0 goes back to a file matched by name (or the title's own icon),
     // row 1 always shows the title's own icon.
     const name = row === 0 ? undefined : row === 1 ? USE_ICON : artFiles()[row - 2];
-    if (name && name !== USE_ICON && artTexture(name) < 0) {
-      setArtNote("That image could not be read (PNG, up to about 1920x1080).");
-      return;
-    }
+    // The host decodes the file in the background. One it cannot read leaves
+    // the title with its own icon.
     patchOverride(game.id, { art: name });
     loadIconsAround();
     setArtOpen(false);

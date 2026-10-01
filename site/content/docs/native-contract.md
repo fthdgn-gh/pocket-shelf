@@ -90,7 +90,7 @@ cases.
 | 47–50 | `fontStreamConfigure`, `fontStreamRequests`, `fontStreamCommit`, `fontStreamStats` — a bounded external glyph cache fed by CPU handoff | `text.glyphs.streamed`. |
 | 51 | `appClose` — request graceful closure of a configured child app | Native navigation hosts only. |
 | 52–56 | `physicsCreate`, `physicsApply`, `physicsDestroy`, `physicsEvents`, `physicsQuery` — worlds, bodies, colliders, zones and emitters stepped inside `tick()`; parameters, commands and events are little-endian f64 records (`contracts/spec/physics.ts`). `physicsApply` takes any number of `[handle, cmd, argc, arg*]` records in one crossing. `physicsEvents` drains every world's records once per frame and returns `undefined` when there are none; the framework calls it only while a world has handlers, which is also when the world records. `physicsQuery` is a cold-path read, one crossing per value | `ui.physics`. See [Physics](/docs/physics/). |
-| 57 | `appIcon` — texture handle of a listed native app's icon, decoded host-side on first request and cached per output | Hosts with native app navigation (`appTable` with `kind: "native"`). Returns -1 for an unknown output or a missing icon. |
+| 57 | `appIcon` — texture handle of a listed native app's icon, decoded host-side on first request and cached per output | Hosts with native app navigation (`appTable` with `kind: "native"`). Returns -1 for an unknown output or a missing icon, and -2 while a worker thread decodes the icon. |
 
 For the meaning of `PROP` ids, `ENUMS`, and how a `class` string becomes a `styleId`, see [Styling](/docs/styling/) and the [API reference](/docs/api/). For `animate`/`easing` semantics see [Animation](/docs/animation/).
 

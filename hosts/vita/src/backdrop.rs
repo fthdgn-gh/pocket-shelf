@@ -1,12 +1,18 @@
 //! Background art of installed titles (cargo feature `installed-apps`).
 //!
-//! A title ships a full-screen picture next to its icon: `sce_sys/pic0.png`
+//! A title ships a full-screen picture next to its icon: `pic0.png`
 //! (960x544), or the LiveArea background named by
-//! `sce_sys/livearea/contents/template.xml` (840x500). The launcher draws it
+//! `livearea/contents/template.xml` (840x500). Both are looked for in the
+//! title's `sce_sys` folder and in the system's copy of it (see
+//! `installed::metadata_dirs`). The launcher draws the picture
 //! behind the selected title. The host decodes the file, crops it to the
 //! screen's 30:17 shape and averages it down to a 512x256 texture, the
 //! largest power-of-two size the core accepts; the guest stretches that back
 //! over the screen.
+//!
+//! Reading and decoding a picture takes long enough to drop frames, so it
+//! runs on a worker thread (`jobs`): a request answers `PENDING` until the
+//! pixels are ready, and the guest asks again on later frames.
 //!
 //! A texture this size is 512 KiB, so the guest says when it is done with
 //! one (`release`), and the host frees it then. The host does not free a
@@ -16,7 +22,8 @@ use std::fs;
 use std::string::String;
 use std::vec::Vec;
 
-const APP_ROOT: &str = "ux0:/app";
+use crate::jobs::{self, Pixels, Poll, PENDING};
+
 /// Largest file read, in bytes.
 const FILE_MAX: u64 = 8 * 1024 * 1024;
 /// Largest image decoded, in pixels (1920x1080). The decoded frame is held
@@ -33,15 +40,17 @@ const ASPECT_H: u64 = 17;
 /// gets -1 for the extra ones.
 const HELD_MAX: usize = 8;
 
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+
 /// Loaded textures, by picture.
 static mut CACHE: Vec<(String, i32)> = Vec::new();
 /// Titles found to have no usable picture, so their files are read once.
 static mut MISSING: Vec<String> = Vec::new();
 
 /// File name of the LiveArea background, from the `<image>` inside
-/// `<livearea-background>` of the title's template.
-fn livearea_image(title_id: &str) -> Option<String> {
-    let path = format!("{APP_ROOT}/{title_id}/sce_sys/livearea/contents/template.xml");
+/// `<livearea-background>` of the template under `base`.
+fn livearea_image(base: &str) -> Option<String> {
+    let path = format!("{base}/livearea/contents/template.xml");
     if fs::metadata(&path).ok()?.len() > 64 * 1024 {
         return None;
     }
@@ -57,26 +66,44 @@ fn livearea_image(title_id: &str) -> Option<String> {
     plain.then(|| String::from(name))
 }
 
-/// Files to try for a title, best first.
-fn candidates(title_id: &str) -> Vec<String> {
-    let base = format!("{APP_ROOT}/{title_id}/sce_sys");
-    let mut paths = vec![format!("{base}/pic0.png")];
-    if let Some(name) = livearea_image(title_id) {
-        paths.push(format!("{base}/livearea/contents/{name}"));
+/// Files to try in a title's metadata folders, best first.
+fn candidates(dirs: &[String]) -> Vec<String> {
+    let mut paths = Vec::new();
+    for base in dirs {
+        paths.push(format!("{base}/pic0.png"));
+        if let Some(name) = livearea_image(base) {
+            paths.push(format!("{base}/livearea/contents/{name}"));
+        }
+        paths.push(format!("{base}/livearea/contents/bg.png"));
+        paths.push(format!("{base}/livearea/contents/bg0.png"));
     }
-    paths.push(format!("{base}/livearea/contents/bg.png"));
-    paths.push(format!("{base}/livearea/contents/bg0.png"));
     paths
+}
+
+/// The bytes of a PNG file, or None when the file is missing, too large, or
+/// not a PNG (an encrypted file is not).
+fn read_png(path: &str) -> Option<Vec<u8>> {
+    if fs::metadata(path).ok()?.len() > FILE_MAX {
+        return None;
+    }
+    let bytes = fs::read(path).ok()?;
+    bytes.starts_with(&PNG_SIGNATURE).then_some(bytes)
+}
+
+/// The file of a listed title's own picture. A retail game the home screen
+/// has not opened yet has no plain copy, so its own files are read through a
+/// decrypting mount (`installed::with_decrypted`). The mount is held for the
+/// read only; decoding happens after it is released.
+fn read_title(title_id: &str) -> Option<Vec<u8>> {
+    let from = |dirs: &[String]| candidates(dirs).iter().find_map(|path| read_png(path));
+    from(&crate::installed::metadata_dirs(title_id))
+        .or_else(|| unsafe { crate::installed::with_decrypted(title_id, from) })
 }
 
 /// Decode, crop to the screen's shape and box-filter down. Returns the
 /// texture's width and height and its RGBA pixels.
-fn decode(path: &str) -> Option<(u32, u32, Vec<u8>)> {
-    if fs::metadata(path).ok()?.len() > FILE_MAX {
-        return None;
-    }
-    let file = fs::File::open(path).ok()?;
-    let mut decoder = png::Decoder::new(std::io::BufReader::new(file));
+fn decode(bytes: &[u8]) -> Option<Pixels> {
+    let mut decoder = png::Decoder::new(bytes);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;
     let (width, height) = {
@@ -168,52 +195,62 @@ fn custom_path(_file: &str) -> Option<String> {
     None
 }
 
-/// Texture handle of a background picture, or -1 when there is none the host
-/// can decode. With `file` empty it is the listed title's own picture;
-/// otherwise it is that PNG from the data folder's `backdrops` directory.
-/// The handle stays valid until it is passed to `release`; asking for the
-/// same picture again before that returns the same handle.
+/// Texture handle of a background picture: -1 when there is none the host
+/// can decode, or `PENDING` while it is being read and decoded; the guest
+/// asks again on a later frame. With `file` empty it is the listed title's
+/// own picture; otherwise it is that PNG from the data folder's `backdrops`
+/// directory. The handle stays valid until it is passed to `release`; asking
+/// for the same picture again before that returns the same handle.
 pub unsafe fn texture(ui: &mut pocketjs_core::Ui, title_id: &str, file: &str) -> i32 {
     // A file's key cannot collide with a title id, which has no colon.
     let key = if file.is_empty() { String::from(title_id) } else { format!("file:{file}") };
-    let key = key.as_str();
     if file.is_empty() && !crate::installed::listed(title_id) {
         return -1;
     }
-    if MISSING.iter().any(|id| id == key) {
+    if MISSING.iter().any(|id| *id == key) {
         return -1;
     }
-    if let Some((_, handle)) = CACHE.iter().find(|(id, _)| id == key) {
+    if let Some((_, handle)) = CACHE.iter().find(|(id, _)| *id == key) {
         return *handle;
     }
     if CACHE.len() >= HELD_MAX {
         return -1;
     }
-    let decoded = if file.is_empty() {
-        candidates(title_id).iter().find_map(|path| decode(path))
-    } else {
-        custom_path(file).and_then(|path| decode(&path))
+    let path = if file.is_empty() { None } else { custom_path(file) };
+    if !file.is_empty() && path.is_none() {
+        return -1;
+    }
+    let title = String::from(title_id);
+    let poll = jobs::poll(&format!("backdrop:{key}"), move || {
+        let bytes = match path {
+            Some(path) => read_png(&path),
+            None => read_title(&title),
+        };
+        bytes.and_then(|bytes| decode(&bytes))
+    });
+    let pixels = match poll {
+        Poll::Pending => return PENDING,
+        Poll::Ready(pixels) => pixels,
     };
-    let handle = match decoded {
-        Some((width, height, rgba)) => ui.upload_texture_flags(
-            &rgba,
-            width,
-            height,
-            pocketjs_core::spec::psm::PSM_8888,
-            pocketjs_core::spec::img::FLAG_LINEAR,
-        ),
-        None => -1,
-    };
-    if handle < 0 {
+    let Some((width, height, rgba)) = pixels else {
         // A title's own files do not change while the launcher runs. A file in
         // the data folder can appear later (a download), so it is tried again.
         if file.is_empty() {
-            MISSING.push(String::from(key));
+            MISSING.push(key);
         }
         return -1;
+    };
+    let handle = ui.upload_texture_flags(
+        &rgba,
+        width,
+        height,
+        pocketjs_core::spec::psm::PSM_8888,
+        pocketjs_core::spec::img::FLAG_LINEAR,
+    );
+    if handle >= 0 {
+        crate::graphics::register_texture(ui, handle);
+        CACHE.push((key, handle));
     }
-    crate::graphics::register_texture(ui, handle);
-    CACHE.push((String::from(key), handle));
     handle
 }
 

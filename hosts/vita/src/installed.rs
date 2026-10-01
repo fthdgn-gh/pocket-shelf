@@ -34,6 +34,9 @@ const SELF_TITLE_ID: &str = match option_env!("VITA_DEFAULT_TITLE_ID") {
 };
 
 const APP_ROOT: &str = "ux0:/app";
+/// Where the system keeps a plain copy of each title's `sce_sys` files (icon,
+/// pictures, LiveArea) for the home screen.
+const META_ROOT: &str = "ur0:appmeta";
 /// Largest `icon0.png` the host will read; Vita icons are 128x128 and a few
 /// tens of KiB.
 const ICON_MAX: usize = 2 * 1024 * 1024;
@@ -131,6 +134,76 @@ unsafe fn titles() -> &'static [Title] {
     CACHE.as_deref().unwrap_or(&[])
 }
 
+/// Folders that hold a title's icon and pictures, in the order to try them:
+/// the title's own `sce_sys`, then the system's copy. A retail game's own
+/// files are encrypted and do not decode; the system's copy is plain, and
+/// exists once the home screen has opened the game's LiveArea.
+pub fn metadata_dirs(title_id: &str) -> [String; 2] {
+    [
+        format!("{APP_ROOT}/{title_id}/sce_sys"),
+        format!("{META_ROOT}/{title_id}"),
+    ]
+}
+
+/// Run `read` with a retail game's encrypted files readable.
+///
+/// A retail game's folder is a PFS volume: its files, the icon and pictures
+/// included, are encrypted on disk. `sceAppMgrGameDataMount` asks the system
+/// to decrypt it for this process, the way a file manager opens such a folder.
+/// `read` gets the folders to look in: the title's `sce_sys` by its usual path,
+/// and by the mount point the system returned. The volume is unmounted before
+/// this returns. Returns None for a title that is not a PFS volume, or when
+/// the system refuses the mount (no license for the game on this console).
+/// Callable from any thread.
+pub unsafe fn with_decrypted<R>(title_id: &str, read: impl FnOnce(&[String]) -> Option<R>) -> Option<R> {
+    // The marker of a PFS volume. Homebrew titles do not have it.
+    if fs::metadata(format!("{APP_ROOT}/{title_id}/sce_pfs")).is_err() {
+        return None;
+    }
+    // One mount at a time: the main thread reads icons this way while a
+    // worker thread reads a picture.
+    static MOUNTING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = MOUNTING.lock().ok()?;
+    // The system writes the mount point's name here, up to 16 bytes with its NUL.
+    let mut mount = [0u8; 16];
+    let mut mounted = false;
+    for path in [format!("ux0:app/{title_id}"), format!("ux0:app/{title_id}/")] {
+        let Ok(path) = CString::new(path) else {
+            continue;
+        };
+        let code = vitasdk_sys::sceAppMgrGameDataMount(
+            path.as_ptr(),
+            core::ptr::null(),
+            core::ptr::null(),
+            mount.as_mut_ptr() as *mut _,
+        );
+        if code >= 0 {
+            mounted = true;
+            break;
+        }
+        crate::vita_log(format_args!(
+            "[PocketJS installed] mount {title_id} failed: {:#x}",
+            code as u32
+        ));
+    }
+    if !mounted {
+        return None;
+    }
+    let name = mount
+        .iter()
+        .position(|&byte| byte == 0)
+        .and_then(|end| core::str::from_utf8(&mount[..end]).ok())
+        .unwrap_or("");
+    let mut dirs = vec![format!("{APP_ROOT}/{title_id}/sce_sys")];
+    if !name.is_empty() {
+        dirs.push(format!("{name}sce_sys"));
+        dirs.push(format!("{name}/sce_sys"));
+    }
+    let result = read(&dirs);
+    vitasdk_sys::sceAppMgrUmount(mount.as_ptr() as *const _);
+    result
+}
+
 /// Whether the scan found a title with this id.
 pub unsafe fn listed(title_id: &str) -> bool {
     titles().iter().any(|item| item.title_id == title_id)
@@ -190,14 +263,25 @@ pub unsafe fn launch(title_id: &str) -> bool {
     vitasdk_sys::sceAppMgrLaunchAppByUri(LAUNCH_FLAGS, uri.as_ptr()) >= 0
 }
 
-/// Decode `sce_sys/icon0.png` to tightly packed RGBA. The core only accepts
-/// power-of-two textures up to `TEX_MAX_DIM`; other sizes have no icon.
-fn decode_icon(title_id: &str) -> Option<(u32, u32, Vec<u8>)> {
-    let path = format!("{APP_ROOT}/{title_id}/sce_sys/icon0.png");
-    if fs::metadata(&path).ok()?.len() as usize > ICON_MAX {
+/// The title's `icon0.png` as tightly packed RGBA: from the first folder of
+/// `metadata_dirs` whose copy decodes, or from the title's encrypted files.
+unsafe fn decode_icon(title_id: &str) -> Option<(u32, u32, Vec<u8>)> {
+    let from = |dirs: &[String]| {
+        dirs.iter()
+            .find_map(|base| decode_icon_file(&format!("{base}/icon0.png")))
+    };
+    // A retail game the home screen has not opened yet has no plain copy;
+    // its own file is read through a decrypting mount.
+    from(&metadata_dirs(title_id)).or_else(|| with_decrypted(title_id, from))
+}
+
+/// Decode one `icon0.png`. The core only accepts power-of-two textures up to
+/// `TEX_MAX_DIM`; other sizes have no icon.
+fn decode_icon_file(path: &str) -> Option<(u32, u32, Vec<u8>)> {
+    if fs::metadata(path).ok()?.len() as usize > ICON_MAX {
         return None;
     }
-    let bytes = fs::read(&path).ok()?;
+    let bytes = fs::read(path).ok()?;
     let mut decoder = png::Decoder::new(&bytes[..]);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;
@@ -235,9 +319,10 @@ fn decode_icon(title_id: &str) -> Option<(u32, u32, Vec<u8>)> {
     (rgba.len() == count * 4).then_some((width, height, rgba))
 }
 
-/// spec op 52: texture handle of a listed title's icon, -1 when the id was
-/// not found by the scan or its icon cannot be decoded. The first call for a
-/// title decodes and uploads; later calls return the cached handle.
+/// spec op 57: texture handle of a listed title's icon, -1 when the id was
+/// not found by the scan or its icon cannot be decoded, or -2 while the icon
+/// is being decoded on a worker thread (`jobs`); the guest asks again on a
+/// later frame. Once decoded, the handle is cached per title.
 pub unsafe fn icon(ui: &mut pocketjs_core::Ui, title_id: &str) -> i32 {
     if !titles().iter().any(|item| item.title_id == title_id) {
         return -1;
@@ -245,7 +330,13 @@ pub unsafe fn icon(ui: &mut pocketjs_core::Ui, title_id: &str) -> i32 {
     if let Some((_, handle)) = ICONS.iter().find(|(id, _)| id == title_id) {
         return *handle;
     }
-    let handle = match decode_icon(title_id) {
+    let title = String::from(title_id);
+    let poll = crate::jobs::poll(&format!("icon:{title_id}"), move || unsafe { decode_icon(&title) });
+    let pixels = match poll {
+        crate::jobs::Poll::Pending => return crate::jobs::PENDING,
+        crate::jobs::Poll::Ready(pixels) => pixels,
+    };
+    let handle = match pixels {
         Some((width, height, rgba)) => {
             let handle = ui.upload_texture_flags(
                 &rgba,

@@ -30,6 +30,8 @@ pub mod accent;
 pub mod backdrop;
 #[cfg(feature = "installed-apps")]
 pub mod installed;
+#[cfg(feature = "installed-apps")]
+pub mod jobs;
 pub mod input;
 pub mod net;
 pub mod pak;
@@ -493,9 +495,11 @@ unsafe fn reset_guest_state() {
     GUEST_NATIVE_ACTIVE = false;
 }
 
-/// Spacing for vita-elf-create. It appends 3072 bytes of SCE module data at the
-/// end of the code segment, and fails ("segment 1 overlaps") when that segment
-/// happens to end within 3 KiB of a 4 KiB page boundary. This pad moves the end
-/// of the segment; when the error returns after other changes, resize it.
+/// Spacing for vita-elf-create. It appends about 3 KiB of SCE module data at
+/// the end of the code segment, and fails ("segment 1 overlaps") when the data
+/// segment starts closer than that. The data segment starts on the next 64 KiB
+/// boundary, so roughly one build in twenty lands too close after a code
+/// change. This pad moves the end of the code segment; when the error returns,
+/// resize it by a few KiB.
 #[used]
-static LINK_PAD: [u8; 1000] = [0x5a; 1000];
+static LINK_PAD: [u8; 3048] = [0x5a; 3048];

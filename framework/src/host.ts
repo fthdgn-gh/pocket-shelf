@@ -250,7 +250,8 @@ export interface HostOps {
   /** Native navigation: request graceful closure of a configured child app. */
   appClose?(output: string): number;
   /** OP.appIcon — native navigation: texture handle of a listed app's icon
-   *  (PSM_8888), -1 for an unknown output or a missing/undecodable icon. */
+   *  (PSM_8888), -1 for an unknown output or a missing/undecodable icon, -2
+   *  while the host decodes it (ask again on a later frame). */
   appIcon?(output: string): number;
   /**
    * Optional host-owned acceptance sink. Applications report a completed,
