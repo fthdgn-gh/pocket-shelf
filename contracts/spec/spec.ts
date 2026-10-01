@@ -300,6 +300,10 @@ export const OP = {
   //                    record, at most PHYSICS_EVENT_MAX.
   physicsQuery: 56, //  (query, handle, a, b, c, d) -> f64. Picks and body
   //                    state reads (PHYSICS_QUERY).
+  appIcon: 57, //  (output: string) -> handle | -1. Native navigation only:
+  //                texture handle of a listed app's icon (PSM_8888, bilinear),
+  //                decoded host-side on first request and cached per output.
+  //                -1 = unknown output, no icon, or an undecodable image.
 } as const;
 
 // ---------------------------------------------------------------------------

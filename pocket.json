@@ -1,9 +1,9 @@
 {
   "$schema": "https://pocketjs.dev/schema/pocket-2.json",
   "pocket": 2,
-  "id": "dev.pocket-nexus.hero",
-  "name": "pocketjs-hero",
-  "title": "PocketJS Hero",
+  "id": "dev.fthdgn.pocket-shelf",
+  "name": "pocket-shelf",
+  "title": "Pocket Shelf",
   "version": "0.13.0",
   "engine": {
     "capabilities": {
@@ -15,8 +15,8 @@
     }
   },
   "app": {
-    "entry": "apps/hero/main.tsx",
-    "output": "hero-main",
+    "entry": "src/main.tsx",
+    "output": "pocket-shelf",
     "framework": "solid",
     "viewport": {
       "fixed": {

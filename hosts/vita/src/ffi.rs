@@ -665,7 +665,16 @@ unsafe extern "C" fn js_dbg_shot(
 }
 
 /// Borrow a UTF-8 string argument (the PSP ffi.rs helper, verbatim).
-unsafe fn with_str_arg<R>(
+/// Create a JS string from UTF-8 text.
+///
+/// # Safety
+///
+/// `ctx` must be a live QuickJS context.
+pub(crate) unsafe fn new_js_string(ctx: *mut JSContext, value: &str) -> JSValue {
+    JS_NewStringLen(ctx, value.as_ptr(), value.len())
+}
+
+pub(crate) unsafe fn with_str_arg<R>(
     ctx: *mut JSContext,
     argc: i32,
     argv: *mut JSValue,
@@ -862,6 +871,68 @@ unsafe extern "C" fn js_app_launch(
     }
 }
 
+/// ui.appTable() -> JSON of installed titles (spec op 39, native flavour).
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_installed_table(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    let value = crate::installed::table_json();
+    JS_NewStringLen(ctx, value.as_ptr(), value.len())
+}
+
+/// ui.appIcon(titleId) -> texture handle | -1 (spec op 52).
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_installed_icon(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    argc: i32,
+    argv: *mut JSValue,
+) -> JSValue {
+    let handle = with_str_arg(ctx, argc, argv, 0, -1, |id| {
+        crate::installed::icon(ui(), id)
+    });
+    JS_NewInt32(ctx, handle)
+}
+
+/// ui.__appArt(fileName) -> texture handle | -1. Host extra (not a spec op):
+/// decodes a PNG from the launcher's art folder.
+#[cfg(all(feature = "installed-apps", feature = "data-fs"))]
+unsafe extern "C" fn js_app_art(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    argc: i32,
+    argv: *mut JSValue,
+) -> JSValue {
+    let handle = with_str_arg(ctx, argc, argv, 0, -1, |name| crate::art::texture(ui(), name));
+    JS_NewInt32(ctx, handle)
+}
+
+/// ui.appLaunch(titleId) -> 0|1 (spec op 40, native flavour).
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_installed_launch(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    argc: i32,
+    argv: *mut JSValue,
+) -> JSValue {
+    if argc < 1 {
+        return JS_NewInt32(ctx, 0);
+    }
+    let mut len: size_t = 0;
+    let raw = JS_ToCStringLen2(ctx, &mut len, *argv.offset(0), 0);
+    if raw.is_null() {
+        return JS_NewInt32(ctx, 0);
+    }
+    let accepted = core::str::from_utf8(core::slice::from_raw_parts(raw as *const u8, len))
+        .map(|id| crate::installed::launch(id))
+        .unwrap_or(false);
+    JS_FreeCString(ctx, raw);
+    JS_NewInt32(ctx, accepted as i32)
+}
+
 /// ui.appShot() -> frozen-frame texture handle or -1 (spec op 41).
 unsafe extern "C" fn js_app_shot(
     ctx: *mut JSContext,
@@ -973,6 +1044,26 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"appLaunch\0", js_app_launch, 1);
         add_fn(ctx, ui_obj, b"appShot\0", js_app_shot, 0);
     }
+    // Installed-title navigation. A multi-app VPK keeps its embedded table.
+    #[cfg(feature = "installed-apps")]
+    if !crate::switch::multi() {
+        add_fn(ctx, ui_obj, b"appTable\0", js_installed_table, 0);
+        add_fn(ctx, ui_obj, b"appLaunch\0", js_installed_launch, 1);
+        add_fn(ctx, ui_obj, b"appIcon\0", js_installed_icon, 1);
+    }
+
+    // Custom box art: the texture op and the folder the files go in.
+    #[cfg(all(feature = "installed-apps", feature = "data-fs"))]
+    {
+        add_fn(ctx, ui_obj, b"__appArt\0", js_app_art, 1);
+        let dir = crate::art::dir();
+        JS_SetPropertyStr(
+            ctx,
+            ui_obj,
+            c"__artDir".as_ptr(),
+            JS_NewStringLen(ctx, dir.as_ptr(), dir.len()),
+        );
+    }
 
     // Framework-owned host identity. The bundle rejects a VPK assembled for a
     // different target or HostOps ABI before app code mounts. planHash is a
@@ -1048,4 +1139,7 @@ pub unsafe fn register(
 
     // JS_SetPropertyStr consumes ownership of ui_obj.
     JS_SetPropertyStr(ctx, global, c"ui".as_ptr(), ui_obj);
+    // Per-title data folder as globalThis.fs (docs/FS.md).
+    #[cfg(feature = "data-fs")]
+    crate::datafs::mount(ctx, global);
 }

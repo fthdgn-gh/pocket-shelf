@@ -56,6 +56,13 @@ export function closeApp(output: string): boolean {
   return (getOps().appClose?.(output) ?? 0) !== 0;
 }
 
+/** Texture handle of a listed native app's icon, -1 when the host has no
+ *  icon for it or does not implement the op. Bind it under a name with the
+ *  renderer's registerTexture(key, handle) and reference it as <Image src={key}>. */
+export function appIcon(output: string): number {
+  return getOps().appIcon?.(output) ?? -1;
+}
+
 /** Texture handle of the summon's frozen frame (256×128 PSM_8888), -1 when
  *  none was captured. Bind it under a name with the renderer's
  *  registerTexture(key, handle) and reference it as <Image src={key}>. */

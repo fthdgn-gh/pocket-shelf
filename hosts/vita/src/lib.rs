@@ -11,6 +11,10 @@ use pocketjs_core::Ui;
 
 pub mod audio;
 pub mod dbg;
+#[cfg(all(feature = "installed-apps", feature = "data-fs"))]
+pub mod art;
+#[cfg(feature = "data-fs")]
+pub mod datafs;
 pub mod dev;
 #[cfg(feature = "usb-debug")]
 mod dev_delivery;
@@ -18,6 +22,8 @@ pub mod dev_protocol;
 pub mod devmenu;
 pub mod ffi;
 pub mod graphics;
+#[cfg(feature = "installed-apps")]
+pub mod installed;
 pub mod input;
 pub mod net;
 pub mod pak;
@@ -480,3 +486,10 @@ unsafe fn reset_guest_state() {
     pak::uninstall();
     GUEST_NATIVE_ACTIVE = false;
 }
+
+/// Spacing for vita-elf-create. It appends 3072 bytes of SCE module data at the
+/// end of the code segment, and fails ("segment 1 overlaps") when that segment
+/// happens to end within 3 KiB of a 4 KiB page boundary. This pad moves the end
+/// of the segment; when the error returns after other changes, resize it.
+#[used]
+static LINK_PAD: [u8; 1000] = [0x5a; 1000];

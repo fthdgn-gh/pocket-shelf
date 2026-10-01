@@ -25,6 +25,7 @@ import { BuildInputs } from "../framework/compiler/build-inputs.ts";
 //   --density=<integer>          low-level target sampling density (default 1)
 //   --font-regular=<path>        override the regular font source
 //   --font-bold=<path>           override the bold font source
+//   (POCKET_FONT_REGULAR / _BOLD / _MONO set the same overrides)
 //   --outdir=<path>              write <app>.js/.pak here instead of dist/
 //                                (external repos build their apps against a
 //                                vendored PocketJS and keep outputs local)
@@ -85,6 +86,12 @@ const args = process.argv.slice(2);
 let extraChars = "";
 let regularFontPath: string | undefined;
 let boldFontPath: string | undefined;
+let monoFontPath: string | undefined;
+// Environment fallbacks let wrappers that do not forward build flags
+// (tools/pocket.ts) still pick the font; explicit flags below win.
+if (process.env.POCKET_FONT_REGULAR) regularFontPath = resolvePath(process.env.POCKET_FONT_REGULAR);
+if (process.env.POCKET_FONT_MONO) monoFontPath = resolvePath(process.env.POCKET_FONT_MONO);
+if (process.env.POCKET_FONT_BOLD) boldFontPath = resolvePath(process.env.POCKET_FONT_BOLD);
 let appArg = "";
 let frameworkFlag: string | undefined;
 let configPath = join(ROOT, "pocket.config.ts");
@@ -351,6 +358,7 @@ const atlases = await bakeAtlases({
   rasterDensity,
   regularTtf: regularFontPath,
   boldTtf: boldFontPath,
+  monoTtf: monoFontPath,
   onRead: path => buildInputs.add(path),
   fallbackTtfs,
 });

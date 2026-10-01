@@ -29,6 +29,7 @@ the system summon chord.
 | 39 | `appTable` | `() -> string` | JSON `{ apps: [{output, id, title}], current, resume }`. `current` is the running bundle's output name; `resume` is the app interrupted by the last SELECT summon (null after a cold boot or an explicit launch). Hosts without app switching omit the op (same rule as `debugStats`). |
 | 40 | `appLaunch` | `(output: string) -> 0\|1` | Request a switch. The host finishes the CURRENT frame (draw + present), then swaps guests before the next one. Returns 0 for an unknown output (no switch scheduled). Calling it with `current` relaunches fresh. |
 | 41 | `appShot` | `() -> handle \| -1` | Texture handle of the frozen frame captured when the running app was summoned away: the full current logical frame downscaled into 256×128 PSM_8888 (stored squeezed; drawn at the current viewport aspect, which undoes it). Console frames are 480×272. Valid in the guest booted by a summon until the next switch; -1 otherwise. |
+| 57 | `appIcon` | `(output: string) -> handle \| -1` | Native navigation only. Texture handle of a listed app's icon (PSM_8888, bilinear), decoded on first request and cached per output. Returns -1 for an unknown output, a missing icon, or an image the host cannot decode. |
 
 `@pocketjs/framework/launcher` wraps these (`appTable()`, `launchApp()`,
 `frozenShot()`, `launcherActive()`) and degrades to `null`/no-op on hosts

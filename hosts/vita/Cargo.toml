@@ -8,6 +8,11 @@ edition = "2021"
 # self-contained and do not require a separately extracted libshacccg.suprx.
 vitasdk-sys = { version = "0.3.3", features = ["SceAudio_stub", "SceCtrl_stub", "SceGxm_stub", "SceKernelModulemgr_stub", "SceKernelThreadMgr_stub", "SceLibKernel_stub", "SceNet_stub", "SceNetCtl_stub", "SceSysmodule_stub", "SceTouch_stub"] }
 vita2d-sys = "0.1.1"
+# Decodes each title's icon0.png; built only with `installed-apps`.
+png = { version = "0.17", optional = true }
+
+# File access for apps (globalThis.fs); built only with `data-fs`.
+pocket-fs = { path = "../../engine/crates/pocket-fs", default-features = false, optional = true }
 
 libquickjs-sys = { git = "https://github.com/pocket-nexus/quickjs-rs.git", rev = "ba5bdd0dc013518768e76cd9e05cd30ed53dd35b" }
 pocketjs-core = { path = "../../engine/core" }
@@ -15,8 +20,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [features]
-default = ["usb-debug"]
+default = []
 usb-debug = ["vitasdk-sys/ScePower_stub", "vitasdk-sys/SceSysmem_stub"]
+# Native app navigation (docs/LAUNCHER.md): appTable/appLaunch list and start
+# the titles installed under ux0:/app. Opt-in per VPK, because a native table
+# makes the framework treat the guest as launcher-hosted.
+installed-apps = ["vitasdk-sys/SceAppMgr_stub", "dep:png"]
+# globalThis.fs over ux0:/data/pocketjs/<title id>.
+data-fs = ["dep:pocket-fs"]
 capture = []
 bench = []
 

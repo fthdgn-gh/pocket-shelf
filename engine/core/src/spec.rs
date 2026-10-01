@@ -110,6 +110,7 @@ pub mod op {
     pub const PHYSICS_DESTROY: u8 = 54;
     pub const PHYSICS_EVENTS: u8 = 55;
     pub const PHYSICS_QUERY: u8 = 56;
+    pub const APP_ICON: u8 = 57;
 }
 
 /// Property ids (u8, stable, append-only). Groups:
