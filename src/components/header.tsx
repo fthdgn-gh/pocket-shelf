@@ -7,20 +7,10 @@ import { fontSlot } from "../text.ts";
 import { SCREEN_W } from "../../contracts/spec/spec.ts";
 import { HEADER_SIDE, TAB_GAP, TAB_W } from "../layout.ts";
 import type { LauncherState } from "../state.ts";
-
-/** A shoulder-button badge at one end of the header. */
-function Shoulder(props: { state: LauncherState; label: string }) {
-  return (
-    <View class="w-[24] h-[16] shrink-0 items-center justify-center rounded-[5] border" style={{ borderColor: props.state.theme().line }}>
-      <Text class={props.state.text().smallBold} style={{ textColor: props.state.theme().dim }}>
-        {props.label}
-      </Text>
-    </View>
-  );
-}
+import { Icon } from "./icons.tsx";
 
 /**
- * Category header: L and R badges on the sides, the category names between
+ * Category header: the L and R buttons on the sides, the category names between
  * them. The strip slides so the current category sits in the center, marked
  * by a bar under its name.
  */
@@ -46,7 +36,7 @@ export function Header(props: { state: LauncherState }) {
     <View class="flex-row items-center gap-[6] w-full h-[34] shrink-0 px-3">
       <View class="w-[24] h-[16] shrink-0">
         <Show when={many()}>
-          <Shoulder state={state} label="L" />
+          <Icon name="l" />
         </Show>
       </View>
       <View class="flex-row grow h-[34] overflow-hidden justify-start items-center">
@@ -80,7 +70,7 @@ export function Header(props: { state: LauncherState }) {
       </View>
       <View class="w-[24] h-[16] shrink-0">
         <Show when={many()}>
-          <Shoulder state={state} label="R" />
+          <Icon name="r" />
         </Show>
       </View>
     </View>

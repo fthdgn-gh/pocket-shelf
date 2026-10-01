@@ -20,7 +20,7 @@ export interface Theme {
   text: string;
   dim: string;
   faint: string;
-  /** Focus ring, active tab, values and button glyphs. */
+  /** Selected tile frame, active tab, highlighted rows and values. */
   accent: string;
   /** Drawers and sheets. */
   panel: string;

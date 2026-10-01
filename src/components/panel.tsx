@@ -3,6 +3,7 @@ import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
 import type { LauncherState } from "../state.ts";
 import { alpha } from "../themes.ts";
+import { Icon, type IconName } from "./icons.tsx";
 
 const DRAWER = {
   narrow: { width: 232, panel: "absolute top-0 right-0 bottom-0 w-[232] flex-col gap-[3] pl-4 pr-3 py-3" },
@@ -44,9 +45,22 @@ export function Drawer(props: {
   );
 }
 
-/** One line of a drawer: a label on the left and its value on the right. */
-export function OptionRow(props: { state: LauncherState; active: boolean; label: string; value?: string }) {
+/**
+ * One line of a drawer: a label on the left and its value on the right. The
+ * value is text, an icon, or both. `step` adds the arrows that show the value
+ * changes with left and right: "both" for a list of choices, "right" for a
+ * row that opens something.
+ */
+export function OptionRow(props: {
+  state: LauncherState;
+  active: boolean;
+  label: string;
+  value?: string;
+  icon?: IconName;
+  step?: "both" | "right";
+}) {
   const theme = props.state.theme;
+  const arrows = () => (props.active ? props.step : undefined);
   return (
     <View
       class="flex-row items-center justify-between w-full h-[26] shrink-0 px-2 rounded-md"
@@ -58,11 +72,20 @@ export function OptionRow(props: { state: LauncherState; active: boolean; label:
       >
         {props.label}
       </Text>
-      <Show when={props.value}>
-        <Text class={props.state.text().bodyBold} style={{ textColor: props.active ? theme().accent : theme().dim }}>
-          {props.value}
-        </Text>
-      </Show>
+      <View class="flex-row items-center gap-1 shrink-0">
+        <Show when={arrows() === "both"}>
+          <Icon name="arrowLeft" />
+        </Show>
+        <Show when={props.value}>
+          <Text class={props.state.text().bodyBold} style={{ textColor: props.active ? theme().accent : theme().dim }}>
+            {props.value}
+          </Text>
+        </Show>
+        <Show when={props.icon}>{(name) => <Icon name={name()} />}</Show>
+        <Show when={arrows()}>
+          <Icon name="arrowRight" />
+        </Show>
+      </View>
     </View>
   );
 }
@@ -72,7 +95,7 @@ export function Spacer() {
   return <View class="grow" />;
 }
 
-/** A line of dim text at the bottom of a panel: a message or a button hint. */
+/** A line of dim text at the bottom of a panel. */
 export function Note(props: { state: LauncherState; children: JSX.Element }) {
   return (
     <Text class={props.state.text().small} style={{ textColor: props.state.theme().dim }}>

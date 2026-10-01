@@ -1,11 +1,10 @@
 import { For, onMount } from "solid-js";
 import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
-import { glyph } from "@pocketjs/framework/modality";
 import { fitTail } from "../catalog.ts";
 import type { LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
-import { Note } from "./panel.tsx";
+import { hints, Prompt } from "./icons.tsx";
 
 // Space inside the text field: the key rows are 416 wide, less the field's padding.
 const FIELD_TEXT_W = 396;
@@ -67,9 +66,17 @@ export function KeyboardOverlay(props: { state: LauncherState }) {
           )}
         </For>
         <View class="h-[2] shrink-0" />
-        <Note state={state}>
-          {`${state.confirmGlyph()}: Key  ${glyph("square")}: Delete  L: Shift  R: Symbols  START: Done  ${state.cancelGlyph()}: Cancel`}
-        </Note>
+        <Prompt
+          state={state}
+          parts={hints(
+            [state.confirmButton(), "Key"],
+            ["square", "Delete"],
+            ["l", "Shift"],
+            ["r", "Symbols"],
+            ["start", "Done"],
+            [state.cancelButton(), "Cancel"],
+          )}
+        />
       </View>
     </View>
   );

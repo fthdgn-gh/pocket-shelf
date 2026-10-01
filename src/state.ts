@@ -1,7 +1,6 @@
 import { batch, createEffect, createMemo, createSignal, on } from "solid-js";
 import { registerTexture } from "@pocketjs/framework";
 import { appIcon, launchApp } from "@pocketjs/framework/launcher";
-import { glyph } from "@pocketjs/framework/modality";
 import {
   BUILTIN_CATEGORIES,
   CATEGORY_LABEL_MAX,
@@ -246,8 +245,9 @@ export function createLauncherState(catalog: Catalog) {
   const theme = createMemo(() => themeById(themeId()));
   /** Text class per role in the chosen font. */
   const text = createMemo(() => textClasses(font()));
-  const confirmGlyph = () => glyph(confirmMode());
-  const cancelGlyph = () => glyph(confirmMode() === "circle" ? "cross" : "circle");
+  /** The face buttons that confirm and cancel, as icon names. */
+  const confirmButton = (): ConfirmMode => confirmMode();
+  const cancelButton = (): ConfirmMode => (confirmMode() === "circle" ? "cross" : "circle");
 
   // The current tab can disappear (hidden or deleted): move to the first one.
   createEffect(() => {
@@ -502,7 +502,8 @@ export function createLauncherState(catalog: Catalog) {
       setCatNote("Deleted");
     } else {
       setCatArmed(item.id);
-      setCatNote(`Press ${glyph("square")} again to delete ${item.label}`);
+      // The manager shows the square button in front of this note while a row is armed.
+      setCatNote(`again to delete ${item.label}`);
     }
   };
   /** Show or hide the highlighted category in the tab bar. */
@@ -632,8 +633,8 @@ export function createLauncherState(catalog: Catalog) {
     icons,
     theme,
     text,
-    confirmGlyph,
-    cancelGlyph,
+    confirmButton,
+    cancelButton,
     select,
     page,
     launchSelected,
@@ -672,6 +673,7 @@ export function createLauncherState(catalog: Catalog) {
     categoryLabel,
     catRow,
     catNote,
+    catArmed,
     catNew,
     catDelete,
     catToggleHidden,

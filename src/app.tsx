@@ -11,7 +11,6 @@
 
 import { onMount, Show } from "solid-js";
 import { Text, View } from "@pocketjs/framework/components";
-import { glyph } from "@pocketjs/framework/modality";
 import { loadCatalog } from "./catalog.ts";
 import { TINT_AMBIENT } from "./components/art.tsx";
 import { ArtPickerOverlay } from "./components/art-picker.tsx";
@@ -19,6 +18,7 @@ import { CategoryManagerOverlay } from "./components/category-manager.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
 import { Footer } from "./components/footer.tsx";
 import { Header } from "./components/header.tsx";
+import { Prompt } from "./components/icons.tsx";
 import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
 import { installInput } from "./input.ts";
@@ -52,9 +52,7 @@ export default function App() {
               {state.hasTitles() ? "Nothing in this category yet" : "No installed apps found"}
             </Text>
             <Show when={state.hasTitles()}>
-              <Text class={state.text().small} style={{ textColor: state.theme().dim }}>
-                {`Use Edit (${glyph("triangle")}) on a title to move it here`}
-              </Text>
+              <Prompt state={state} parts={["Press", { icon: "triangle" }, "on a title to move it here"]} />
             </Show>
           </View>
         }
