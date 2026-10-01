@@ -1,0 +1,4 @@
+{
+  "fallback": ["../assets/fonts/Inter-Regular.ttf"],
+  "ranges": ["U+0020-007E"]
+}

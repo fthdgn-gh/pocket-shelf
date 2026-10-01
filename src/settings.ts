@@ -1,0 +1,44 @@
+import { readFileSync, writeFileSync } from "@pocketjs/framework/fs";
+import { FONTS, type FontId } from "./fonts.ts";
+import { THEMES, type ThemeId } from "./themes.ts";
+import { DETAIL_LEVELS, VIEW_MODES } from "./navigation.ts";
+import type { ConfirmMode, DetailLevel, ViewMode } from "./types.ts";
+
+export interface Settings {
+  theme: ThemeId;
+  font: FontId;
+  view: ViewMode;
+  detail: DetailLevel;
+  confirm: ConfirmMode;
+}
+
+// Relative to the data folder, ux0:/data/PocketShelf/.
+const SETTINGS_FILE = "settings.json";
+
+/**
+ * Saved settings, or null when nothing usable is stored. Values are checked
+ * one by one, so a stale or hand-edited file degrades to defaults. The fs
+ * namespace is missing on hosts built without `data-fs`; that also returns null.
+ */
+export function loadSettings(): Partial<Settings> | null {
+  try {
+    const raw = JSON.parse(readFileSync(SETTINGS_FILE, "utf8")) as Partial<Settings>;
+    const result: Partial<Settings> = {};
+    if (THEMES.some((theme) => theme.id === raw.theme)) result.theme = raw.theme;
+    if (FONTS.some((item) => item.id === raw.font)) result.font = raw.font;
+    if (VIEW_MODES.includes(raw.view as ViewMode)) result.view = raw.view;
+    if (DETAIL_LEVELS.includes(raw.detail as DetailLevel)) result.detail = raw.detail;
+    if (raw.confirm === "circle" || raw.confirm === "cross") result.confirm = raw.confirm;
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSettings(settings: Settings): void {
+  try {
+    writeFileSync(SETTINGS_FILE, JSON.stringify(settings));
+  } catch (error) {
+    console.log(`Settings not saved: ${error}`);
+  }
+}
