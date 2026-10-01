@@ -30,8 +30,8 @@ const SIZES = {
   },
   // Grid tile.
   md: {
-    box: "relative w-[68] h-[68] items-center justify-center",
-    image: "w-[68] h-[68]",
+    box: "relative w-[72] h-[72] items-center justify-center",
+    image: "w-[72] h-[72]",
     text: "text-xl text-white font-bold",
   },
   // List row.
