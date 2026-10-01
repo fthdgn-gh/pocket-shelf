@@ -17,8 +17,8 @@ export const SHELF: Record<DetailLevel, { tile: number; gap: number; row: number
 
 export const GRID_COLUMNS = 5;
 export const GRID_ROWS = 2;
-export const GRID_TILE = 68;
-export const GRID_GAP = 14;
+export const GRID_TILE = 72;
+export const GRID_GAP = 10;
 /** Width of a full grid row: columns plus the gaps between them. */
 export const GRID_W = GRID_COLUMNS * GRID_TILE + (GRID_COLUMNS - 1) * GRID_GAP;
 

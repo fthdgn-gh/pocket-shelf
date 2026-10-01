@@ -215,6 +215,10 @@ const SHOTS: Shot[] = [
     steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 6)],
   },
   { name: "19-basic", steps: [BTN.SELECT, ...tap(BTN.DOWN, 3), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4)] },
+  {
+    name: "21-list-detailed",
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 4)],
+  },
   // Holding RIGHT for a second repeats the move.
   { name: "12-hold-repeat", steps: [[BTN.RIGHT, 60]] },
   // Launch from another category, start again: the selection comes back.

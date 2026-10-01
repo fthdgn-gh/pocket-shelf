@@ -28,11 +28,10 @@ function FadeIn(props: { src: string }) {
 
 /**
  * The selected title's picture behind the screen, under a wash of the theme's
- * background so text stays readable. Each view leaves a different part clear:
+ * background so text stays readable:
  *
- *  - shelf: the top, behind the tiles;
- *  - grid: an even, darker wash, because tiles cover most of the screen;
- *  - list: the right side, beside the names.
+ *  - shelf: clearest at the top, behind the tiles;
+ *  - grid and list: an even, darker wash, because tiles and rows cover the screen.
  */
 export function Backdrop(props: { state: LauncherState }) {
   const { state } = props;
@@ -51,25 +50,10 @@ export function Backdrop(props: { state: LauncherState }) {
           style={{ gradFrom: alpha(theme().bgTop, "73"), gradTo: alpha(theme().bgBottom, "f2") }}
         />
       </Show>
-      <Show when={state.view() === "grid"}>
+      <Show when={state.view() !== "carousel"}>
         <View
           class="absolute inset-0 bg-gradient-to-b from-black to-black"
           style={{ gradFrom: alpha(theme().bgTop, "c7"), gradTo: alpha(theme().bgBottom, "f5") }}
-        />
-      </Show>
-      <Show when={state.view() === "list"}>
-        <View
-          class="absolute inset-0 bg-gradient-to-r from-black to-black"
-          style={{ gradFrom: alpha(theme().bgBottom, "f5"), gradTo: alpha(theme().bgBottom, "33") }}
-        />
-        {/* The header and the footer keep their own wash across the full width. */}
-        <View
-          class="absolute top-0 left-0 right-0 h-[56] bg-gradient-to-b from-black to-black"
-          style={{ gradFrom: alpha(theme().bgTop, "cc"), gradTo: alpha(theme().bgTop, "00") }}
-        />
-        <View
-          class="absolute left-0 right-0 bottom-0 h-[90] bg-gradient-to-b from-black to-black"
-          style={{ gradFrom: alpha(theme().bgBottom, "00"), gradTo: alpha(theme().bgBottom, "e6") }}
         />
       </Show>
     </Show>

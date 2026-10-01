@@ -9,8 +9,11 @@ import { SelectedInfo } from "./info.tsx";
 
 const ROW_PITCH = GRID_TILE + GRID_GAP;
 
-const TILE = "relative shrink-0 w-[68] h-[68] scale-100 opacity-80 transition duration-150 ease-out";
-const TILE_SELECTED = "relative shrink-0 w-[68] h-[68] scale-110 opacity-100 transition duration-150 ease-out";
+// The selected tile is drawn at its own size, so its frame lands on whole
+// pixels and sits evenly around the art. The other tiles are drawn smaller and
+// dimmer; they have no frame, so their scaled edges need not be exact.
+const TILE = "relative shrink-0 w-[72] h-[72] scale-90 opacity-70 transition duration-150 ease-out";
+const TILE_SELECTED = "relative shrink-0 w-[72] h-[72] scale-100 opacity-100 transition duration-150 ease-out";
 
 function GridTile(props: {
   game: Game;
@@ -47,14 +50,14 @@ export function GridView(props: { state: LauncherState }) {
 
   return (
     <View class="flex-col items-center w-full grow">
-      {/* Two rows, plus room above and below for the selected tile's ring. */}
-      <View class="flex-row items-start justify-center w-full h-[168] shrink-0 pt-[8] overflow-hidden">
+      {/* Two rows, plus room above and below for the selected tile's frame. */}
+      <View class="flex-row items-start justify-center w-full h-[168] shrink-0 pt-[6] overflow-hidden">
         <Grid
           ref={(el) => {
             stripRef = el;
           }}
           gap={GRID_GAP}
-          class="flex-row flex-wrap w-[396] shrink-0"
+          class="flex-row flex-wrap w-[400] shrink-0"
           style={{ translateY: -topRow * ROW_PITCH }}
         >
           <For each={state.games()}>

@@ -11,63 +11,36 @@ import type { Game } from "../types.ts";
 
 const ROW_PITCH = LIST_ROW_H + LIST_GAP;
 
-function ListRow(props: {
-  game: Game;
-  state: LauncherState;
-  selected: boolean;
-}) {
+// Room for a title in a row: the screen less the margins, the icon and the title id.
+const TITLE_W = 300;
+
+function ListRow(props: { game: Game; state: LauncherState; selected: boolean }) {
   const theme = props.state.theme;
+  const role = () => (props.selected ? "bodyBold" : "body");
   return (
     <View
-      class="relative flex-row shrink-0 items-center gap-2 w-full h-[30] pl-3 pr-2 rounded-lg"
+      class="relative flex-row shrink-0 items-center gap-2 w-full h-[30] pl-3 pr-3 rounded-lg"
       style={{ bgColor: props.selected ? alpha(theme().accent, "30") : "#00000000" }}
     >
       <Show when={props.selected}>
         <View class="absolute left-0 top-[7] w-[3] h-[16] rounded-[1]" style={{ bgColor: theme().accent }} />
       </Show>
       <TitleArt size="sm" game={props.game} icon={props.state.icons()[props.game.id]} />
-      <Text
-        class={props.selected ? props.state.text().bodyBold : props.state.text().body}
-        style={{ textColor: props.selected ? theme().text : theme().dim }}
-      >
-        {fitTitle(props.game.title, 196, fontSlot(props.state.font(), props.selected ? "bodyBold" : "body"))}
+      <Text class={props.state.text()[role()]} style={{ textColor: props.selected ? theme().text : theme().dim }}>
+        {fitTitle(props.game.title, TITLE_W, fontSlot(props.state.font(), role()))}
       </Text>
-    </View>
-  );
-}
-
-/** The selected title in detail, beside the list. */
-function Detail(props: { state: LauncherState; game: Game }) {
-  const { state } = props;
-  return (
-    <View
-      class={
-        state.backdrop()
-          ? "flex-col items-end justify-end gap-2 grow h-full pr-2 pb-2"
-          : "flex-col items-center justify-center gap-2 grow h-full"
-      }
-    >
-      {/* With a backdrop the picture fills this side, so the large icon steps aside. */}
-      <Show when={!state.backdrop()}>
-        <TitleArt size="lg" game={props.game} icon={state.icons()[props.game.id]} />
-      </Show>
-      <Show when={state.detail() !== "basic"}>
-        <View class={state.backdrop() ? "flex-col items-end gap-[2]" : "flex-col items-center gap-[2]"}>
-          <Text class={state.text().title} style={{ textColor: state.theme().text }}>
-            {fitTitle(props.game.title, 176, fontSlot(state.font(), "title"))}
-          </Text>
-          <Show when={state.detail() === "detailed"}>
-            <Text class={state.text().small} style={{ textColor: state.theme().dim }}>
-              {`${props.game.id}  ·  ${state.categoryLabel(props.game.category)}`}
-            </Text>
-          </Show>
-        </View>
+      {/* "Detailed" adds the title id at the end of the row. */}
+      <Show when={props.state.detail() === "detailed"}>
+        <View class="grow" />
+        <Text class={props.state.text().small} style={{ textColor: props.selected ? theme().dim : theme().faint }}>
+          {props.game.id}
+        </Text>
       </Show>
     </View>
   );
 }
 
-/** Titles by name on the left, the selected one in detail on the right. */
+/** One title per row across the screen; the list scrolls one row at a time. */
 export function ListView(props: { state: LauncherState }) {
   const { state } = props;
   let stripRef: NodeMirror | undefined;
@@ -84,8 +57,8 @@ export function ListView(props: { state: LauncherState }) {
   });
 
   return (
-    <View class="flex-row w-full grow pl-4 pr-2">
-      <View class="flex-col w-[250] h-[200] shrink-0 mt-[4] overflow-hidden justify-start">
+    <View class="flex-row w-full grow px-4">
+      <View class="flex-col grow h-[200] mt-[4] overflow-hidden justify-start">
         <View
           ref={(el) => {
             stripRef = el;
@@ -94,17 +67,10 @@ export function ListView(props: { state: LauncherState }) {
           style={{ gap: LIST_GAP, translateY: -topRow * ROW_PITCH }}
         >
           <For each={state.games()}>
-            {(game, index) => (
-              <ListRow
-                game={game}
-                state={state}
-                selected={state.selectedIndex() === index()}
-              />
-            )}
+            {(game, index) => <ListRow game={game} state={state} selected={state.selectedIndex() === index()} />}
           </For>
         </View>
       </View>
-      <Show when={state.games()[state.selectedIndex()]}>{(game) => <Detail state={state} game={game()} />}</Show>
     </View>
   );
 }
