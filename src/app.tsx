@@ -14,6 +14,7 @@ import { Text, View } from "@pocketjs/framework/components";
 import { loadCatalog } from "./catalog.ts";
 import { TINT_AMBIENT } from "./components/art.tsx";
 import { ArtPickerOverlay } from "./components/art-picker.tsx";
+import { Backdrop } from "./components/backdrop.tsx";
 import { CategoryManagerOverlay } from "./components/category-manager.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
 import { Footer } from "./components/footer.tsx";
@@ -39,8 +40,11 @@ export default function App() {
       class="relative flex-col w-full h-full bg-gradient-to-b from-black to-black"
       style={{ gradFrom: state.theme().bgTop, gradTo: state.theme().bgBottom }}
     >
-      {/* The selected title's tint, washed over the top of the screen. */}
-      <Show when={selected()}>{(game) => <View class={TINT_AMBIENT[game().tint % TINT_AMBIENT.length]} />}</Show>
+      {/* The selected title's picture, or its tint washed over the top of the screen. */}
+      <Show when={!state.backdrop() ? selected() : undefined}>
+        {(game) => <View class={TINT_AMBIENT[game().tint % TINT_AMBIENT.length]} />}
+      </Show>
+      <Backdrop state={state} />
 
       <Header state={state} />
 

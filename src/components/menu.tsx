@@ -20,6 +20,7 @@ export function MenuOverlay(props: { state: LauncherState }) {
     { label: "Font", value: FONTS.find((item) => item.id === state.font())?.name ?? "", step: "both" },
     { label: "View", value: VIEW_LABELS[state.view()], step: "both" },
     { label: "Details", value: DETAIL_LABELS[state.detail()], step: "both" },
+    { label: "Backdrop", value: state.backdropOn() ? "On" : "Off", step: "both" },
     { label: "Categories", value: "Manage", step: "right" },
     { label: "Confirm", icon: state.confirmButton(), step: "both" },
   ];
