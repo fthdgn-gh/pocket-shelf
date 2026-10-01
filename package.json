@@ -351,7 +351,8 @@
     "shelf:check": "bun tools/pocket.ts check --target vita && bunx tsc --noEmit",
     "shelf:test": "bun test ./src",
     "shelf:preview": "POCKET_FONT_REGULAR=src/fonts/SpaceGrotesk-Regular.ttf POCKET_FONT_BOLD=src/fonts/SpaceGrotesk-Bold.ttf POCKET_FONT_MONO=src/fonts/Hack-Regular.ttf bun src/tools/preview.ts",
-    "shelf:art": "bun src/tools/art.ts"
+    "shelf:art": "bun src/tools/art.ts",
+    "shelf:icons": "bun src/tools/icons.ts"
   },
   "dependencies": {
     "@solid-primitives/keyed": "^1.5.3",

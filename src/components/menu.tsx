@@ -2,36 +2,46 @@ import { For } from "solid-js";
 import { FONTS } from "../text.ts";
 import { DETAIL_LABELS, VIEW_LABELS } from "../navigation.ts";
 import type { LauncherState } from "../state.ts";
-import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
+import { hints, Prompt, type IconName } from "./icons.tsx";
+import { Drawer, OptionRow, Spacer } from "./panel.tsx";
+
+interface Row {
+  label: string;
+  value?: string;
+  icon?: IconName;
+  step: "both" | "right";
+}
 
 /** The SELECT menu. */
 export function MenuOverlay(props: { state: LauncherState }) {
   const { state } = props;
-  const rows = () => [
-    { label: "Theme", value: state.theme().name },
-    { label: "Font", value: FONTS.find((item) => item.id === state.font())?.name ?? "" },
-    { label: "View", value: VIEW_LABELS[state.view()] },
-    { label: "Details", value: DETAIL_LABELS[state.detail()] },
-    { label: "Categories", value: "Manage" },
-    { label: "Confirm", value: state.confirmGlyph() },
+  const rows = (): Row[] => [
+    { label: "Theme", value: state.theme().name, step: "both" },
+    { label: "Font", value: FONTS.find((item) => item.id === state.font())?.name ?? "", step: "both" },
+    { label: "View", value: VIEW_LABELS[state.view()], step: "both" },
+    { label: "Details", value: DETAIL_LABELS[state.detail()], step: "both" },
+    { label: "Categories", value: "Manage", step: "right" },
+    { label: "Confirm", icon: state.confirmButton(), step: "both" },
   ];
   return (
     <Drawer state={state} title="Menu">
       <For each={rows()}>
-        {(row, index) => {
-          const active = () => state.menuRow() === index();
-          return (
-            <OptionRow
-              state={state}
-              active={active()}
-              label={row.label}
-              value={active() ? `◄ ${row.value} ►` : row.value}
-            />
-          );
-        }}
+        {(row, index) => (
+          <OptionRow
+            state={state}
+            active={state.menuRow() === index()}
+            label={row.label}
+            value={row.value}
+            icon={row.icon}
+            step={row.step}
+          />
+        )}
       </For>
       <Spacer />
-      <Note state={state}>{`D-pad: Move / Change  ·  ${state.cancelGlyph()}: Close`}</Note>
+      <Prompt
+        state={state}
+        parts={hints(["dpadVertical", "Move"], ["dpadHorizontal", "Change"], [state.cancelButton(), "Close"])}
+      />
     </Drawer>
   );
 }
