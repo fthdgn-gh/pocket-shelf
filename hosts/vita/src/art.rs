@@ -116,13 +116,17 @@ pub unsafe fn texture(ui: &mut pocketjs_core::Ui, name: &str) -> i32 {
         return *handle;
     }
     let handle = match decode(&format!("{}/{name}", dir())) {
-        Some((side, rgba)) => ui.upload_texture_flags(
-            &rgba,
-            side,
-            side,
-            pocketjs_core::spec::psm::PSM_8888,
-            pocketjs_core::spec::img::FLAG_LINEAR,
-        ),
+        Some((side, rgba)) => {
+            let handle = ui.upload_texture_flags(
+                &rgba,
+                side,
+                side,
+                pocketjs_core::spec::psm::PSM_8888,
+                pocketjs_core::spec::img::FLAG_LINEAR,
+            );
+            crate::accent::record(handle, &rgba);
+            handle
+        }
         None => -1,
     };
     if handle >= 0 {

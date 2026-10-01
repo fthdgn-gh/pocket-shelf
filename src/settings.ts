@@ -12,6 +12,8 @@ export interface Settings {
   confirm: ConfirmMode;
   /** Whether the selected title's picture is drawn behind the screen. */
   backdrop: boolean;
+  /** Whether an icon with transparent parts gets a box behind it. */
+  iconBox: boolean;
   /** Category and title that were selected when the settings were last saved. */
   category?: string;
   title?: string;
@@ -35,6 +37,7 @@ export function loadSettings(): Partial<Settings> | null {
     if (DETAIL_LEVELS.includes(raw.detail as DetailLevel)) result.detail = raw.detail;
     if (raw.confirm === "circle" || raw.confirm === "cross") result.confirm = raw.confirm;
     if (typeof raw.backdrop === "boolean") result.backdrop = raw.backdrop;
+    if (typeof raw.iconBox === "boolean") result.iconBox = raw.iconBox;
     if (typeof raw.category === "string") result.category = raw.category;
     if (typeof raw.title === "string") result.title = raw.title;
     return result;

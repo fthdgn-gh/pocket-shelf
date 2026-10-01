@@ -1,7 +1,7 @@
 import { createEffect, For, Show, untrack } from "solid-js";
 import { Grid, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
-import { TitleArt } from "../components/art.tsx";
+import { SelectedFrame, TitleArt } from "../components/art.tsx";
 import { GRID_COLUMNS, GRID_GAP, GRID_ROWS, GRID_TILE } from "../layout.ts";
 import type { LauncherState } from "../state.ts";
 import type { Game } from "../types.ts";
@@ -22,11 +22,10 @@ function GridTile(props: {
 }) {
   return (
     <View class={props.selected ? TILE_SELECTED : TILE}>
-      {/* The selected tile's frame: a filled square behind the art, 3 px larger on each side. */}
       <Show when={props.selected}>
-        <View class="absolute inset-[-3]" style={{ bgColor: props.state.theme().accent }} />
+        <SelectedFrame state={props.state} />
       </Show>
-      <TitleArt size="md" game={props.game} icon={props.state.icons()[props.game.id]} />
+      <TitleArt size="md" game={props.game} state={props.state} />
     </View>
   );
 }

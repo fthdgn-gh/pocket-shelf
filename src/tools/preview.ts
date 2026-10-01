@@ -12,6 +12,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ACCENT_HAS_ALPHA } from "../accent.ts";
 import { BTN, IMG_FLAG_LINEAR, PSM } from "../../contracts/spec/spec.ts";
 import { createSimFsHost } from "../../hosts/sim/fs.ts";
 import { bootWorld, type SimWorld } from "../../hosts/sim/sim.ts";
@@ -61,11 +62,40 @@ const ICON_COLORS: [string, string][] = [
   ["#93c5fd", "#312e81"],
 ];
 
+/** Every third sample icon is a logo on a transparent background. */
+const seeThrough = (index: number) => index % 3 === 1;
+
+/** What the Vita host reports as the accent of a sample icon (hosts/vita/src/accent.rs). */
+function iconAccent(index: number): number {
+  const color = Number.parseInt(ICON_COLORS[index % ICON_COLORS.length][0].slice(1), 16);
+  return seeThrough(index) ? ACCENT_HAS_ALPHA | color : color;
+}
+
 /** A 128x128 stand-in for a title's icon0.png: gradient, shape and initials. */
 function iconPixels(index: number, title: string): Uint8Array {
   const canvas = createCanvas(128, 128);
   const ctx = canvas.getContext("2d");
   const [from, to] = ICON_COLORS[index % ICON_COLORS.length];
+  if (seeThrough(index)) {
+    // A ring and the initials in the icon's color, nothing behind them.
+    ctx.strokeStyle = from;
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.arc(64, 64, 50, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = from;
+    ctx.font = "bold 46px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const letters = title
+      .split(" ")
+      .map((word) => word[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+    ctx.fillText(letters, 64, 67);
+    return new Uint8Array(ctx.getImageData(0, 0, 128, 128).data.buffer);
+  }
   const gradient = ctx.createLinearGradient(0, 0, 128, 128);
   gradient.addColorStop(0, from);
   gradient.addColorStop(1, to);
@@ -147,7 +177,85 @@ function uploadImage(ops: Record<string, unknown>, pixels: Uint8Array, width: nu
   return entry(blob);
 }
 
+/** The API key the preview "saved": the fake SteamGridDB accepts this one only. */
+const PREVIEW_KEY = "0123456789abcdef0123456789abcdef";
+
+/**
+ * A stand-in for the Vita host's HTTPS extras and for SteamGridDB: a request
+ * finishes after a few polls with a canned reply.
+ */
+function installNet(ops: Record<string, unknown>): void {
+  interface Request {
+    polls: number;
+    status: number;
+    text: string;
+    size: number;
+  }
+  const requests = new Map<number, Request>();
+  let next = 1;
+  const reply = (data: unknown) => JSON.stringify({ success: true, data });
+  ops.__netGet = (url: string, authorization: string): number => {
+    let status = 200;
+    let text = reply([]);
+    if (authorization !== `Bearer ${PREVIEW_KEY}`) {
+      status = 401;
+      text = JSON.stringify({ success: false, errors: ["Authentication Required"] });
+    } else if (url.includes("/search/autocomplete/")) {
+      const term = decodeURIComponent(url.split("/").pop() ?? "");
+      text = reply([
+        { id: 4501, name: term, release_date: 1339459200 },
+        { id: 4502, name: `${term} 2`, release_date: 1484870400 },
+        { id: 4503, name: `${term} Remastered`, release_date: 1454371200 },
+        { id: 4504, name: `${term}: The Animation`, release_date: 0 },
+      ]);
+    } else if (url.includes("/icons/game/") || url.includes("/heroes/game/")) {
+      const kind = url.includes("/icons/") ? "icon" : "hero";
+      const count = kind === "icon" ? 14 : 6;
+      text = reply(
+        Array.from({ length: count }, (_, index) => ({
+          id: (kind === "icon" ? 7000 : 9000) + index,
+          url: `https://cdn2.steamgriddb.com/${kind}/${index}.png`,
+        })),
+      );
+    }
+    requests.set(next, { polls: 0, status, text, size: text.length });
+    return next++;
+  };
+  ops.__netSave = (_url: string, _path: string): number => {
+    requests.set(next, { polls: 0, status: 200, text: "", size: 480 * 1024 });
+    return next++;
+  };
+  ops.__netState = (id: number): string => {
+    const request = requests.get(id);
+    if (!request) return "error unknown request";
+    request.polls++;
+    if (request.polls < 6) return `busy ${Math.round((request.size * request.polls) / 6)} ${request.size}`;
+    return `done ${request.status} ${request.size}`;
+  };
+  ops.__netText = (id: number): string => requests.get(id)?.text ?? "";
+  ops.__netClose = (id: number): void => {
+    requests.delete(id);
+  };
+}
+
 function installHost(ops: Record<string, unknown>): void {
+  installNet(ops);
+  // A downloaded candidate gets a generated picture, numbered by its id.
+  const art = new Map<string, number>();
+  // Accent per texture handle, as the Vita host keeps it.
+  const accents = new Map<number, number>();
+  ops.__artAccent = (handle: number): number => accents.get(handle) ?? -1;
+  ops.__artDir = "ux0:/data/PocketShelf/art";
+  ops.__appArt = (name: string): number => {
+    let handle = art.get(name);
+    if (handle === undefined) {
+      const index = Number(name.replace(/\D/g, "")) || 0;
+      handle = uploadImage(ops, iconPixels(index, `S ${index % 100}`), 128, 128);
+      accents.set(handle, iconAccent(index));
+      art.set(name, handle);
+    }
+    return handle;
+  };
   const handles = new Map<string, number>();
   ops.appTable = () =>
     JSON.stringify({
@@ -164,6 +272,7 @@ function installHost(ops: Record<string, unknown>): void {
     let handle = handles.get(id);
     if (handle === undefined) {
       handle = uploadImage(ops, iconPixels(index, TITLES[index][1]), 128, 128);
+      accents.set(handle, iconAccent(index));
       handles.set(id, handle);
     }
     return handle;
@@ -171,25 +280,35 @@ function installHost(ops: Record<string, unknown>): void {
   // Like the Vita host, a picture is uploaded on request. Every fourth title
   // has none, to show the fallback.
   const backdrops = new Map<string, number>();
-  ops.__appBackdrop = (id: string): number => {
-    const index = TITLES.findIndex(([known]) => known === id);
-    if (index < 0 || index % 4 === 3) return -1;
-    let handle = backdrops.get(id);
+  ops.__appBackdrop = (id: string, file = ""): number => {
+    const title = TITLES.findIndex(([known]) => known === id);
+    // A file from the backdrops folder is numbered by the digits in its name.
+    const index = file ? Number(file.replace(/\D/g, "")) || 0 : title;
+    if (title < 0 || (!file && index % 4 === 3)) return -1;
+    const key = file || id;
+    let handle = backdrops.get(key);
     if (handle === undefined) {
       handle = uploadImage(ops, backdropPixels(index), 512, 256);
-      backdrops.set(id, handle);
+      backdrops.set(key, handle);
     }
     return handle;
   };
 }
 
-/** One tap, a hold for N frames, or a restart of the app that keeps its saved files. */
+/**
+ * One tap, a hold for N frames, a wait of N frames (mask 0), or a restart of
+ * the app that keeps its saved files.
+ */
 type Step = number | [mask: number, frames: number] | "restart";
 
 interface Shot {
   name: string;
   steps: Step[];
+  /** Save an API key before the app starts. */
+  key?: boolean;
 }
+
+
 
 const tap = (button: number, times = 1): Step[] => Array<Step>(times).fill(button);
 
@@ -204,7 +323,10 @@ const SHOTS: Shot[] = [
   { name: "07-editor", steps: [BTN.RIGHT, BTN.TRIANGLE] },
   { name: "08-keyboard", steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN] },
   { name: "09-art-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE] },
-  { name: "10-categories", steps: [BTN.SELECT, ...tap(BTN.DOWN, 5), BTN.CIRCLE, BTN.DOWN] },
+  { name: "10-categories", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, BTN.DOWN] },
+  // Icon box off: SELECT, down to "Icon box", right once.
+  { name: "29-icon-box-off", steps: [BTN.SELECT, ...tap(BTN.DOWN, 5), BTN.RIGHT, BTN.SELECT, BTN.RIGHT] },
+  { name: "30-menu-scrolled", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6)] },
   // Backdrop off: SELECT, down to "Backdrop", right once.
   { name: "20-no-backdrop", steps: [BTN.SELECT, ...tap(BTN.DOWN, 4), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2)] },
   { name: "11-launching", steps: [...tap(BTN.RIGHT, 2), BTN.CIRCLE] },
@@ -219,6 +341,29 @@ const SHOTS: Shot[] = [
     name: "21-list-detailed",
     steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 4)],
   },
+  // Title editor, down to "SteamGridDB": no API key saved yet.
+  { name: "22-online-key", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE] },
+  // With a key: the search runs and lists games.
+  { name: "23-online-games", key: true, steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 30]] },
+  // Choose the first game: its icon candidates, third one on screen.
+  {
+    name: "24-online-icon",
+    key: true,
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.RIGHT, [0, 20], BTN.RIGHT, [0, 20]],
+  },
+  // The backdrop row, applied: it shows behind the screen once the drawers close.
+  {
+    name: "25-online-backdrop",
+    key: true,
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.DOWN, [0, 20], BTN.RIGHT, [0, 20], BTN.CIRCLE],
+  },
+  {
+    name: "26-online-applied",
+    key: true,
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.CIRCLE, BTN.DOWN, [0, 20], BTN.CIRCLE, ...tap(BTN.CROSS, 3), [0, 30]],
+  },
+  { name: "27-editor-rows", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3)] },
+  { name: "28-backdrop-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.DOWN] },
   // Holding RIGHT for a second repeats the move.
   { name: "12-hold-repeat", steps: [[BTN.RIGHT, 60]] },
   // Launch from another category, start again: the selection comes back.
@@ -237,6 +382,13 @@ function advance(world: SimWorld, mask: number, frames: number): void {
 
 async function capture(shot: Shot): Promise<void> {
   const files = createSimFsHost();
+  if (shot.key) {
+    (files.ns as { write(path: string, data: string, mode: number): number }).write(
+      "steamgriddb.txt",
+      JSON.stringify(PREVIEW_KEY),
+      0,
+    );
+  }
   const boot = async () => {
     const world = await bootWorld(`${BUNDLE_DIR}/main`, 60, { fs: files.ns }, installHost, {
       width: W,

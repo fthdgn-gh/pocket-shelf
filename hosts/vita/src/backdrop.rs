@@ -8,8 +8,9 @@
 //! largest power-of-two size the core accepts; the guest stretches that back
 //! over the screen.
 //!
-//! A texture this size is 512 KiB, so only the last few are kept: asking for
-//! one more frees the least recently used.
+//! A texture this size is 512 KiB, so the guest says when it is done with
+//! one (`release`), and the host frees it then. The host does not free a
+//! picture by itself: only the guest knows which ones are on screen.
 
 use std::fs;
 use std::string::String;
@@ -28,10 +29,11 @@ const OUT_W_MIN: u32 = 64;
 /// Screen shape the picture is cropped to (480:272).
 const ASPECT_W: u64 = 30;
 const ASPECT_H: u64 = 17;
-/// Textures kept at once.
-const KEEP: usize = 4;
+/// Textures held at once. A guest that asks for more without releasing any
+/// gets -1 for the extra ones.
+const HELD_MAX: usize = 8;
 
-/// Loaded textures, least recently used first.
+/// Loaded textures, by picture.
 static mut CACHE: Vec<(String, i32)> = Vec::new();
 /// Titles found to have no usable picture, so their files are read once.
 static mut MISSING: Vec<String> = Vec::new();
@@ -149,21 +151,49 @@ fn decode(path: &str) -> Option<(u32, u32, Vec<u8>)> {
     Some((out_w, out_h, rgba))
 }
 
-/// Texture handle of a listed title's background picture, or -1 when the id
-/// was not found by the scan or the title has no picture the host can decode.
-/// The handle stays valid until `KEEP` other titles have been asked for;
-/// asking again reloads it under a new handle.
-pub unsafe fn texture(ui: &mut pocketjs_core::Ui, title_id: &str) -> i32 {
-    if !crate::installed::listed(title_id) || MISSING.iter().any(|id| id == title_id) {
+/// Path of a picture the user supplied: a plain `.png` name in the data
+/// folder's `backdrops` directory.
+#[cfg(feature = "data-fs")]
+fn custom_path(file: &str) -> Option<String> {
+    let plain = !file.is_empty()
+        && file.len() <= 96
+        && !file.starts_with('.')
+        && !file.contains(['/', '\\', ':'])
+        && file.to_ascii_lowercase().ends_with(".png");
+    plain.then(|| format!("{}/backdrops/{file}", crate::datafs::data_dir()))
+}
+
+#[cfg(not(feature = "data-fs"))]
+fn custom_path(_file: &str) -> Option<String> {
+    None
+}
+
+/// Texture handle of a background picture, or -1 when there is none the host
+/// can decode. With `file` empty it is the listed title's own picture;
+/// otherwise it is that PNG from the data folder's `backdrops` directory.
+/// The handle stays valid until it is passed to `release`; asking for the
+/// same picture again before that returns the same handle.
+pub unsafe fn texture(ui: &mut pocketjs_core::Ui, title_id: &str, file: &str) -> i32 {
+    // A file's key cannot collide with a title id, which has no colon.
+    let key = if file.is_empty() { String::from(title_id) } else { format!("file:{file}") };
+    let key = key.as_str();
+    if file.is_empty() && !crate::installed::listed(title_id) {
         return -1;
     }
-    if let Some(index) = CACHE.iter().position(|(id, _)| id == title_id) {
-        let entry = CACHE.remove(index);
-        let handle = entry.1;
-        CACHE.push(entry);
-        return handle;
+    if MISSING.iter().any(|id| id == key) {
+        return -1;
     }
-    let decoded = candidates(title_id).iter().find_map(|path| decode(path));
+    if let Some((_, handle)) = CACHE.iter().find(|(id, _)| id == key) {
+        return *handle;
+    }
+    if CACHE.len() >= HELD_MAX {
+        return -1;
+    }
+    let decoded = if file.is_empty() {
+        candidates(title_id).iter().find_map(|path| decode(path))
+    } else {
+        custom_path(file).and_then(|path| decode(&path))
+    };
     let handle = match decoded {
         Some((width, height, rgba)) => ui.upload_texture_flags(
             &rgba,
@@ -175,15 +205,25 @@ pub unsafe fn texture(ui: &mut pocketjs_core::Ui, title_id: &str) -> i32 {
         None => -1,
     };
     if handle < 0 {
-        MISSING.push(String::from(title_id));
+        // A title's own files do not change while the launcher runs. A file in
+        // the data folder can appear later (a download), so it is tried again.
+        if file.is_empty() {
+            MISSING.push(String::from(key));
+        }
         return -1;
     }
     crate::graphics::register_texture(ui, handle);
-    while CACHE.len() >= KEEP {
-        let (_, old) = CACHE.remove(0);
-        crate::graphics::free_texture(old);
-        ui.free_texture(old);
-    }
-    CACHE.push((String::from(title_id), handle));
+    CACHE.push((String::from(key), handle));
     handle
+}
+
+/// Free a picture's texture. The guest calls this once nothing on screen
+/// draws the handle any more. Handles this module did not hand out are ignored.
+pub unsafe fn release(ui: &mut pocketjs_core::Ui, handle: i32) {
+    let Some(index) = CACHE.iter().position(|(_, held)| *held == handle) else {
+        return;
+    };
+    CACHE.remove(index);
+    crate::graphics::free_texture(handle);
+    ui.free_texture(handle);
 }

@@ -11,6 +11,12 @@ vita2d-sys = "0.1.1"
 # Decodes each title's icon0.png; built only with `installed-apps`.
 png = { version = "0.17", optional = true }
 
+# TLS for `http`. The Vita's own SceSsl cannot negotiate with servers that
+# present an ECDSA certificate, so the host carries a TLS stack in Rust.
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"], optional = true }
+rustls-rustcrypto = { version = "0.0.2-alpha", optional = true }
+webpki-roots = { version = "1", optional = true }
+
 # File access for apps (globalThis.fs); built only with `data-fs`.
 pocket-fs = { path = "../../engine/crates/pocket-fs", default-features = false, optional = true }
 
@@ -28,6 +34,9 @@ usb-debug = ["vitasdk-sys/ScePower_stub", "vitasdk-sys/SceSysmem_stub"]
 installed-apps = ["vitasdk-sys/SceAppMgr_stub", "dep:png"]
 # globalThis.fs over ux0:/data/pocketjs/<title id>.
 data-fs = ["dep:pocket-fs"]
+# HTTPS GET for apps (src/http.rs): text replies and PNG downloads into the
+# data folder.
+http = ["data-fs", "dep:rustls", "dep:rustls-rustcrypto", "dep:webpki-roots"]
 capture = []
 bench = []
 

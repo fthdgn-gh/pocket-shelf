@@ -22,6 +22,10 @@ pub mod dev_protocol;
 pub mod devmenu;
 pub mod ffi;
 pub mod graphics;
+#[cfg(feature = "http")]
+pub mod http;
+#[cfg(feature = "installed-apps")]
+pub mod accent;
 #[cfg(feature = "installed-apps")]
 pub mod backdrop;
 #[cfg(feature = "installed-apps")]

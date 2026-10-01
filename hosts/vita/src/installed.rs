@@ -246,13 +246,17 @@ pub unsafe fn icon(ui: &mut pocketjs_core::Ui, title_id: &str) -> i32 {
         return *handle;
     }
     let handle = match decode_icon(title_id) {
-        Some((width, height, rgba)) => ui.upload_texture_flags(
-            &rgba,
-            width,
-            height,
-            pocketjs_core::spec::psm::PSM_8888,
-            pocketjs_core::spec::img::FLAG_LINEAR,
-        ),
+        Some((width, height, rgba)) => {
+            let handle = ui.upload_texture_flags(
+                &rgba,
+                width,
+                height,
+                pocketjs_core::spec::psm::PSM_8888,
+                pocketjs_core::spec::img::FLAG_LINEAR,
+            );
+            crate::accent::record(handle, &rgba);
+            handle
+        }
         None => -1,
     };
     if handle >= 0 {

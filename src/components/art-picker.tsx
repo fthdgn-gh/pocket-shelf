@@ -1,15 +1,19 @@
 import { For, Show } from "solid-js";
-import { artFolder } from "../art-files.ts";
+import { artFolder, backdropFolder } from "../art-files.ts";
 import { fitTitle } from "../catalog.ts";
 import { PICKER_ROWS, type LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
 import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
 
-/** Lists the PNG files in the art folder, after "Default" and "Game icon". */
+/**
+ * Lists the PNG files of the art folder after "Default" and "Game icon", or
+ * those of the backdrops folder after "Default" and "None".
+ */
 export function ArtPickerOverlay(props: { state: LauncherState }) {
   const { state } = props;
-  const entries = () => ["Default", "Game icon", ...state.artFiles()];
+  const backdrop = () => state.pickerKind() === "backdrop";
+  const entries = () => ["Default", backdrop() ? "None" : "Game icon", ...state.artFiles()];
   // Scroll so the highlighted row stays in view.
   const first = () => {
     const last = entries().length - PICKER_ROWS;
@@ -17,7 +21,7 @@ export function ArtPickerOverlay(props: { state: LauncherState }) {
   };
   const visible = () => entries().slice(first(), first() + PICKER_ROWS);
   return (
-    <Drawer state={state} title="Box art" size="wide">
+    <Drawer state={state} title={backdrop() ? "Backdrop" : "Box art"} size="wide">
       <For each={visible()}>
         {(name, index) => (
           <OptionRow
@@ -33,7 +37,7 @@ export function ArtPickerOverlay(props: { state: LauncherState }) {
       </Show>
       <Show when={!state.artNote() && state.artFiles().length === 0}>
         <Note state={state}>No PNG files yet. Copy images to</Note>
-        <Note state={state}>{artFolder()}</Note>
+        <Note state={state}>{backdrop() ? backdropFolder() : artFolder()}</Note>
       </Show>
       <Prompt state={state} parts={hints([state.confirmButton(), "Use"], [state.cancelButton(), "Back"])} />
     </Drawer>

@@ -345,7 +345,7 @@
     "ime:setup": "bun tools/ime/setup.ts",
     "clear:companion": "bun tools/ime/device.ts",
     "test:fuzz": "bun microts/compiler/model-fuzz.ts",
-    "shelf:build": "POCKET_FONT_REGULAR=src/fonts/SpaceGrotesk-Regular.ttf POCKET_FONT_BOLD=src/fonts/SpaceGrotesk-Bold.ttf POCKET_FONT_MONO=src/fonts/Hack-Regular.ttf bun tools/pocket.ts build --target vita -- --features=installed-apps,data-fs",
+    "shelf:build": "POCKET_FONT_REGULAR=src/fonts/SpaceGrotesk-Regular.ttf POCKET_FONT_BOLD=src/fonts/SpaceGrotesk-Bold.ttf POCKET_FONT_MONO=src/fonts/Hack-Regular.ttf bun tools/pocket.ts build --target vita -- --features=installed-apps,data-fs,http",
     "shelf:build:release": "bun run shelf:build --release",
     "shelf:run": "bun run shelf:build && /Applications/Vita3K.app/Contents/MacOS/Vita3K dist/vita/pocket-shelf.vpk",
     "shelf:check": "bun tools/pocket.ts check --target vita && bunx tsc --noEmit",

@@ -112,6 +112,11 @@ fn init() -> bool {
     ok
 }
 
+/// Bring up sceNet for another module of the host (http.rs).
+pub(crate) fn ensure_stack() -> bool {
+    init()
+}
+
 unsafe fn init_scenet() -> bool {
     use vitasdk_sys::*;
     // Static pool: sceNet keeps referencing it for the process lifetime.
