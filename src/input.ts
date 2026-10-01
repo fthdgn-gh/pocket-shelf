@@ -48,6 +48,7 @@ export function installInput(state: LauncherState): void {
   let held = 0;
   let heldFrames = 0;
   onFrame((buttons) => {
+    state.frame();
     const entry = DIRECTIONS.find(([mask]) => buttons & mask);
     if (!entry) {
       held = 0;

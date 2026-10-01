@@ -1,10 +1,11 @@
 import { mkdirSync, readdirSync } from "@pocketjs/framework/fs";
 import { getOps } from "@pocketjs/framework/host";
 
-/** Vita host extras for custom box art (hosts/vita/src/art.rs). */
+/** Vita host extras for artwork (hosts/vita/src/art.rs and backdrop.rs). */
 interface ArtHost {
   __appArt?(name: string): number;
   __artDir?: string;
+  __appBackdrop?(titleId: string): number;
 }
 
 const host = () => getOps() as unknown as ArtHost;
@@ -29,4 +30,12 @@ export function listArt(): string[] {
 /** Texture handle for an art file, -1 when the host cannot decode it. */
 export function artTexture(name: string): number {
   return host().__appArt?.(name) ?? -1;
+}
+
+/**
+ * Texture handle for a title's full-screen picture, -1 when it has none. The
+ * host keeps only the last few, so ask again each time the picture is shown.
+ */
+export function backdropTexture(titleId: string): number {
+  return host().__appBackdrop?.(titleId) ?? -1;
 }

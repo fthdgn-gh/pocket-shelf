@@ -23,6 +23,8 @@ pub mod devmenu;
 pub mod ffi;
 pub mod graphics;
 #[cfg(feature = "installed-apps")]
+pub mod backdrop;
+#[cfg(feature = "installed-apps")]
 pub mod installed;
 pub mod input;
 pub mod net;

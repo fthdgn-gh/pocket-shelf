@@ -897,6 +897,22 @@ unsafe extern "C" fn js_installed_icon(
     JS_NewInt32(ctx, handle)
 }
 
+/// ui.__appBackdrop(titleId) -> texture handle | -1. Host extra (not a spec
+/// op): the title's full-screen picture, decoded on request. The host keeps
+/// the last few; an older handle stops drawing once its texture is freed.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_app_backdrop(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    argc: i32,
+    argv: *mut JSValue,
+) -> JSValue {
+    let handle = with_str_arg(ctx, argc, argv, 0, -1, |id| {
+        crate::backdrop::texture(ui(), id)
+    });
+    JS_NewInt32(ctx, handle)
+}
+
 /// ui.__appArt(fileName) -> texture handle | -1. Host extra (not a spec op):
 /// decodes a PNG from the launcher's art folder.
 #[cfg(all(feature = "installed-apps", feature = "data-fs"))]
@@ -1050,6 +1066,7 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"appTable\0", js_installed_table, 0);
         add_fn(ctx, ui_obj, b"appLaunch\0", js_installed_launch, 1);
         add_fn(ctx, ui_obj, b"appIcon\0", js_installed_icon, 1);
+        add_fn(ctx, ui_obj, b"__appBackdrop\0", js_app_backdrop, 1);
     }
 
     // Custom box art: the texture op and the folder the files go in.

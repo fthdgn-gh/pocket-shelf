@@ -36,14 +36,23 @@ function ListRow(props: {
   );
 }
 
-/** The selected title at full size, beside the list. */
+/** The selected title in detail, beside the list. */
 function Detail(props: { state: LauncherState; game: Game }) {
   const { state } = props;
   return (
-    <View class="flex-col items-center justify-center gap-2 grow h-full">
-      <TitleArt size="lg" game={props.game} icon={state.icons()[props.game.id]} />
+    <View
+      class={
+        state.backdrop()
+          ? "flex-col items-end justify-end gap-2 grow h-full pr-2 pb-2"
+          : "flex-col items-center justify-center gap-2 grow h-full"
+      }
+    >
+      {/* With a backdrop the picture fills this side, so the large icon steps aside. */}
+      <Show when={!state.backdrop()}>
+        <TitleArt size="lg" game={props.game} icon={state.icons()[props.game.id]} />
+      </Show>
       <Show when={state.detail() !== "basic"}>
-        <View class="flex-col items-center gap-[2]">
+        <View class={state.backdrop() ? "flex-col items-end gap-[2]" : "flex-col items-center gap-[2]"}>
           <Text class={state.text().title} style={{ textColor: state.theme().text }}>
             {fitTitle(props.game.title, 176, fontSlot(state.font(), "title"))}
           </Text>

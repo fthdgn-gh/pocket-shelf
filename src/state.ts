@@ -11,7 +11,7 @@ import {
   saveCategoryConfig,
   type Category,
 } from "./categories.ts";
-import { artTexture, listArt } from "./art-files.ts";
+import { artTexture, backdropTexture, listArt } from "./art-files.ts";
 import type { Catalog } from "./catalog.ts";
 import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "./keyboard.ts";
 import { TITLE_MAX, USE_ICON, loadOverrides, saveOverrides, type Overrides, type TitleOverride } from "./overrides.ts";
@@ -21,8 +21,11 @@ import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
 import { DEFAULT_THEME, THEMES, themeById, type ThemeId } from "./themes.ts";
 import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./types.ts";
 
-/** Rows in the SELECT menu: theme, font, view, details, categories, confirm button. */
-export const MENU_ROWS = 6;
+/** Rows in the SELECT menu: theme, font, view, details, backdrop, categories, confirm button. */
+export const MENU_ROWS = 7;
+
+/** Frames the selection rests on a title before its backdrop is loaded (0.25 s at 60 per second). */
+const BACKDROP_DELAY = 15;
 
 /** Rows in the per-title editor: category, title, box art, reset. */
 export const EDITOR_ROWS = 4;
@@ -143,6 +146,7 @@ export function createLauncherState(catalog: Catalog) {
   const [detail, setDetail] = createSignal<DetailLevel>(saved?.detail ?? "normal");
   const [view, setViewMode] = createSignal<ViewMode>(saved?.view ?? "carousel");
   const [confirmMode, setConfirmMode] = createSignal<ConfirmMode>(saved?.confirm ?? "circle");
+  const [backdropOn, setBackdropOn] = createSignal(saved?.backdrop ?? true);
 
   // The launcher process ends when a title starts, so the selection is saved
   // with the settings and restored on the next start.
@@ -158,11 +162,12 @@ export function createLauncherState(catalog: Catalog) {
       view: view(),
       detail: detail(),
       confirm: confirmMode(),
+      backdrop: backdropOn(),
       category: categoryId(),
       title: games()[selectedIndex()]?.id,
     });
   // Persist on change; the initial run is skipped so a fresh start writes nothing.
-  createEffect(on([themeId, font, view, detail, confirmMode], persist, { defer: true }));
+  createEffect(on([themeId, font, view, detail, confirmMode, backdropOn], persist, { defer: true }));
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [menuRow, setMenuRow] = createSignal(0);
 
@@ -260,6 +265,50 @@ export function createLauncherState(catalog: Catalog) {
       });
     }
   });
+  // --- Backdrop ------------------------------------------------------------
+  // The selected title's full-screen picture. Decoding one takes the host a
+  // moment, so it loads once the selection has rested on a title, and the
+  // previous picture stays underneath while the new one fades in.
+  const [backdrop, setBackdrop] = createSignal<string | undefined>(undefined);
+  const [backdropUnder, setBackdropUnder] = createSignal<string | undefined>(undefined);
+  let backdropWait = 0;
+  const selectedId = createMemo(() => games()[selectedIndex()]?.id);
+  createEffect(() => {
+    selectedId();
+    if (backdropOn()) backdropWait = BACKDROP_DELAY;
+    else {
+      backdropWait = 0;
+      batch(() => {
+        setBackdrop(undefined);
+        setBackdropUnder(undefined);
+      });
+    }
+  });
+  const loadBackdrop = () => {
+    const id = selectedId();
+    const handle = id && native ? backdropTexture(id) : -1;
+    if (handle < 0) {
+      batch(() => {
+        setBackdrop(undefined);
+        setBackdropUnder(undefined);
+      });
+      return;
+    }
+    // The handle is part of the key: the host frees old pictures, and a
+    // picture loaded again comes back under a new handle.
+    const key = `backdrop.${id}.${handle}`;
+    if (key === backdrop()) return;
+    registerTexture(key, handle);
+    batch(() => {
+      setBackdropUnder(backdrop());
+      setBackdrop(key);
+    });
+  };
+  /** Call once per frame. */
+  const frame = () => {
+    if (backdropWait > 0 && --backdropWait === 0) loadBackdrop();
+  };
+
   // --- SELECT menu -------------------------------------------------------
   const openMenu = () => setMenuOpen(true);
   const closeMenu = () => setMenuOpen(false);
@@ -272,7 +321,8 @@ export function createLauncherState(catalog: Catalog) {
     else if (row === 1) setFont((id) => cycle(FONTS.map((item) => item.id), id, delta));
     else if (row === 2) setView(cycle(VIEW_MODES, view(), delta));
     else if (row === 3) setDetail(cycle(DETAIL_LEVELS, detail(), delta));
-    else if (row === 4) openCategoryManager();
+    else if (row === 4) setBackdropOn((on) => !on);
+    else if (row === 5) openCategoryManager();
     else toggleConfirm();
   };
 
@@ -635,6 +685,10 @@ export function createLauncherState(catalog: Catalog) {
     text,
     confirmButton,
     cancelButton,
+    backdropOn,
+    backdrop,
+    backdropUnder,
+    frame,
     select,
     page,
     launchSelected,

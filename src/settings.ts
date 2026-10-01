@@ -10,6 +10,8 @@ export interface Settings {
   view: ViewMode;
   detail: DetailLevel;
   confirm: ConfirmMode;
+  /** Whether the selected title's picture is drawn behind the screen. */
+  backdrop: boolean;
   /** Category and title that were selected when the settings were last saved. */
   category?: string;
   title?: string;
@@ -32,6 +34,7 @@ export function loadSettings(): Partial<Settings> | null {
     if (VIEW_MODES.includes(raw.view as ViewMode)) result.view = raw.view;
     if (DETAIL_LEVELS.includes(raw.detail as DetailLevel)) result.detail = raw.detail;
     if (raw.confirm === "circle" || raw.confirm === "cross") result.confirm = raw.confirm;
+    if (typeof raw.backdrop === "boolean") result.backdrop = raw.backdrop;
     if (typeof raw.category === "string") result.category = raw.category;
     if (typeof raw.title === "string") result.title = raw.title;
     return result;

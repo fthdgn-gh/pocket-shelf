@@ -131,6 +131,11 @@ unsafe fn titles() -> &'static [Title] {
     CACHE.as_deref().unwrap_or(&[])
 }
 
+/// Whether the scan found a title with this id.
+pub unsafe fn listed(title_id: &str) -> bool {
+    titles().iter().any(|item| item.title_id == title_id)
+}
+
 fn push_json_str(output: &mut String, value: &str) {
     output.push('"');
     for character in value.chars() {

@@ -98,18 +98,49 @@ function iconPixels(index: number, title: string): Uint8Array {
   return new Uint8Array(ctx.getImageData(0, 0, 128, 128).data.buffer);
 }
 
-/** Upload 128x128 RGBA as a bilinear-filtered texture, the way the Vita host does. */
-function uploadIcon(ops: Record<string, unknown>, pixels: Uint8Array): number {
+/** A 512x256 stand-in for a title's full-screen picture: sky, sun and hills in its colors. */
+function backdropPixels(index: number): Uint8Array {
+  const canvas = createCanvas(512, 256);
+  const ctx = canvas.getContext("2d");
+  const [from, to] = ICON_COLORS[index % ICON_COLORS.length];
+  const sky = ctx.createLinearGradient(0, 0, 0, 256);
+  sky.addColorStop(0, to);
+  sky.addColorStop(1, from);
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, 512, 256);
+  ctx.fillStyle = "#ffffff";
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.arc(330 + ((index * 41) % 120), 70 + ((index * 23) % 40), 34, 0, Math.PI * 2);
+  ctx.fill();
+  for (const [layer, shade] of [0.25, 0.45, 0.7].entries()) {
+    ctx.globalAlpha = shade;
+    ctx.fillStyle = "#04060f";
+    ctx.beginPath();
+    ctx.moveTo(0, 256);
+    for (let x = 0; x <= 512; x += 16) {
+      const wave = Math.sin((x + index * 53) / (38 + layer * 21)) * (26 - layer * 6);
+      ctx.lineTo(x, 150 + layer * 30 + wave);
+    }
+    ctx.lineTo(512, 256);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  return new Uint8Array(ctx.getImageData(0, 0, 512, 256).data.buffer);
+}
+
+/** Upload RGBA as a bilinear-filtered texture, the way the Vita host does. */
+function uploadImage(ops: Record<string, unknown>, pixels: Uint8Array, width: number, height: number): number {
   const entry = ops.uploadImgEntry as ((blob: Uint8Array) => number) | undefined;
   if (!entry) {
     const upload = ops.uploadTexture as (buf: Uint8Array, w: number, h: number, psm: number) => number;
-    return upload(pixels, 128, 128, PSM.PSM_8888);
+    return upload(pixels, width, height, PSM.PSM_8888);
   }
   // IMG entry: u16 width, u16 height, u8 pixel format, u8 flags, 2 bytes of padding, then pixels.
   const blob = new Uint8Array(8 + pixels.length);
   const view = new DataView(blob.buffer);
-  view.setUint16(0, 128, true);
-  view.setUint16(2, 128, true);
+  view.setUint16(0, width, true);
+  view.setUint16(2, height, true);
   blob[4] = PSM.PSM_8888;
   blob[5] = IMG_FLAG_LINEAR;
   blob.set(pixels, 8);
@@ -132,8 +163,21 @@ function installHost(ops: Record<string, unknown>): void {
     if (index < 0 || index % 5 === 4) return -1;
     let handle = handles.get(id);
     if (handle === undefined) {
-      handle = uploadIcon(ops, iconPixels(index, TITLES[index][1]));
+      handle = uploadImage(ops, iconPixels(index, TITLES[index][1]), 128, 128);
       handles.set(id, handle);
+    }
+    return handle;
+  };
+  // Like the Vita host, a picture is uploaded on request. Every fourth title
+  // has none, to show the fallback.
+  const backdrops = new Map<string, number>();
+  ops.__appBackdrop = (id: string): number => {
+    const index = TITLES.findIndex(([known]) => known === id);
+    if (index < 0 || index % 4 === 3) return -1;
+    let handle = backdrops.get(id);
+    if (handle === undefined) {
+      handle = uploadImage(ops, backdropPixels(index), 512, 256);
+      backdrops.set(id, handle);
     }
     return handle;
   };
@@ -160,7 +204,9 @@ const SHOTS: Shot[] = [
   { name: "07-editor", steps: [BTN.RIGHT, BTN.TRIANGLE] },
   { name: "08-keyboard", steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN] },
   { name: "09-art-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE] },
-  { name: "10-categories", steps: [BTN.SELECT, ...tap(BTN.DOWN, 4), BTN.CIRCLE, BTN.DOWN] },
+  { name: "10-categories", steps: [BTN.SELECT, ...tap(BTN.DOWN, 5), BTN.CIRCLE, BTN.DOWN] },
+  // Backdrop off: SELECT, down to "Backdrop", right once.
+  { name: "20-no-backdrop", steps: [BTN.SELECT, ...tap(BTN.DOWN, 4), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2)] },
   { name: "11-launching", steps: [...tap(BTN.RIGHT, 2), BTN.CIRCLE] },
   // Second theme, to check that colors come from the theme and not from literals.
   { name: "17-detailed", steps: [BTN.SELECT, ...tap(BTN.DOWN, 3), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4)] },
