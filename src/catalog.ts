@@ -43,14 +43,31 @@ export interface Catalog {
   native: boolean;
 }
 
+// Adrenaline, the PSP emulator, is installed as PSPEMUCFW. The bubbles it
+// makes for single PSP and PS1 games use the same prefix with a number, for
+// example PSPEMU001.
+const ADRENALINE_ID = "PSPEMUCFW";
+const ADRENALINE_BUBBLE_PREFIX = "PSPEMU";
+
 /**
- * The host's installed-title table (kind "native"). Hosts without app
- * navigation report no table, which leaves the list empty.
+ * Whether an installed title belongs in the launcher. Adrenaline's game
+ * bubbles are left out: each one is a shortcut into Adrenaline, not a title
+ * of its own. Adrenaline itself stays.
+ */
+export function isListed(titleId: string): boolean {
+  return titleId === ADRENALINE_ID || !titleId.startsWith(ADRENALINE_BUBBLE_PREFIX);
+}
+
+/**
+ * The host's installed-title table (kind "native"), less the titles
+ * `isListed` leaves out. Hosts without app navigation report no table, which
+ * leaves the list empty.
  */
 export function loadCatalog(): Catalog {
   const table = appTable();
   if (table?.kind !== "native") return { native: false, games: [] };
-  const games: Game[] = table.apps.map((app, index) => ({
+  const apps = table.apps.filter((app) => isListed(app.id));
+  const games: Game[] = apps.map((app, index) => ({
     title: cleanTitle(app.title),
     id: app.id,
     genre: "PS Vita",
