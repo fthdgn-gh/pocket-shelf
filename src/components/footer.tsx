@@ -1,30 +1,48 @@
-import { Show } from "solid-js";
+import { For, Show } from "solid-js";
 import { glyph } from "@pocketjs/framework/modality";
 import { Text, View } from "@pocketjs/framework/components";
 import type { LauncherState } from "../state.ts";
 
+/** One button hint: the button's glyph in the accent color, then what it does. */
+export function Hint(props: { state: LauncherState; button: string; label: string }) {
+  return (
+    <View class="flex-row items-center gap-1 shrink-0">
+      <Text class={props.state.text().smallBold} style={{ textColor: props.state.theme().accent }}>
+        {props.button}
+      </Text>
+      <Text class={props.state.text().small} style={{ textColor: props.state.theme().dim }}>
+        {props.label}
+      </Text>
+    </View>
+  );
+}
+
+/** Button legend on the left, position in the current category on the right. */
 export function Footer(props: { state: LauncherState }) {
   const { state } = props;
-  // Shown only while a launch is in progress.
-  const message = () => {
-    const launching = state.launchingTitle();
-    return launching ? `Launching ${launching}...` : "";
-  };
+  const hints = () => [
+    { button: state.confirmGlyph(), label: "Launch" },
+    { button: glyph("triangle"), label: "Edit" },
+    { button: "SELECT", label: "Menu" },
+  ];
   const position = () => (state.games().length === 0 ? 0 : state.selectedIndex() + 1);
-  const hints = () => `${state.confirmGlyph()}: Launch  ·  ${glyph("triangle")}: Edit  ·  SELECT: Menu`;
   return (
-    <View class="flex-col px-5 py-1 gap-1">
-      <Show when={message()}>
-        <Text class={state.theme().footerAccent}>{message()}</Text>
+    <View class="flex-row items-center justify-between w-full h-[26] shrink-0 px-4">
+      <Show
+        when={state.launchingTitle()}
+        fallback={
+          <View class="flex-row items-center gap-3">
+            <For each={hints()}>{(hint) => <Hint state={state} button={hint.button} label={hint.label} />}</For>
+          </View>
+        }
+      >
+        <Text class={state.text().smallBold} style={{ textColor: state.theme().accent }}>
+          {`Launching ${state.launchingTitle()}...`}
+        </Text>
       </Show>
-      <View class="flex-row items-center justify-between">
-        <Text class={state.theme().footerDim}>{hints()}</Text>
-        <View class={state.theme().pill}>
-          <Text class={state.theme().pillText}>
-            {position()} / {state.games().length}
-          </Text>
-        </View>
-      </View>
+      <Text class={state.text().small} style={{ textColor: state.theme().faint }}>
+        {`${position()} / ${state.games().length}`}
+      </Text>
     </View>
   );
 }

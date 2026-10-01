@@ -2,16 +2,18 @@
 //
 //   state.ts        selection, theme, view mode, menu, icon loading
 //   input.ts        button bindings
-//   themes.ts       color themes (class literals per UI role)
+//   themes.ts       color palettes
+//   text.ts         fonts and the text class per role
 //   catalog.ts      reads the host's installed-title table
 //   navigation.ts   view modes and D-pad movement per view
-//   views/          carousel, grid and list
-//   components/     title art, header, footer, SELECT menu
+//   views/          shelf (carousel), grid and list
+//   components/     title art, header, footer, drawers, keyboard
 
 import { onMount, Show } from "solid-js";
-import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
+import { Text, View } from "@pocketjs/framework/components";
 import { glyph } from "@pocketjs/framework/modality";
 import { loadCatalog } from "./catalog.ts";
+import { TINT_AMBIENT } from "./components/art.tsx";
 import { ArtPickerOverlay } from "./components/art-picker.tsx";
 import { CategoryManagerOverlay } from "./components/category-manager.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
@@ -28,29 +30,29 @@ import { ListView } from "./views/list.tsx";
 export default function App() {
   const state = createLauncherState(loadCatalog());
 
-  let rootRef: NodeMirror | undefined;
-  onMount(() => {
-    if (rootRef) installInput(state, rootRef);
-  });
+  onMount(() => installInput(state));
+
+  const selected = () => state.games()[state.selectedIndex()];
 
   return (
     <View
-      ref={(el) => {
-        rootRef = el;
-      }}
-      class={state.theme().screen}
+      class="relative flex-col w-full h-full bg-gradient-to-b from-black to-black"
+      style={{ gradFrom: state.theme().bgTop, gradTo: state.theme().bgBottom }}
     >
+      {/* The selected title's tint, washed over the top of the screen. */}
+      <Show when={selected()}>{(game) => <View class={TINT_AMBIENT[game().tint % TINT_AMBIENT.length]} />}</Show>
+
       <Header state={state} />
 
       <Show
         when={state.games().length > 0}
         fallback={
-          <View class="w-full grow items-center justify-center">
-            <Text class={state.theme().empty}>
+          <View class="flex-col w-full grow items-center justify-center gap-1">
+            <Text class={state.text().title} style={{ textColor: state.theme().text }}>
               {state.hasTitles() ? "Nothing in this category yet" : "No installed apps found"}
             </Text>
             <Show when={state.hasTitles()}>
-              <Text class={state.theme().footerDim}>
+              <Text class={state.text().small} style={{ textColor: state.theme().dim }}>
                 {`Use Edit (${glyph("triangle")}) on a title to move it here`}
               </Text>
             </Show>

@@ -15,11 +15,10 @@ export const BUILTIN_CATEGORIES: readonly Category[] = [
 ];
 
 /**
- * While the sample titles are in, every built-in category shows even when
- * empty. Set to false so a built-in category with no titles is hidden from the
- * tab bar. Categories the user created always show.
+ * A built-in category with no titles is left out of the tab bar. Set to true to
+ * show all three always. Categories the user created always show.
  */
-export const SHOW_EMPTY_CATEGORIES = true;
+export const SHOW_EMPTY_CATEGORIES = false;
 
 export const CATEGORY_LABEL_MAX = 16;
 export const CATEGORY_ID_PATTERN = /^[a-z0-9-]{1,32}$/;

@@ -1,21 +1,31 @@
-// Geometry shared by the views. The class literals in themes.ts spell the same
-// sizes (for example `w-[150]`), so change both together.
+// Geometry shared by the views. The class literals in views/ and components/
+// spell the same sizes (for example `w-[84]`), so change both together.
 
-export const CARD_W = 150;
-export const CARD_GAP = 16;
+import type { DetailLevel } from "./types.ts";
 
-export const GRID_COLUMNS = 4;
+/**
+ * Shelf (carousel) geometry per detail level. The less text sits under the
+ * shelf, the larger the tiles: `tile` is a tile's side, `gap` the space
+ * between tiles, and `row` the height of the row the tiles stand in (the
+ * selected tile is drawn at 125%, plus its frame).
+ */
+export const SHELF: Record<DetailLevel, { tile: number; gap: number; row: number }> = {
+  basic: { tile: 124, gap: 26, row: 172 },
+  normal: { tile: 112, gap: 24, row: 156 },
+  detailed: { tile: 100, gap: 22, row: 140 },
+};
+
+export const GRID_COLUMNS = 5;
 export const GRID_ROWS = 2;
-export const GRID_TILE_W = 104;
-export const GRID_TILE_H = 84;
-export const GRID_GAP = 8;
+export const GRID_TILE = 68;
+export const GRID_GAP = 14;
 /** Width of a full grid row: columns plus the gaps between them. */
-export const GRID_W = GRID_COLUMNS * GRID_TILE_W + (GRID_COLUMNS - 1) * GRID_GAP;
+export const GRID_W = GRID_COLUMNS * GRID_TILE + (GRID_COLUMNS - 1) * GRID_GAP;
 
-export const LIST_ROW_H = 34;
-export const LIST_GAP = 6;
-/** Rows that fit fully in the list viewport; the next row shows partly. */
-export const LIST_ROWS = 4;
+export const LIST_ROW_H = 30;
+export const LIST_GAP = 4;
+/** Rows that fit in the list viewport. */
+export const LIST_ROWS = 6;
 
 export interface CarouselLayout {
   cardPitch: number;
@@ -23,15 +33,16 @@ export interface CarouselLayout {
   centerX: number;
 }
 
-export function carouselLayout(screenW: number): CarouselLayout {
+export function carouselLayout(screenW: number, detail: DetailLevel): CarouselLayout {
+  const { tile, gap } = SHELF[detail];
   return {
-    cardPitch: CARD_W + CARD_GAP,
-    centerX: Math.round((screenW - CARD_W) / 2),
+    cardPitch: tile + gap,
+    centerX: Math.round((screenW - tile) / 2),
   };
 }
 
-// Category header: a badge on each side (28 wide, 20 from the edge, 8 gap)
+// Category header: a badge on each side (24 wide, 12 from the edge, 6 gap)
 // around a clipped strip of fixed-width tabs.
-export const TAB_W = 96;
-export const TAB_GAP = 8;
-export const HEADER_SIDE = 56;
+export const TAB_W = 76;
+export const TAB_GAP = 4;
+export const HEADER_SIDE = 42;

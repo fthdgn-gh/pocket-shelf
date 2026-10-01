@@ -1,56 +1,15 @@
 import { getOps } from "@pocketjs/framework/host";
 import { appTable } from "@pocketjs/framework/launcher";
 import { categoryOf } from "./categories.ts";
-import type { CategoryId, Game } from "./types.ts";
+import type { Game } from "./types.ts";
 
-// Gradients behind each title's art. Class strings are compiled at build time,
-// so each one is a full literal and titles cycle through the list.
-const GRADIENTS = [
-  "absolute inset-0 rounded-lg bg-gradient-to-b from-amber-500 to-red-600",
-  "absolute inset-0 rounded-lg bg-gradient-to-b from-emerald-500 to-teal-700",
-  "absolute inset-0 rounded-lg bg-gradient-to-b from-blue-500 to-indigo-700",
-  "absolute inset-0 rounded-lg bg-gradient-to-b from-purple-500 to-violet-800",
-  "absolute inset-0 rounded-lg bg-gradient-to-b from-pink-500 to-rose-600",
-  "absolute inset-0 rounded-lg bg-gradient-to-b from-cyan-400 to-blue-600",
-];
+/** How many tints titles cycle through (see TINT_ART and TINT_AMBIENT in components/art.tsx). */
+export const TINT_COUNT = 6;
 
 // The baked font has no trademark glyphs; they render as empty boxes.
 export function cleanTitle(title: string): string {
   return title.replace(/[®™©℠]/g, "").replace(/\s+/g, " ").trim();
 }
-
-/** Cards and rows do not wrap, so long names are cut to fit their width. */
-export function shortTitle(title: string, max: number): string {
-  return title.length > max ? `${title.slice(0, max - 3).trimEnd()}...` : title;
-}
-
-/**
- * Adds placeholder titles after the real ones so the grid and list scrolling
- * can be tried with few installed apps. Set to false to hide them.
- */
-const SHOW_TEST_TITLES = true;
-
-const TEST_TITLES: [title: string, genre: string, category: CategoryId][] = [
-  ["Neon Drift", "Racing", "games"],
-  ["Castle Siege", "Strategy", "games"],
-  ["Star Harbor", "Adventure", "games"],
-  ["Pixel Quest", "RPG", "games"],
-  ["Sky Runner", "Platformer", "games"],
-  ["Deep Blue", "Simulation", "games"],
-  ["Iron Fist Arena", "Fighting", "games"],
-  ["Moon Garden", "Puzzle", "games"],
-  ["Turbo Kart Rally", "Racing", "games"],
-  ["Shadow Temple", "Action", "games"],
-  ["Media Player", "Video", "apps"],
-  ["Web Browser", "Internet", "apps"],
-  ["Music Box", "Audio", "apps"],
-  ["Photo Viewer", "Images", "apps"],
-  ["File Manager", "Tools", "homebrew"],
-  ["Retro Menu", "Emulation", "homebrew"],
-  ["Save Editor", "Tools", "homebrew"],
-  ["Plugin Loader", "System", "homebrew"],
-  ["Tiny Synth", "Audio", "homebrew"],
-];
 
 /**
  * Cuts a title to fit `maxWidth` pixels in the given font slot, measured with
@@ -93,19 +52,7 @@ export function loadCatalog(): Catalog {
     id: app.id,
     genre: "PS Vita",
     category: categoryOf(app.id),
-    gradient: GRADIENTS[index % GRADIENTS.length],
+    tint: index % TINT_COUNT,
   }));
-  if (SHOW_TEST_TITLES) {
-    TEST_TITLES.forEach(([title, genre, category], index) => {
-      games.push({
-        title,
-        // Not a real title id: the host refuses to launch it and has no icon for it.
-        id: `TEST${String(index).padStart(5, "0")}`,
-        genre,
-        category,
-        gradient: GRADIENTS[(games.length) % GRADIENTS.length],
-      });
-    });
-  }
   return { native: true, games };
 }

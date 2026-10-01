@@ -18,6 +18,6 @@ export interface Game {
   artAuto?: boolean;
   /** True when the user chose the title's own icon over a matching art file. */
   artIcon?: boolean;
-  /** Full class literal for the gradient behind the title's art (see catalog.ts). */
-  gradient: string;
+  /** Index of the tint used behind the title's art and for the screen's ambient color. */
+  tint: number;
 }
