@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import { fitTitle } from "../catalog.ts";
+import { NO_BACKDROP } from "../overrides.ts";
 import type { LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
@@ -8,7 +9,7 @@ import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
 // Room for a value beside its label in a wide drawer, with its arrow.
 const VALUE_W = 160;
 
-/** Per-title editor: category, title, box art and reset. */
+/** Per-title editor: category, title, box art, backdrop, SteamGridDB and reset. */
 export function EditorOverlay(props: { state: LauncherState }) {
   const { state } = props;
   const fit = (value: string) => fitTitle(value, VALUE_W, fontSlot(state.font(), "bodyBold"));
@@ -18,6 +19,11 @@ export function EditorOverlay(props: { state: LauncherState }) {
     if (!game?.art) return "Default";
     return game.artAuto ? `${game.art} (auto)` : game.art;
   };
+  const backdrop = () => {
+    const file = state.editorGame()?.backdrop;
+    if (file === NO_BACKDROP) return "None";
+    return file ?? "Default";
+  };
   const rows = () => {
     const game = state.editorGame();
     const category = state.categoryLabel(game?.category ?? "");
@@ -25,6 +31,8 @@ export function EditorOverlay(props: { state: LauncherState }) {
       { label: "Category", value: category, step: "both" as const },
       { label: "Title", value: fit(game?.title ?? ""), step: "right" as const },
       { label: "Box art", value: fit(art()), step: "right" as const },
+      { label: "Backdrop", value: fit(backdrop()), step: "right" as const },
+      { label: "SteamGridDB", value: "Search", step: "right" as const },
       { label: "Reset to defaults", value: "", step: undefined },
     ];
   };

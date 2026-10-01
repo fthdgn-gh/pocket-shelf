@@ -25,7 +25,7 @@ function ListRow(props: { game: Game; state: LauncherState; selected: boolean })
       <Show when={props.selected}>
         <View class="absolute left-0 top-[7] w-[3] h-[16] rounded-[1]" style={{ bgColor: theme().accent }} />
       </Show>
-      <TitleArt size="sm" game={props.game} icon={props.state.icons()[props.game.id]} />
+      <TitleArt size="sm" game={props.game} state={props.state} />
       <Text class={props.state.text()[role()]} style={{ textColor: props.selected ? theme().text : theme().dim }}>
         {fitTitle(props.game.title, TITLE_W, fontSlot(props.state.font(), role()))}
       </Text>

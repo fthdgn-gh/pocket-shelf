@@ -22,6 +22,7 @@ import { Header } from "./components/header.tsx";
 import { Prompt } from "./components/icons.tsx";
 import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
+import { OnlineOverlay } from "./components/online.tsx";
 import { installInput } from "./input.ts";
 import { createLauncherState } from "./state.ts";
 import { CarouselView } from "./views/carousel.tsx";
@@ -85,6 +86,9 @@ export default function App() {
       </Show>
       <Show when={state.editorOpen()}>
         <EditorOverlay state={state} />
+      </Show>
+      <Show when={state.online.open()}>
+        <OnlineOverlay state={state} />
       </Show>
       <Show when={state.modal() === "art"}>
         <ArtPickerOverlay state={state} />

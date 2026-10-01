@@ -1,5 +1,6 @@
 import { Show } from "solid-js";
 import { Image, Text, View } from "@pocketjs/framework/components";
+import type { LauncherState } from "../state.ts";
 import type { Game } from "../types.ts";
 
 // Class literals per size. They stay full literals because the compiler does
@@ -76,16 +77,20 @@ function initials(title: string): string {
 
 /**
  * A title's picture: its icon once the host has decoded it, otherwise its
- * initials (one letter at the small size) over the title's tint.
+ * initials (one letter at the small size) over the title's tint. An icon with
+ * transparent parts gets a box behind it in the icon's own color, when the
+ * "Icon box" setting is on.
  */
-export function TitleArt(props: { game: Game; size: ArtSize; icon: string | undefined }) {
+export function TitleArt(props: { game: Game; size: ArtSize; state: LauncherState }) {
   // Read through a function: the shelf changes `size` when the detail level changes.
   const size = () => SIZES[props.size];
+  const icon = () => props.state.icons()[props.game.id];
+  const box = () => props.state.iconBox(props.game.id);
   const label = () => (props.size === "sm" ? props.game.title.slice(0, 1).toUpperCase() : initials(props.game.title));
   return (
     <View class={size().box}>
       <Show
-        when={props.icon}
+        when={icon()}
         fallback={
           <>
             <View class={TINT_ART[props.game.tint % TINT_ART.length]} />
@@ -93,8 +98,33 @@ export function TitleArt(props: { game: Game; size: ArtSize; icon: string | unde
           </>
         }
       >
-        <Image class={size().image} src={props.icon ?? ""} />
+        <Show when={box()}>
+          {(colors) => (
+            <View
+              class="absolute inset-0 bg-gradient-to-b from-black to-black"
+              style={{ gradFrom: colors().from, gradTo: colors().to }}
+            />
+          )}
+        </Show>
+        <Image class={size().image} src={icon() ?? ""} />
       </Show>
     </View>
+  );
+}
+
+/**
+ * The frame around the selected tile: four bars, 3 px outside the art on each
+ * side. Nothing is drawn behind the art, so a see-through icon shows the
+ * screen (or its box) and not the frame's color.
+ */
+export function SelectedFrame(props: { state: LauncherState }) {
+  const color = () => ({ bgColor: props.state.theme().accent });
+  return (
+    <>
+      <View class="absolute left-[-3] right-[-3] top-[-3] h-[3]" style={color()} />
+      <View class="absolute left-[-3] right-[-3] bottom-[-3] h-[3]" style={color()} />
+      <View class="absolute left-[-3] top-0 bottom-0 w-[3]" style={color()} />
+      <View class="absolute right-[-3] top-0 bottom-0 w-[3]" style={color()} />
+    </>
   );
 }

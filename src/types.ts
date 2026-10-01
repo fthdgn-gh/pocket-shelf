@@ -18,6 +18,8 @@ export interface Game {
   artAuto?: boolean;
   /** True when the user chose the title's own icon over a matching art file. */
   artIcon?: boolean;
+  /** The user's backdrop: a file name in the backdrops folder, or "none". */
+  backdrop?: string;
   /** Index of the tint used behind the title's art and for the screen's ambient color. */
   tint: number;
 }

@@ -11,32 +11,63 @@ import {
   saveCategoryConfig,
   type Category,
 } from "./categories.ts";
-import { artTexture, backdropTexture, listArt } from "./art-files.ts";
+import {
+  acquireBackdrop,
+  artAccent,
+  artTexture,
+  listArt,
+  listBackdrops,
+  pumpBackdrops,
+  releaseBackdrop,
+} from "./art-files.ts";
+import { boxColors, type BoxColors } from "./accent.ts";
+import { pumpNet } from "./net.ts";
+import { createOnlineFlow } from "./online.ts";
+import { KEY_MAX } from "./steamgriddb.ts";
 import type { Catalog } from "./catalog.ts";
 import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "./keyboard.ts";
-import { TITLE_MAX, USE_ICON, loadOverrides, saveOverrides, type Overrides, type TitleOverride } from "./overrides.ts";
+import {
+  NO_BACKDROP,
+  TITLE_MAX,
+  USE_ICON,
+  loadOverrides,
+  saveOverrides,
+  type Overrides,
+  type TitleOverride,
+} from "./overrides.ts";
 import { loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
 import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
 import { DEFAULT_THEME, THEMES, themeById, type ThemeId } from "./themes.ts";
 import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./types.ts";
 
-/** Rows in the SELECT menu: theme, font, view, details, backdrop, categories, confirm button. */
-export const MENU_ROWS = 7;
+/** Rows in the SELECT menu: theme, font, view, details, backdrop, icon box, categories, confirm button. */
+export const MENU_ROWS = 8;
+
+/** Menu rows visible at once; the menu scrolls with the highlight. */
+export const MENU_VISIBLE = 7;
 
 /** Frames the selection rests on a title before its backdrop is loaded (0.25 s at 60 per second). */
 const BACKDROP_DELAY = 15;
 
-/** Rows in the per-title editor: category, title, box art, reset. */
-export const EDITOR_ROWS = 4;
+/** Rows in the per-title editor: category, title, box art, backdrop, SteamGridDB, reset. */
+export const EDITOR_ROWS = 6;
 
 /** Art picker rows visible at once. */
 export const PICKER_ROWS = 5;
 
-export type Modal = "menu" | "editor" | "keyboard" | "art" | "categories";
+export type Modal = "menu" | "editor" | "keyboard" | "art" | "online" | "categories";
+
+/** What the file picker is choosing: a title's icon or its backdrop. */
+export type PickerKind = "art" | "backdrop";
 
 /** What the keyboard is typing into. */
-type KeyboardTarget = { kind: "title" } | { kind: "newCategory" } | { kind: "category"; id: string };
+type KeyboardTarget =
+  | { kind: "title" }
+  | { kind: "newCategory" }
+  | { kind: "category"; id: string }
+  | { kind: "search" }
+  | { kind: "apiKey" };
 
 function cycle<T>(list: readonly T[], current: T, delta: number): T {
   const index = list.indexOf(current);
@@ -108,6 +139,7 @@ export function createLauncherState(catalog: Catalog) {
         title,
         category,
         art,
+        backdrop: change?.backdrop,
         artAuto: !forceIcon && chosen === undefined && art !== undefined,
         artIcon: forceIcon,
       };
@@ -147,6 +179,7 @@ export function createLauncherState(catalog: Catalog) {
   const [view, setViewMode] = createSignal<ViewMode>(saved?.view ?? "carousel");
   const [confirmMode, setConfirmMode] = createSignal<ConfirmMode>(saved?.confirm ?? "circle");
   const [backdropOn, setBackdropOn] = createSignal(saved?.backdrop ?? true);
+  const [iconBoxOn, setIconBoxOn] = createSignal(saved?.iconBox ?? true);
 
   // The launcher process ends when a title starts, so the selection is saved
   // with the settings and restored on the next start.
@@ -163,11 +196,12 @@ export function createLauncherState(catalog: Catalog) {
       detail: detail(),
       confirm: confirmMode(),
       backdrop: backdropOn(),
+      iconBox: iconBoxOn(),
       category: categoryId(),
       title: games()[selectedIndex()]?.id,
     });
   // Persist on change; the initial run is skipped so a fresh start writes nothing.
-  createEffect(on([themeId, font, view, detail, confirmMode, backdropOn], persist, { defer: true }));
+  createEffect(on([themeId, font, view, detail, confirmMode, backdropOn, iconBoxOn], persist, { defer: true }));
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [menuRow, setMenuRow] = createSignal(0);
 
@@ -175,6 +209,10 @@ export function createLauncherState(catalog: Catalog) {
   // ask for one. A custom art file wins over the installed title's own icon;
   // the host caches both per name.
   const [icons, setIcons] = createSignal<Record<string, string>>({});
+  // Box colors per title id, for icons that have transparent parts.
+  const [boxes, setBoxes] = createSignal<Record<string, BoxColors>>({});
+  /** The box to draw behind a title's icon, when the setting is on and the icon needs one. */
+  const iconBox = (id: string): BoxColors | undefined => (iconBoxOn() ? boxes()[id] : undefined);
   const loadedSource = new Map<string, string>();
   const registeredKeys = new Set<string>();
   const loadIcon = (game: Game) => {
@@ -193,8 +231,11 @@ export function createLauncherState(catalog: Catalog) {
     }
     if (handle < 0) {
       setIcons(({ [game.id]: _removed, ...rest }) => rest);
+      setBoxes(({ [game.id]: _removed, ...rest }) => rest);
       return;
     }
+    const colors = boxColors(artAccent(handle));
+    setBoxes(({ [game.id]: _previous, ...rest }) => (colors ? { ...rest, [game.id]: colors } : rest));
     if (!registeredKeys.has(key)) {
       registeredKeys.add(key);
       registerTexture(key, handle);
@@ -271,34 +312,53 @@ export function createLauncherState(catalog: Catalog) {
   // previous picture stays underneath while the new one fades in.
   const [backdrop, setBackdrop] = createSignal<string | undefined>(undefined);
   const [backdropUnder, setBackdropUnder] = createSignal<string | undefined>(undefined);
+  // Texture handles of the two pictures on screen, given back when they leave it.
+  let backdropHandle = -1;
+  let backdropUnderHandle = -1;
+  const clearBackdrop = () => {
+    releaseBackdrop(backdropHandle);
+    releaseBackdrop(backdropUnderHandle);
+    backdropHandle = -1;
+    backdropUnderHandle = -1;
+    batch(() => {
+      setBackdrop(undefined);
+      setBackdropUnder(undefined);
+    });
+  };
   let backdropWait = 0;
   const selectedId = createMemo(() => games()[selectedIndex()]?.id);
   createEffect(() => {
     selectedId();
+    // A backdrop the user just chose for the selected title loads too.
+    games()[selectedIndex()]?.backdrop;
     if (backdropOn()) backdropWait = BACKDROP_DELAY;
     else {
       backdropWait = 0;
-      batch(() => {
-        setBackdrop(undefined);
-        setBackdropUnder(undefined);
-      });
+      clearBackdrop();
     }
   });
   const loadBackdrop = () => {
-    const id = selectedId();
-    const handle = id && native ? backdropTexture(id) : -1;
+    const game = games()[selectedIndex()];
+    const id = game?.id;
+    const file = game?.backdrop;
+    const handle = id && native && file !== NO_BACKDROP ? acquireBackdrop(id, file ?? "") : -1;
     if (handle < 0) {
-      batch(() => {
-        setBackdrop(undefined);
-        setBackdropUnder(undefined);
-      });
+      clearBackdrop();
       return;
     }
-    // The handle is part of the key: the host frees old pictures, and a
-    // picture loaded again comes back under a new handle.
-    const key = `backdrop.${id}.${handle}`;
-    if (key === backdrop()) return;
+    // The handle is part of the key: a picture that was freed and loaded
+    // again comes back under a new handle.
+    const key = `backdrop.${id}.${file ?? ""}.${handle}`;
+    if (key === backdrop()) {
+      // Already on screen: this second claim on the handle is not needed.
+      releaseBackdrop(handle);
+      return;
+    }
     registerTexture(key, handle);
+    // The picture that was underneath leaves the screen; the current one goes under.
+    releaseBackdrop(backdropUnderHandle);
+    backdropUnderHandle = backdropHandle;
+    backdropHandle = handle;
     batch(() => {
       setBackdropUnder(backdrop());
       setBackdrop(key);
@@ -306,6 +366,8 @@ export function createLauncherState(catalog: Catalog) {
   };
   /** Call once per frame. */
   const frame = () => {
+    pumpNet();
+    pumpBackdrops();
     if (backdropWait > 0 && --backdropWait === 0) loadBackdrop();
   };
 
@@ -322,7 +384,8 @@ export function createLauncherState(catalog: Catalog) {
     else if (row === 2) setView(cycle(VIEW_MODES, view(), delta));
     else if (row === 3) setDetail(cycle(DETAIL_LEVELS, detail(), delta));
     else if (row === 4) setBackdropOn((on) => !on);
-    else if (row === 5) openCategoryManager();
+    else if (row === 5) setIconBoxOn((on) => !on);
+    else if (row === 6) openCategoryManager();
     else toggleConfirm();
   };
 
@@ -383,7 +446,11 @@ export function createLauncherState(catalog: Catalog) {
   const keyRows = () => (symbols() ? SYMBOL_ROWS : LETTER_ROWS);
 
   const [keyboardTarget, setKeyboardTarget] = createSignal<KeyboardTarget>({ kind: "title" });
-  const keyboardLimit = () => (keyboardTarget().kind === "title" ? TITLE_MAX : CATEGORY_LABEL_MAX);
+  const keyboardLimit = () => {
+    const kind = keyboardTarget().kind;
+    if (kind === "apiKey") return KEY_MAX;
+    return kind === "title" || kind === "search" ? TITLE_MAX : CATEGORY_LABEL_MAX;
+  };
 
   const openKeyboard = (target: KeyboardTarget, text: string) => {
     setKeyboardTarget(target);
@@ -422,6 +489,10 @@ export function createLauncherState(catalog: Catalog) {
         // Typing the original title back removes the override.
         patchOverride(game.id, { title: !text || text === baseOf(game.id)?.title ? undefined : text });
       }
+    } else if (target.kind === "search") {
+      online.submitTerm(text);
+    } else if (target.kind === "apiKey") {
+      online.submitKey(text);
     } else if (text) {
       const used = allCategories().some(
         (item) =>
@@ -456,19 +527,30 @@ export function createLauncherState(catalog: Catalog) {
     else commitKeyboard();
   };
 
-  // --- Box art picker ----------------------------------------------------
+  // --- File picker: box art and backdrop ----------------------------------
+  // Two fixed rows, then the PNG files of the folder. For box art the fixed
+  // rows are "Default" and "Game icon"; for a backdrop, "Default" and "None".
   const [artOpen, setArtOpen] = createSignal(false);
+  const [pickerKind, setPickerKind] = createSignal<PickerKind>("art");
   const [artFiles, setArtFiles] = createSignal<string[]>([]);
   const [artRow, setArtRow] = createSignal(0);
   const [artNote, setArtNote] = createSignal("");
 
-  const openArtPicker = () => {
-    const files = listArt();
-    setArtIndex(new Map(files.map((name) => [name.toLowerCase(), name])));
-    setArtFiles(files);
+  const openArtPicker = (kind: PickerKind = "art") => {
     const game = editorGame();
-    const current = game?.artAuto ? -1 : files.indexOf(game?.art ?? "");
-    setArtRow(game?.artIcon ? 1 : current >= 0 ? current + 2 : 0);
+    setPickerKind(kind);
+    if (kind === "art") {
+      const files = listArt();
+      setArtIndex(new Map(files.map((name) => [name.toLowerCase(), name])));
+      setArtFiles(files);
+      const current = game?.artAuto ? -1 : files.indexOf(game?.art ?? "");
+      setArtRow(game?.artIcon ? 1 : current >= 0 ? current + 2 : 0);
+    } else {
+      const files = listBackdrops();
+      setArtFiles(files);
+      const current = files.indexOf(game?.backdrop ?? "");
+      setArtRow(game?.backdrop === NO_BACKDROP ? 1 : current >= 0 ? current + 2 : 0);
+    }
     setArtNote("");
     setArtOpen(true);
   };
@@ -481,6 +563,22 @@ export function createLauncherState(catalog: Catalog) {
     const game = editorGame();
     if (!game) return;
     const row = artRow();
+    if (pickerKind() === "backdrop") {
+      // Row 0 goes back to the title's own picture, row 1 draws none.
+      const name = row === 0 ? undefined : row === 1 ? NO_BACKDROP : artFiles()[row - 2];
+      if (name && name !== NO_BACKDROP) {
+        // Load it once to check that the host can read it.
+        const handle = acquireBackdrop(game.id, name);
+        if (handle < 0) {
+          setArtNote("That image could not be read (PNG, up to about 1920x1080).");
+          return;
+        }
+        releaseBackdrop(handle);
+      }
+      patchOverride(game.id, { backdrop: name });
+      setArtOpen(false);
+      return;
+    }
     // Row 0 goes back to a file matched by name (or the title's own icon),
     // row 1 always shows the title's own icon.
     const name = row === 0 ? undefined : row === 1 ? USE_ICON : artFiles()[row - 2];
@@ -492,6 +590,24 @@ export function createLauncherState(catalog: Catalog) {
     loadIconsAround();
     setArtOpen(false);
   };
+
+  // --- SteamGridDB (title editor -> SteamGridDB) ----------------------------
+  const online = createOnlineFlow({
+    game: editorGame,
+    askText: (target, text) => openKeyboard({ kind: target }, text),
+    apply: (kind, file) => {
+      const game = editorGame();
+      if (!game) return;
+      if (kind === "icon") {
+        // The new file has to be in the name index before it can be an icon.
+        setArtIndex(readArtIndex());
+        patchOverride(game.id, { art: file });
+        loadIconsAround();
+      } else patchOverride(game.id, { backdrop: file });
+    },
+    inUse: (kind, file) =>
+      Object.values(overrides()).some((change) => (kind === "icon" ? change.art : change.backdrop) === file),
+  });
 
   // --- Category manager (SELECT menu -> Categories) ------------------------
   const [catOpen, setCatOpen] = createSignal(false);
@@ -588,18 +704,14 @@ export function createLauncherState(catalog: Catalog) {
   };
 
   // --- Routing for whichever panel is on top ------------------------------
-  const modal = (): Modal | null =>
-    keyboardOpen()
-      ? "keyboard"
-      : artOpen()
-        ? "art"
-        : editorOpen()
-          ? "editor"
-          : catOpen()
-            ? "categories"
-            : menuOpen()
-              ? "menu"
-              : null;
+  const modal = (): Modal | null => {
+    if (keyboardOpen()) return "keyboard";
+    if (artOpen()) return "art";
+    if (online.open()) return "online";
+    if (editorOpen()) return "editor";
+    if (catOpen()) return "categories";
+    return menuOpen() ? "menu" : null;
+  };
 
   const modalMove = (dx: number, dy: number) => {
     switch (modal()) {
@@ -617,6 +729,9 @@ export function createLauncherState(catalog: Catalog) {
       case "art":
         if (dy !== 0) artMove(dy);
         break;
+      case "online":
+        online.move(dx, dy);
+        break;
       case "categories":
         if (dy !== 0) catMove(dy);
         break;
@@ -631,7 +746,9 @@ export function createLauncherState(catalog: Catalog) {
         const row = editorRow();
         if (row === 0) changeGameCategory(1);
         else if (row === 1) openKeyboard({ kind: "title" }, editorGame()?.title ?? "");
-        else if (row === 2) openArtPicker();
+        else if (row === 2) openArtPicker("art");
+        else if (row === 3) openArtPicker("backdrop");
+        else if (row === 4) online.start();
         else resetGame();
         break;
       }
@@ -640,6 +757,9 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "art":
         artConfirm();
+        break;
+      case "online":
+        online.confirm();
         break;
       case "categories":
         catConfirm();
@@ -653,6 +773,9 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "art":
         closeArtPicker();
+        break;
+      case "online":
+        online.cancel();
         break;
       case "editor":
         closeEditor();
@@ -686,6 +809,8 @@ export function createLauncherState(catalog: Catalog) {
     confirmButton,
     cancelButton,
     backdropOn,
+    iconBoxOn,
+    iconBox,
     backdrop,
     backdropUnder,
     frame,
@@ -721,6 +846,8 @@ export function createLauncherState(catalog: Catalog) {
     artFiles,
     artRow,
     artNote,
+    pickerKind,
+    online,
     allCategories,
     hasTitles: () => catalog.games.length > 0,
     customCategories,

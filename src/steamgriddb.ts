@@ -1,0 +1,124 @@
+import { readFileSync, writeFileSync } from "@pocketjs/framework/fs";
+
+// SteamGridDB (https://www.steamgriddb.com/api/v2): search a game by name,
+// then list its icons and heroes. Every call needs the user's own API key,
+// sent as `Authorization: Bearer <key>`.
+//
+// The launcher decodes PNG only, so each list asks for static PNG files in
+// sizes its decoders accept.
+
+const API = "https://www.steamgriddb.com/api/v2";
+
+/** Candidates kept per list. The API returns them best score first. */
+export const ASSETS_MAX = 30;
+export const GAMES_MAX = 12;
+
+// ux0:/data/PocketShelf/steamgriddb.txt, one line: the API key.
+const KEY_FILE = "steamgriddb.txt";
+export const KEY_MAX = 64;
+const KEY_PATTERN = /^[A-Za-z0-9]{16,64}$/;
+
+export type AssetKind = "icon" | "backdrop";
+
+export interface SgdbGame {
+  id: number;
+  name: string;
+  /** Release year, when the database has one. */
+  year?: number;
+}
+
+export interface SgdbAsset {
+  id: number;
+  url: string;
+}
+
+/** The saved API key, or "" when there is none or the file does not hold one. */
+export function loadKey(): string {
+  try {
+    const key = readFileSync(KEY_FILE, "utf8").trim();
+    return KEY_PATTERN.test(key) ? key : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Save a typed key. Returns false when it does not look like a key. */
+export function saveKey(text: string): boolean {
+  const key = text.trim();
+  if (!KEY_PATTERN.test(key)) return false;
+  try {
+    writeFileSync(KEY_FILE, `${key}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function authorization(key: string): string {
+  return `Bearer ${key}`;
+}
+
+export function searchUrl(term: string): string {
+  return `${API}/search/autocomplete/${encodeURIComponent(term.trim())}`;
+}
+
+export function assetsUrl(kind: AssetKind, gameId: number): string {
+  return kind === "icon"
+    ? `${API}/icons/game/${gameId}?types=static&mimes=image/png&dimensions=128,256,512`
+    : `${API}/heroes/game/${gameId}?types=static&mimes=image/png&dimensions=1920x620,1600x650`;
+}
+
+/** File a candidate is downloaded to, under the data folder. */
+export function assetPath(kind: AssetKind, asset: SgdbAsset): string {
+  return `${kind === "icon" ? "art" : "backdrops"}/${assetFile(asset)}`;
+}
+
+export function assetFile(asset: SgdbAsset): string {
+  return `sgdb-${asset.id}.png`;
+}
+
+/** The `data` array of an API reply, or a message saying why there is none. */
+function dataOf(status: number, text: string): unknown[] | string {
+  if (status === 401) return "SteamGridDB did not accept the API key.";
+  if (status === 404) return [];
+  if (status === 429) return "SteamGridDB is busy. Try again in a moment.";
+  if (status !== 200) return `SteamGridDB answered with status ${status}.`;
+  try {
+    const reply = JSON.parse(text) as { success?: boolean; data?: unknown };
+    if (reply.success !== true || !Array.isArray(reply.data)) return "SteamGridDB sent an unexpected reply.";
+    return reply.data;
+  } catch {
+    return "SteamGridDB sent an unexpected reply.";
+  }
+}
+
+export function parseGames(status: number, text: string): SgdbGame[] | string {
+  const data = dataOf(status, text);
+  if (typeof data === "string") return data;
+  const games: SgdbGame[] = [];
+  for (const item of data as { id?: unknown; name?: unknown; release_date?: unknown }[]) {
+    if (typeof item?.id !== "number" || typeof item.name !== "string" || !item.name) continue;
+    const seconds = typeof item.release_date === "number" ? item.release_date : 0;
+    games.push({
+      id: item.id,
+      name: item.name,
+      year: seconds > 0 ? new Date(seconds * 1000).getUTCFullYear() : undefined,
+    });
+    if (games.length === GAMES_MAX) break;
+  }
+  return games;
+}
+
+export function parseAssets(status: number, text: string): SgdbAsset[] | string {
+  const data = dataOf(status, text);
+  if (typeof data === "string") return data;
+  const assets: SgdbAsset[] = [];
+  for (const item of data as { id?: unknown; url?: unknown }[]) {
+    if (typeof item?.id !== "number" || typeof item.url !== "string") continue;
+    // The host downloads over https and keeps PNG only.
+    if (!item.url.startsWith("https://") || !/\.png$/i.test(item.url)) continue;
+    assets.push({ id: item.id, url: item.url });
+    if (assets.length === ASSETS_MAX) break;
+  }
+  return assets;
+}
