@@ -1,10 +1,10 @@
 import { For } from "solid-js";
-import { Text, View } from "@pocketjs/framework/components";
-import { FONTS } from "../fonts.ts";
+import { FONTS } from "../text.ts";
 import { DETAIL_LABELS, VIEW_LABELS } from "../navigation.ts";
 import type { LauncherState } from "../state.ts";
+import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
 
-/** The SELECT menu: a centered panel over a dimmed screen. */
+/** The SELECT menu. */
 export function MenuOverlay(props: { state: LauncherState }) {
   const { state } = props;
   const rows = () => [
@@ -12,24 +12,26 @@ export function MenuOverlay(props: { state: LauncherState }) {
     { label: "Font", value: FONTS.find((item) => item.id === state.font())?.name ?? "" },
     { label: "View", value: VIEW_LABELS[state.view()] },
     { label: "Details", value: DETAIL_LABELS[state.detail()] },
-    { label: "Categories", value: "Manage ►" },
-    { label: "Confirm button", value: state.confirmGlyph() },
+    { label: "Categories", value: "Manage" },
+    { label: "Confirm", value: state.confirmGlyph() },
   ];
-  const hint = () => `D-pad: Move / Change  ·  ${state.cancelGlyph()}: Close`;
   return (
-    <View class="absolute inset-0 items-center justify-center bg-[#000000b3]">
-      <View class={state.theme().menuPanel}>
-        <Text class={state.theme().menuTitle}>Menu</Text>
-        <For each={rows()}>
-          {(row, index) => (
-            <View class={state.menuRow() === index() ? state.theme().menuRowActive : state.theme().menuRow}>
-              <Text class={state.theme().menuLabel}>{row.label}</Text>
-              <Text class={state.theme().menuValue}>{`◄ ${row.value} ►`}</Text>
-            </View>
-          )}
-        </For>
-        <Text class={state.theme().menuHint}>{hint()}</Text>
-      </View>
-    </View>
+    <Drawer state={state} title="Menu">
+      <For each={rows()}>
+        {(row, index) => {
+          const active = () => state.menuRow() === index();
+          return (
+            <OptionRow
+              state={state}
+              active={active()}
+              label={row.label}
+              value={active() ? `◄ ${row.value} ►` : row.value}
+            />
+          );
+        }}
+      </For>
+      <Spacer />
+      <Note state={state}>{`D-pad: Move / Change  ·  ${state.cancelGlyph()}: Close`}</Note>
+    </Drawer>
   );
 }

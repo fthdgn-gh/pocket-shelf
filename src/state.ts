@@ -18,7 +18,7 @@ import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "./keyboard.ts";
 import { TITLE_MAX, USE_ICON, loadOverrides, saveOverrides, type Overrides, type TitleOverride } from "./overrides.ts";
 import { loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
-import { DEFAULT_FONT, FONTS, withFont, type FontId } from "./fonts.ts";
+import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
 import { DEFAULT_THEME, THEMES, themeById, type ThemeId } from "./themes.ts";
 import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./types.ts";
 
@@ -145,15 +145,25 @@ export function createLauncherState(catalog: Catalog) {
   const [view, setViewMode] = createSignal<ViewMode>(saved?.view ?? "carousel");
   const [confirmMode, setConfirmMode] = createSignal<ConfirmMode>(saved?.confirm ?? "circle");
 
+  // The launcher process ends when a title starts, so the selection is saved
+  // with the settings and restored on the next start.
+  if (saved?.category && categories().some((item) => item.id === saved.category)) {
+    setCategoryId(saved.category);
+    const index = games().findIndex((game) => game.id === saved.title);
+    if (index >= 0) setSelectedIndex(index);
+  }
+  const persist = () =>
+    saveSettings({
+      theme: themeId(),
+      font: font(),
+      view: view(),
+      detail: detail(),
+      confirm: confirmMode(),
+      category: categoryId(),
+      title: games()[selectedIndex()]?.id,
+    });
   // Persist on change; the initial run is skipped so a fresh start writes nothing.
-  createEffect(
-    on(
-      [themeId, font, view, detail, confirmMode],
-      ([theme, fontId, viewMode, detailLevel, confirm]) =>
-        saveSettings({ theme, font: fontId, view: viewMode, detail: detailLevel, confirm }),
-      { defer: true },
-    ),
-  );
+  createEffect(on([themeId, font, view, detail, confirmMode], persist, { defer: true }));
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [menuRow, setMenuRow] = createSignal(0);
 
@@ -215,20 +225,13 @@ export function createLauncherState(catalog: Catalog) {
     loadIconsAround();
   };
 
-  /** A tap or confirm press on a title. Ignored while a panel is open, because the
-   *  framework also presses the focused title when the panel's confirm is used. */
-  const activate = (index: number) => {
-    if (modal()) return;
-    select(index);
-    launchSelected();
-  };
-
   const page = (direction: 1 | -1) => select(selectedIndex() + direction * pageSize(view()));
 
   const launchSelected = () => {
     const game = games()[selectedIndex()];
     if (!game) return;
     setLaunchingTitle(game.title);
+    persist();
     console.log(`Launch requested: ${game.id}`);
     if (native && !launchApp(game.id)) console.log(`Launch rejected: ${game.id}`);
   };
@@ -240,7 +243,9 @@ export function createLauncherState(catalog: Catalog) {
 
   const toggleConfirm = () => setConfirmMode((mode) => (mode === "circle" ? "cross" : "circle"));
 
-  const theme = () => withFont(themeById(themeId()), font());
+  const theme = createMemo(() => themeById(themeId()));
+  /** Text class per role in the chosen font. */
+  const text = createMemo(() => textClasses(font()));
   const confirmGlyph = () => glyph(confirmMode());
   const cancelGlyph = () => glyph(confirmMode() === "circle" ? "cross" : "circle");
 
@@ -626,12 +631,12 @@ export function createLauncherState(catalog: Catalog) {
     confirmMode,
     icons,
     theme,
+    text,
     confirmGlyph,
     cancelGlyph,
     select,
     page,
     launchSelected,
-    activate,
     menuOpen,
     menuRow,
     openMenu,

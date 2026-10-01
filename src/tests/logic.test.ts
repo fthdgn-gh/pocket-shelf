@@ -3,10 +3,10 @@
 // `bun run shelf:test`.
 
 import { describe, expect, test } from "bun:test";
-import { cleanTitle, shortTitle } from "../catalog.ts";
+import { cleanTitle } from "../catalog.ts";
 import { categoryOf, cycleCategory, makeCategoryId } from "../categories.ts";
 import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "../keyboard.ts";
-import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, carouselLayout } from "../layout.ts";
+import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
 
 describe("moveSelection", () => {
@@ -33,18 +33,22 @@ describe("moveSelection", () => {
     expect(moveSelection("grid", "up", 2, 10)).toBeNull();
   });
 
+  // Two full rows and a last row of two items.
+  const GRID_COUNT = GRID_COLUMNS * 2 + 2;
+
   test("grid moves by one item sideways and by one row vertically", () => {
-    expect(moveSelection("grid", "right", 3, 10)).toBe(4);
-    expect(moveSelection("grid", "left", 4, 10)).toBe(3);
-    expect(moveSelection("grid", "down", 1, 10)).toBe(1 + GRID_COLUMNS);
-    expect(moveSelection("grid", "up", 5, 10)).toBe(5 - GRID_COLUMNS);
+    // Right from the end of a row continues onto the next one.
+    expect(moveSelection("grid", "right", GRID_COLUMNS - 1, GRID_COUNT)).toBe(GRID_COLUMNS);
+    expect(moveSelection("grid", "left", GRID_COLUMNS, GRID_COUNT)).toBe(GRID_COLUMNS - 1);
+    expect(moveSelection("grid", "down", 1, GRID_COUNT)).toBe(1 + GRID_COLUMNS);
+    expect(moveSelection("grid", "up", 1 + GRID_COLUMNS, GRID_COUNT)).toBe(1);
   });
 
   test("grid down onto a partial last row lands on the last item", () => {
-    // 10 items: rows of 4, 4 and 2. Column 2 has nothing below row 1.
-    expect(moveSelection("grid", "down", 6, 10)).toBe(9);
+    // The last column of the second row has nothing below it.
+    expect(moveSelection("grid", "down", GRID_COLUMNS * 2 - 1, GRID_COUNT)).toBe(GRID_COUNT - 1);
     // Already on the last row.
-    expect(moveSelection("grid", "down", 8, 10)).toBeNull();
+    expect(moveSelection("grid", "down", GRID_COLUMNS * 2, GRID_COUNT)).toBeNull();
   });
 
   test("an empty list never yields a destination", () => {
@@ -148,17 +152,24 @@ describe("titles", () => {
     expect(cleanTitle("Uncharted™:  Golden Abyss®")).toBe("Uncharted: Golden Abyss");
     expect(cleanTitle("  Plain  ")).toBe("Plain");
   });
-
-  test("shortTitle cuts to the limit, ellipsis included", () => {
-    expect(shortTitle("short", 8)).toBe("short");
-    expect(shortTitle("abcdefghij", 8)).toBe("abcde...");
-    expect(shortTitle("abcd efghij", 8)).toBe("abcd...");
-  });
 });
 
 describe("layout", () => {
-  test("carouselLayout centers the first card in the viewport", () => {
-    expect(carouselLayout(480)).toEqual({ cardPitch: 166, centerX: 165 });
-    expect(carouselLayout(960).centerX).toBe(405);
+  test("carouselLayout centers the first tile for every detail level", () => {
+    for (const detail of ["basic", "normal", "detailed"] as const) {
+      const { tile, gap } = SHELF[detail];
+      expect(carouselLayout(480, detail)).toEqual({ cardPitch: tile + gap, centerX: (480 - tile) / 2 });
+    }
+  });
+
+  test("the selected shelf tile clears its neighbors and fits its row", () => {
+    for (const { tile, gap, row } of Object.values(SHELF)) {
+      // Selected: 125% plus a 3 px frame. Neighbors: 90%.
+      const selectedHalf = (tile * 1.25) / 2 + 3 * 1.25;
+      const neighborHalf = (tile * 0.9) / 2;
+      expect(tile + gap - selectedHalf - neighborHalf).toBeGreaterThan(0);
+      // The row has 8 px of padding under the tiles for the frame.
+      expect(tile * 1.25 + 3 * 1.25).toBeLessThanOrEqual(row - 8);
+    }
   });
 });

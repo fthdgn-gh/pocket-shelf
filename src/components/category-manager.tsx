@@ -1,7 +1,7 @@
 import { For } from "solid-js";
-import { Text, View } from "@pocketjs/framework/components";
 import { glyph } from "@pocketjs/framework/modality";
 import { PICKER_ROWS, type LauncherState } from "../state.ts";
+import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
 
 /** Create, rename, delete, reorder and hide categories. */
 export function CategoryManagerOverlay(props: { state: LauncherState }) {
@@ -19,30 +19,24 @@ export function CategoryManagerOverlay(props: { state: LauncherState }) {
     return Math.max(0, Math.min(state.catRow() - Math.floor(PICKER_ROWS / 2), last));
   };
   const visible = () => entries().slice(first(), first() + PICKER_ROWS);
-  const hintEdit = () => `${state.confirmGlyph()}: Rename  ${glyph("triangle")}: New  ${glyph("square")}: Delete`;
-  const hintMove = () => `START: Hide / Show  L R: Move  ${state.cancelGlyph()}: Back`;
   return (
-    <View class="absolute inset-0 items-center justify-center bg-[#000000e6]">
-      <View class={state.theme().panelWide}>
-        <Text class={state.theme().menuTitle}>Categories</Text>
-        <For each={visible()}>
-          {(entry, index) => (
-            <View
-              class={
-                first() + index() === state.catRow()
-                  ? state.theme().menuRowActive
-                  : state.theme().menuRow
-              }
-            >
-              <Text class={state.theme().menuLabel}>{entry.label}</Text>
-              <Text class={state.theme().menuValue}>{entry.value}</Text>
-            </View>
-          )}
-        </For>
-        <Text class={state.theme().menuHint}>{state.catNote() || " "}</Text>
-        <Text class={state.theme().menuHint}>{hintEdit()}</Text>
-        <Text class={state.theme().menuHint}>{hintMove()}</Text>
-      </View>
-    </View>
+    <Drawer state={state} title="Categories" size="wide">
+      <For each={visible()}>
+        {(entry, index) => (
+          <OptionRow
+            state={state}
+            active={first() + index() === state.catRow()}
+            label={entry.label}
+            value={entry.value}
+          />
+        )}
+      </For>
+      <Spacer />
+      <Note state={state}>{state.catNote() || " "}</Note>
+      <Note state={state}>
+        {`${state.confirmGlyph()}: Rename  ${glyph("triangle")}: New  ${glyph("square")}: Delete`}
+      </Note>
+      <Note state={state}>{`START: Hide / Show  L R: Move  ${state.cancelGlyph()}: Back`}</Note>
+    </Drawer>
   );
 }
