@@ -24,7 +24,7 @@ import { boxColors, type BoxColors } from "./accent.ts";
 import { pumpNet } from "./net.ts";
 import { createOnlineFlow } from "./online.ts";
 import { KEY_MAX } from "./steamgriddb.ts";
-import type { Catalog } from "./catalog.ts";
+import { TINT_COLORS, type Catalog } from "./catalog.ts";
 import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "./keyboard.ts";
 import {
   NO_BACKDROP,
@@ -38,7 +38,7 @@ import {
 import { loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
 import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
-import { DEFAULT_THEME, THEMES, themeById, type ThemeId } from "./themes.ts";
+import { DEFAULT_THEME, THEMES, dynamicTheme, themeById, type ThemeId } from "./themes.ts";
 import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./types.ts";
 
 /** Rows in the SELECT menu: theme, font, view, details, backdrop, icon box, categories, confirm button. */
@@ -215,6 +215,8 @@ export function createLauncherState(catalog: Catalog) {
   const iconBox = (id: string): BoxColors | undefined => (iconBoxOn() ? boxes()[id] : undefined);
   const loadedSource = new Map<string, string>();
   const registeredKeys = new Set<string>();
+  // The strongest color of each loaded icon, as 0xRRGGBB (Dynamic theme).
+  const iconColors = new Map<string, number | undefined>();
   const loadIcon = (game: Game) => {
     const source = game.art ? `art:${game.art}` : "app";
     if (loadedSource.get(game.id) === source) return;
@@ -232,9 +234,12 @@ export function createLauncherState(catalog: Catalog) {
     if (handle < 0) {
       setIcons(({ [game.id]: _removed, ...rest }) => rest);
       setBoxes(({ [game.id]: _removed, ...rest }) => rest);
+      iconColors.delete(game.id);
       return;
     }
-    const colors = boxColors(artAccent(handle));
+    const accent = artAccent(handle);
+    iconColors.set(game.id, accent < 0 ? undefined : accent & 0xffffff);
+    const colors = boxColors(accent);
     setBoxes(({ [game.id]: _previous, ...rest }) => (colors ? { ...rest, [game.id]: colors } : rest));
     if (!registeredKeys.has(key)) {
       registeredKeys.add(key);
@@ -288,7 +293,38 @@ export function createLauncherState(catalog: Catalog) {
 
   const toggleConfirm = () => setConfirmMode((mode) => (mode === "circle" ? "cross" : "circle"));
 
-  const theme = createMemo(() => themeById(themeId()));
+  // The Dynamic theme takes its colors from the selected title: its icon's
+  // color, or its tint when it has no icon. `dynamicColor` moves toward that
+  // color a little each frame, so the screen blends from one title to the next.
+  const [dynamicColor, setDynamicColor] = createSignal<[number, number, number] | undefined>(undefined);
+  const titleColor = (): number | undefined => {
+    const game = games()[selectedIndex()];
+    if (!game) return undefined;
+    return iconColors.get(game.id) ?? TINT_COLORS[game.tint % TINT_COLORS.length];
+  };
+  const blendDynamicColor = () => {
+    if (themeId() !== "dynamic") return;
+    const target = titleColor();
+    if (target === undefined) return;
+    const goal = [(target >> 16) & 255, (target >> 8) & 255, target & 255];
+    const now = dynamicColor();
+    if (!now) {
+      setDynamicColor([goal[0], goal[1], goal[2]]);
+      return;
+    }
+    if (now.every((value, index) => value === goal[index])) return;
+    // A quarter of the way each frame, then snap once it is within a step.
+    const next = now.map((value, index) => {
+      const gap = goal[index] - value;
+      return Math.abs(gap) < 3 ? goal[index] : value + gap * 0.25;
+    });
+    setDynamicColor([next[0], next[1], next[2]]);
+  };
+  const theme = createMemo(() => {
+    const color = themeId() === "dynamic" ? dynamicColor() : undefined;
+    if (!color) return themeById(themeId());
+    return dynamicTheme((Math.round(color[0]) << 16) | (Math.round(color[1]) << 8) | Math.round(color[2]));
+  });
   /** Text class per role in the chosen font. */
   const text = createMemo(() => textClasses(font()));
   /** The face buttons that confirm and cancel, as icon names. */
@@ -368,6 +404,7 @@ export function createLauncherState(catalog: Catalog) {
   const frame = () => {
     pumpNet();
     pumpBackdrops();
+    blendDynamicColor();
     if (backdropWait > 0 && --backdropWait === 0) loadBackdrop();
   };
 

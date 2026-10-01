@@ -6,6 +6,9 @@ import type { Game } from "./types.ts";
 /** How many tints titles cycle through (see TINT_ART and TINT_AMBIENT in components/art.tsx). */
 export const TINT_COUNT = 6;
 
+/** The tints as `0xRRGGBB`, for a title whose icon gives no color of its own. */
+export const TINT_COLORS: readonly number[] = [0xf59e0b, 0x10b981, 0x3b82f6, 0x8b5cf6, 0xec4899, 0x06b6d4];
+
 // The baked font has no trademark glyphs; they render as empty boxes.
 export function cleanTitle(title: string): string {
   return title.replace(/[®™©℠]/g, "").replace(/\s+/g, " ").trim();

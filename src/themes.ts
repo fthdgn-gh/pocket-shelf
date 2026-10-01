@@ -5,10 +5,16 @@
 // `textColor`, `gradFrom`, ...), which take values at run time. Add a theme by
 // copying one block, giving it a new id, and adding the id to `ThemeId`.
 //
+// "Dynamic" is the exception: it has no fixed colors. `dynamicTheme` builds
+// its palette from the selected title's color, and its entry in `THEMES` only
+// gives it a place in the menu and the colors used before a title is selected.
+//
 // Colors are `#rrggbb`. `accent` and `shelf` stay six digits because
 // components append an alpha pair to them (see `alpha`).
 
-export type ThemeId = "midnight" | "aurora" | "sakura" | "ember" | "daylight";
+import { hslHex, hueSaturation } from "./accent.ts";
+
+export type ThemeId = "midnight" | "aurora" | "sakura" | "ember" | "daylight" | "dynamic";
 
 export interface Theme {
   id: ThemeId;
@@ -105,7 +111,48 @@ export const THEMES: readonly Theme[] = [
     tile: "#e2e8f0",
     scrim: "#0f172a80",
   },
+  {
+    id: "dynamic",
+    name: "Dynamic",
+    bgTop: "#101a36",
+    bgBottom: "#02040c",
+    text: "#ffffff",
+    dim: "#9aa8c0",
+    faint: "#55627a",
+    accent: "#22d3ee",
+    panel: "#0b1226",
+    line: "#2a3654",
+    tile: "#1a2440",
+    scrim: "#00000099",
+  },
 ];
+
+/**
+ * The Dynamic theme's palette for a title's color (`0xRRGGBB`): a dark screen
+ * in the color's hue and a bright accent of the same hue. A color with almost
+ * no saturation gives a neutral gray palette.
+ */
+export function dynamicTheme(rgb: number): Theme {
+  const [hue, saturation] = hueSaturation(rgb);
+  const colored = saturation >= 0.08;
+  // The surfaces keep part of the color's saturation; the accent is always vivid.
+  const surface = colored ? Math.min(saturation, 0.55) : 0;
+  const hint = colored ? 0.18 : 0;
+  return {
+    id: "dynamic",
+    name: "Dynamic",
+    bgTop: hslHex(hue, surface * 0.9, 0.17),
+    bgBottom: hslHex(hue, surface, 0.04),
+    text: "#ffffff",
+    dim: hslHex(hue, hint, 0.72),
+    faint: hslHex(hue, hint, 0.42),
+    accent: colored ? hslHex(hue, Math.max(saturation, 0.8), 0.62) : "#e5e7eb",
+    panel: hslHex(hue, surface * 0.8, 0.09),
+    line: hslHex(hue, surface * 0.6, 0.25),
+    tile: hslHex(hue, surface * 0.7, 0.19),
+    scrim: "#00000099",
+  };
+}
 
 export function themeById(id: ThemeId): Theme {
   return THEMES.find((theme) => theme.id === id) ?? THEMES[0];
