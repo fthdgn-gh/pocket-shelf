@@ -1,7 +1,8 @@
-// Unit tests for the icon box colors. Run with `bun run shelf:test`.
+// Unit tests for the icon box colors and the Dynamic theme's palette. Run with `bun run shelf:test`.
 
 import { describe, expect, test } from "bun:test";
 import { ACCENT_HAS_ALPHA, boxColors, hslHex, hueSaturation } from "../accent.ts";
+import { dynamicTheme } from "../themes.ts";
 
 describe("hueSaturation", () => {
   test("reads the primary hues", () => {
@@ -57,5 +58,42 @@ describe("boxColors", () => {
     expect(neon).toEqual({ from: hslHex(120, 0.6, 0.36), to: hslHex(120, 0.6, 0.17) });
     const gray = boxColors(ACCENT_HAS_ALPHA | 0x969696);
     expect(gray).toEqual({ from: "#5c5c5c", to: "#2b2b2b" });
+  });
+});
+
+describe("dynamicTheme", () => {
+  const HEX = /^#[0-9a-f]{6}$/;
+  const lightness = (hex: string) => {
+    const rgb = Number.parseInt(hex.slice(1), 16);
+    const parts = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255];
+    return (Math.max(...parts) + Math.min(...parts)) / 510;
+  };
+
+  test("every color is six hex digits, so an alpha pair can be appended", () => {
+    for (const rgb of [0xff0000, 0x2060e0, 0x808080, 0x000000, 0xffffff, 0xf59e0b]) {
+      const theme = dynamicTheme(rgb);
+      for (const key of ["bgTop", "bgBottom", "text", "dim", "faint", "accent", "panel", "line", "tile"] as const) {
+        expect(theme[key]).toMatch(HEX);
+      }
+    }
+  });
+
+  test("the screen is dark and the accent bright, in the title's hue", () => {
+    const theme = dynamicTheme(0x2060e0);
+    const [hue] = hueSaturation(0x2060e0);
+    expect(lightness(theme.bgTop)).toBeLessThan(0.2);
+    expect(lightness(theme.bgBottom)).toBeLessThan(lightness(theme.bgTop));
+    expect(lightness(theme.accent)).toBeGreaterThan(0.55);
+    for (const hex of [theme.bgTop, theme.accent, theme.panel]) {
+      expect(Math.abs(hueSaturation(Number.parseInt(hex.slice(1), 16))[0] - hue)).toBeLessThan(4);
+    }
+  });
+
+  test("a title without color gets a gray palette", () => {
+    const theme = dynamicTheme(0x969696);
+    for (const hex of [theme.bgTop, theme.bgBottom, theme.panel, theme.dim]) {
+      expect(hueSaturation(Number.parseInt(hex.slice(1), 16))[1]).toBe(0);
+    }
+    expect(theme.accent).toBe("#e5e7eb");
   });
 });

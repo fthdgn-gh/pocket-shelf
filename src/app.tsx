@@ -42,7 +42,8 @@ export default function App() {
       style={{ gradFrom: state.theme().bgTop, gradTo: state.theme().bgBottom }}
     >
       {/* The selected title's picture, or its tint washed over the top of the screen. */}
-      <Show when={!state.backdrop() ? selected() : undefined}>
+      {/* The Dynamic theme already colors the screen from the title, so it has no wash. */}
+      <Show when={!state.backdrop() && state.theme().id !== "dynamic" ? selected() : undefined}>
         {(game) => <View class={TINT_AMBIENT[game().tint % TINT_AMBIENT.length]} />}
       </Show>
       <Backdrop state={state} />

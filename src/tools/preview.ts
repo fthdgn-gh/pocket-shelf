@@ -364,12 +364,20 @@ const SHOTS: Shot[] = [
   },
   { name: "27-editor-rows", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3)] },
   { name: "28-backdrop-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.DOWN] },
+  // Dynamic theme: one step left of Midnight. The colors follow the selected title.
+  { name: "31-dynamic", steps: [BTN.SELECT, BTN.LEFT, BTN.SELECT, [0, 30]] },
+  { name: "32-dynamic-next", steps: [BTN.SELECT, BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 2), [0, 40]] },
+  { name: "33-dynamic-menu", steps: [BTN.SELECT, BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4), [0, 40], BTN.SELECT, BTN.DOWN] },
+  {
+    name: "34-dynamic-list",
+    steps: [BTN.SELECT, BTN.LEFT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 5), [0, 40]],
+  },
   // Holding RIGHT for a second repeats the move.
   { name: "12-hold-repeat", steps: [[BTN.RIGHT, 60]] },
   // Launch from another category, start again: the selection comes back.
   { name: "16-restored", steps: [...tap(BTN.RTRIGGER, 2), ...tap(BTN.RIGHT, 2), BTN.CIRCLE, "restart"] },
   { name: "13-theme", steps: [BTN.SELECT, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
-  { name: "14-theme-light", steps: [BTN.SELECT, ...tap(BTN.LEFT, 1), BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
+  { name: "14-theme-light", steps: [BTN.SELECT, ...tap(BTN.LEFT, 2), BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
 ];
 

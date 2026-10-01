@@ -56,12 +56,17 @@ export function artTexture(name: string): number {
   return host().__appArt?.(name) ?? -1;
 }
 
-// Backdrop textures are large, so each one is freed when nothing draws it any
-// more. The host hands out one handle per picture; this module counts who is
-// using each handle and frees it a few frames after the last user lets go,
-// by which time the node that drew it has changed or gone.
+// Backdrop textures are large, so each one is freed once nothing draws it.
+// The host hands out one handle per picture; this module counts who is using
+// each handle. A handle nobody uses is kept for a while, so going back to a
+// title does not decode its picture again; only the IDLE_MAX most recent are
+// kept. One that falls off that list is freed a few frames later, by which
+// time the node that drew it has changed or gone.
 const users = new Map<number, number>();
+/** Handles nobody uses, oldest first. */
+const idle: number[] = [];
 const freeing = new Map<number, number>();
+const IDLE_MAX = 3;
 const FREE_AFTER_FRAMES = 4;
 
 /**
@@ -74,6 +79,8 @@ export function acquireBackdrop(titleId: string, file = ""): number {
   const handle = host().__appBackdrop?.(titleId, file) ?? -1;
   if (handle < 0) return -1;
   users.set(handle, (users.get(handle) ?? 0) + 1);
+  const kept = idle.indexOf(handle);
+  if (kept >= 0) idle.splice(kept, 1);
   freeing.delete(handle);
   return handle;
 }
@@ -87,10 +94,14 @@ export function releaseBackdrop(handle: number | undefined): void {
     return;
   }
   users.delete(handle);
-  freeing.set(handle, FREE_AFTER_FRAMES);
+  idle.push(handle);
+  while (idle.length > IDLE_MAX) {
+    const oldest = idle.shift();
+    if (oldest !== undefined) freeing.set(oldest, FREE_AFTER_FRAMES);
+  }
 }
 
-/** Call once per frame: frees the pictures nobody has used for a few frames. */
+/** Call once per frame: frees the pictures that fell off the idle list a few frames ago. */
 export function pumpBackdrops(): void {
   for (const [handle, frames] of freeing) {
     if (frames > 1) {
