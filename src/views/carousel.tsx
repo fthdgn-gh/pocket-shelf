@@ -11,44 +11,46 @@ import { alpha } from "../themes.ts";
 import type { TextRole } from "../text.ts";
 import type { DetailLevel, Game } from "../types.ts";
 import { SelectedInfo } from "./info.tsx";
+import { createWindow } from "./window.ts";
 
 // Class literals per detail level; the sizes match SHELF in layout.ts. A tile
 // stands on the shelf: the selected one grows from its bottom edge and the
-// rest sit smaller and dimmer beside it.
+// rest sit smaller and dimmer beside it. A tile is placed by its index (see
+// `left` below), so only the tiles near the selection are mounted.
+
+/** Tiles kept mounted on each side of the selected one. About two and a half are on screen. */
+const SIDE_TILES = 5;
 const SHAPES: Record<
   DetailLevel,
-  { art: ArtSize; tile: string; selected: string; row: string; strip: string; role: TextRole }
+  { art: ArtSize; tile: string; selected: string; row: string; role: TextRole }
 > = {
   basic: {
     art: "shelfBasic",
-    tile: "relative shrink-0 w-[124] h-[124] origin-bottom scale-90 opacity-60 transition duration-200 ease-out",
-    selected: "relative shrink-0 w-[124] h-[124] origin-bottom scale-125 opacity-100 transition duration-200 ease-out",
+    tile: "absolute bottom-0 w-[124] h-[124] origin-bottom scale-90 opacity-60 transition duration-200 ease-out",
+    selected: "absolute bottom-0 w-[124] h-[124] origin-bottom scale-125 opacity-100 transition duration-200 ease-out",
     row: "flex-row items-end justify-start w-full h-[172] shrink-0 pb-[8] overflow-hidden",
-    strip: "flex-row items-end gap-[26] shrink-0",
     role: "title",
   },
   normal: {
     art: "shelfNormal",
-    tile: "relative shrink-0 w-[112] h-[112] origin-bottom scale-90 opacity-60 transition duration-200 ease-out",
-    selected: "relative shrink-0 w-[112] h-[112] origin-bottom scale-125 opacity-100 transition duration-200 ease-out",
+    tile: "absolute bottom-0 w-[112] h-[112] origin-bottom scale-90 opacity-60 transition duration-200 ease-out",
+    selected: "absolute bottom-0 w-[112] h-[112] origin-bottom scale-125 opacity-100 transition duration-200 ease-out",
     row: "flex-row items-end justify-start w-full h-[156] shrink-0 pb-[8] overflow-hidden",
-    strip: "flex-row items-end gap-[24] shrink-0",
     role: "title",
   },
   detailed: {
     art: "shelfDetailed",
-    tile: "relative shrink-0 w-[100] h-[100] origin-bottom scale-90 opacity-60 transition duration-200 ease-out",
-    selected: "relative shrink-0 w-[100] h-[100] origin-bottom scale-125 opacity-100 transition duration-200 ease-out",
+    tile: "absolute bottom-0 w-[100] h-[100] origin-bottom scale-90 opacity-60 transition duration-200 ease-out",
+    selected: "absolute bottom-0 w-[100] h-[100] origin-bottom scale-125 opacity-100 transition duration-200 ease-out",
     row: "flex-row items-end justify-start w-full h-[140] shrink-0 pb-[8] overflow-hidden",
-    strip: "flex-row items-end gap-[22] shrink-0",
     role: "heading",
   },
 };
 
-function ShelfTile(props: { game: Game; state: LauncherState; selected: boolean }) {
+function ShelfTile(props: { game: Game; state: LauncherState; selected: boolean; left: number }) {
   const shape = () => SHAPES[props.state.detail()];
   return (
-    <View class={props.selected ? shape().selected : shape().tile}>
+    <View class={props.selected ? shape().selected : shape().tile} style={{ insetL: props.left }}>
       <Show when={props.selected}>
         <SelectedFrame state={props.state} />
       </Show>
@@ -66,10 +68,15 @@ export function CarouselView(props: { state: LauncherState }) {
   // Viewport resolution tracked from the host, which desktop and browser hosts resize.
   const readViewport = () => hostViewport(getOps()) ?? { w: SCREEN_W, h: SCREEN_H };
   const [viewport, setViewport] = createSignal(readViewport());
+  const pitch = () => carouselLayout(viewport().w, state.detail()).cardPitch;
   const stripX = (index: number) => {
     const layout = carouselLayout(viewport().w, state.detail());
     return layout.centerX - index * layout.cardPitch;
   };
+  const shelf = createWindow(state, () => [
+    state.selectedIndex() - SIDE_TILES,
+    state.selectedIndex() + SIDE_TILES + 1,
+  ]);
 
   onMount(() => {
     onFrame(() => {
@@ -103,15 +110,16 @@ export function CarouselView(props: { state: LauncherState }) {
           ref={(el) => {
             stripRef = el;
           }}
-          class={SHAPES[state.detail()].strip}
+          class="relative h-full shrink-0"
           style={{ translateX: untrack(() => stripX(state.selectedIndex())) }}
         >
-          <For each={state.games()}>
-            {(game, index) => (
+          <For each={shelf.items()}>
+            {(game) => (
               <ShelfTile
                 game={game}
                 state={state}
-                selected={state.selectedIndex() === index()}
+                selected={state.selectedIndex() === shelf.indexOf(game)}
+                left={shelf.indexOf(game) * pitch()}
               />
             )}
           </For>

@@ -1,7 +1,14 @@
 import { batch, createSignal } from "solid-js";
 import { registerTexture } from "@pocketjs/framework";
 import { rmSync } from "@pocketjs/framework/fs";
-import { acquireBackdrop, artTexture, listArt, listBackdrops, releaseBackdrop } from "./art-files.ts";
+import {
+  TEXTURE_PENDING,
+  acquireBackdrop,
+  artTexture,
+  listArt,
+  listBackdrops,
+  releaseBackdrop,
+} from "./art-files.ts";
 import { getText, netAvailable, saveFile } from "./net.ts";
 import {
   assetFile,
@@ -62,8 +69,11 @@ export function createOnlineFlow(deps: Deps) {
   // a late callback notice that it no longer belongs to the screen.
   let cancels: (() => void)[] = [];
   let turn = 0;
+  // A backdrop candidate the host is still decoding: asked for again each frame.
+  let retry: (() => void) | undefined;
   const cancelAll = () => {
     turn++;
+    retry = undefined;
     for (const cancel of cancels) cancel();
     cancels = [];
     setBusy(false);
@@ -175,6 +185,12 @@ export function createOnlineFlow(deps: Deps) {
     const file = assetFile(asset);
     const display = () => {
       const handle = kind === "icon" ? artTexture(file) : acquireBackdrop(id, file);
+      if (handle === TEXTURE_PENDING) {
+        setStatus("Loading...");
+        retry = display;
+        return;
+      }
+      retry = undefined;
       if (handle < 0) {
         setStatus("That image could not be read.");
         return;
@@ -314,6 +330,9 @@ export function createOnlineFlow(deps: Deps) {
     } else close();
   };
 
+  /** Call once per frame. */
+  const frame = () => retry?.();
+
   /** The keyboard's result for the search term. */
   const submitTerm = (text: string) => {
     if (!text) return;
@@ -346,6 +365,7 @@ export function createOnlineFlow(deps: Deps) {
     cancel,
     submitTerm,
     submitKey,
+    frame,
   };
 }
 

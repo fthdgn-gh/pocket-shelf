@@ -51,7 +51,10 @@ export function artAccent(handle: number): number {
   return host().__artAccent?.(handle) ?? -1;
 }
 
-/** Texture handle for an art file, -1 when the host cannot decode it. */
+/**
+ * Texture handle for an art file, -1 when the host cannot decode it, or
+ * `TEXTURE_PENDING` while the host decodes it.
+ */
 export function artTexture(name: string): number {
   return host().__appArt?.(name) ?? -1;
 }
@@ -70,13 +73,20 @@ const IDLE_MAX = 3;
 const FREE_AFTER_FRAMES = 4;
 
 /**
- * Take a title's full-screen picture: its texture handle, or -1 when it has
- * none. `file` names a PNG in the backdrops folder to use instead of the
- * title's own picture. Every handle taken has to be given back with
- * `releaseBackdrop`.
+ * What the host answers while it is still reading and decoding a picture on a
+ * worker thread (an icon, an art file or a backdrop): ask again on a later frame.
+ */
+export const TEXTURE_PENDING = -2;
+
+/**
+ * Take a title's full-screen picture: its texture handle, -1 when it has
+ * none, or `TEXTURE_PENDING` while the host decodes it. `file` names a PNG in the backdrops folder to
+ * use instead of the title's own picture. Every handle taken (0 or more) has
+ * to be given back with `releaseBackdrop`.
  */
 export function acquireBackdrop(titleId: string, file = ""): number {
   const handle = host().__appBackdrop?.(titleId, file) ?? -1;
+  if (handle === TEXTURE_PENDING) return TEXTURE_PENDING;
   if (handle < 0) return -1;
   users.set(handle, (users.get(handle) ?? 0) + 1);
   const kept = idle.indexOf(handle);
