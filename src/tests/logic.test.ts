@@ -3,7 +3,7 @@
 // `bun run shelf:test`.
 
 import { describe, expect, test } from "bun:test";
-import { cleanTitle } from "../catalog.ts";
+import { cleanTitle, isListed } from "../catalog.ts";
 import { categoryOf, cycleCategory, makeCategoryId } from "../categories.ts";
 import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
@@ -151,6 +151,14 @@ describe("titles", () => {
   test("cleanTitle drops trademark glyphs and collapses spaces", () => {
     expect(cleanTitle("Uncharted™:  Golden Abyss®")).toBe("Uncharted: Golden Abyss");
     expect(cleanTitle("  Plain  ")).toBe("Plain");
+  });
+
+  test("Adrenaline's game bubbles are not listed; Adrenaline and other titles are", () => {
+    expect(isListed("PSPEMU001")).toBe(false);
+    expect(isListed("PSPEMU123")).toBe(false);
+    expect(isListed("PSPEMUCFW")).toBe(true);
+    expect(isListed("PCSA00069")).toBe(true);
+    expect(isListed("VITASHELL")).toBe(true);
   });
 });
 

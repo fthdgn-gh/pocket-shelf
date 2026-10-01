@@ -50,6 +50,10 @@ const TITLES: [id: string, title: string][] = [
   ["SAVEMGR00", "Save Manager"],
   ["PLUGLOAD1", "Plugin Loader"],
   ["TINYSYNTH", "Tiny Synth"],
+  // Adrenaline and two of its game bubbles; the app lists the first only.
+  ["PSPEMUCFW", "Adrenaline"],
+  ["PSPEMU001", "Crisis Core"],
+  ["PSPEMU002", "Castlevania SOTN"],
   // A large category, to check that a long list scrolls like a short one.
   ...Array.from({ length: 120 }, (_, index): [string, string] => [
     `HBREW${String(index).padStart(4, "0")}`,
