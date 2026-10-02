@@ -425,6 +425,29 @@ const SHOTS: Shot[] = [
     name: "41-last-played-mono",
     steps: [BTN.CIRCLE, BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, BTN.LTRIGGER],
   },
+  // Square, then "s" and "t" on the keyboard: the field counts the matches.
+  { name: "42-search-typing", steps: [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.UP, ...tap(BTN.RIGHT, 3), BTN.CIRCLE] },
+  {
+    name: "43-search-results",
+    steps: [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.UP, ...tap(BTN.RIGHT, 3), BTN.CIRCLE, BTN.START, BTN.RIGHT],
+  },
+  // Square on the search tab: the keyboard opens with the whole term.
+  {
+    name: "47-search-again",
+    steps: [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.UP, ...tap(BTN.RIGHT, 3), BTN.CIRCLE, BTN.START, BTN.SQUARE],
+  },
+  // "qq" finds nothing.
+  { name: "44-search-none", steps: [BTN.SQUARE, ...tap(BTN.CIRCLE, 2), BTN.START] },
+  // Closing the search returns to the title that was selected before it.
+  {
+    name: "45-search-closed",
+    steps: [BTN.RTRIGGER, ...tap(BTN.RIGHT, 2), BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.START, BTN.CROSS],
+  },
+  // The footer's five hints in the monospace font, the widest of the three.
+  {
+    name: "46-search-mono",
+    steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.START],
+  },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
 ];
 

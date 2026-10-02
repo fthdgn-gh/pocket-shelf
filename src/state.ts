@@ -6,6 +6,8 @@ import {
   CATEGORY_LABEL_MAX,
   FAVORITES_ID,
   RECENT_ID,
+  SEARCH_CATEGORY,
+  SEARCH_ID,
   SHOW_EMPTY_CATEGORIES,
   SMART_CATEGORIES,
   cycleCategory,
@@ -40,6 +42,7 @@ import {
   type TitleOverride,
 } from "./overrides.ts";
 import { loadRecent, pushRecent, saveRecent } from "./recent.ts";
+import { searchTitles } from "./search.ts";
 import { loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
 import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
@@ -78,7 +81,8 @@ type KeyboardTarget =
   | { kind: "newCategory" }
   | { kind: "category"; id: string }
   | { kind: "search" }
-  | { kind: "apiKey" };
+  | { kind: "apiKey" }
+  | { kind: "library" };
 
 function cycle<T>(list: readonly T[], current: T, delta: number): T {
   const index = list.indexOf(current);
@@ -173,8 +177,11 @@ export function createLauncherState(catalog: Catalog) {
 
   // Title ids in the order they were last started, newest first (recent.json).
   const [recent, setRecent] = createSignal<string[]>(loadRecent());
+  // The term of the open search (square button); empty when no search is open.
+  const [searchTerm, setSearchTerm] = createSignal("");
   /** The titles a category lists. A title that was uninstalled drops out of "Last Played". */
   const titlesOf = (id: CategoryId): Game[] => {
+    if (id === SEARCH_ID) return searchTitles(allGames(), searchTerm());
     if (id === RECENT_ID) {
       const byId = new Map(allGames().map((game) => [game.id, game]));
       return recent().flatMap((titleId) => byId.get(titleId) ?? []);
@@ -183,13 +190,15 @@ export function createLauncherState(catalog: Catalog) {
     return allGames().filter((game) => game.category === id);
   };
 
-  // Categories in the tab bar, and the titles of the current one.
-  const categories = createMemo(() =>
-    allCategories().filter(
+  // Categories in the tab bar, and the titles of the current one. An open
+  // search adds its tab in front, also when it found nothing.
+  const categories = createMemo(() => {
+    const tabs = allCategories().filter(
       (item) =>
         !isHidden(item.id) && (item.custom || SHOW_EMPTY_CATEGORIES || titlesOf(item.id).length > 0),
-    ),
-  );
+    );
+    return searchTerm() ? [SEARCH_CATEGORY, ...tabs] : tabs;
+  });
   const [categoryId, setCategoryId] = createSignal<CategoryId>(
     categories()[0]?.id ?? BUILTIN_CATEGORIES[0].id,
   );
@@ -218,7 +227,13 @@ export function createLauncherState(catalog: Catalog) {
     const index = games().findIndex((game) => game.id === saved.title);
     if (index >= 0) setSelectedIndex(index);
   }
-  const persist = () =>
+  // Where the selection was when the search opened; closing it goes back there.
+  let beforeSearch: { category: CategoryId; title?: string } | undefined;
+  const persist = () => {
+    const game = games()[selectedIndex()];
+    // A search does not outlive the process: the selected result is saved
+    // under its own category.
+    const category = categoryId() === SEARCH_ID ? (game?.category ?? beforeSearch?.category) : categoryId();
     saveSettings({
       theme: themeId(),
       font: font(),
@@ -227,9 +242,10 @@ export function createLauncherState(catalog: Catalog) {
       confirm: confirmMode(),
       backdrop: backdropOn(),
       iconBox: iconBoxOn(),
-      category: categoryId(),
-      title: games()[selectedIndex()]?.id,
+      category,
+      title: game?.id,
     });
+  };
   // Persist on change; the initial run is skipped so a fresh start writes nothing.
   createEffect(on([themeId, font, view, detail, confirmMode, backdropOn, iconBoxOn], persist, { defer: true }));
   const [menuOpen, setMenuOpen] = createSignal(false);
@@ -315,6 +331,47 @@ export function createLauncherState(catalog: Catalog) {
   };
 
   const page = (direction: 1 | -1) => select(selectedIndex() + direction * pageSize(view()));
+
+  // --- Search (square) ----------------------------------------------------
+  const searching = () => categoryId() === SEARCH_ID;
+  /** Open the keyboard for a search term. On the search tab it starts from the current term. */
+  const openSearch = () => openKeyboard({ kind: "library" }, searching() ? searchTerm() : "");
+  /** Close the search and return to the title that was selected before it. */
+  const clearSearch = () => {
+    if (!searchTerm()) return;
+    const back = beforeSearch;
+    beforeSearch = undefined;
+    if (searching()) {
+      const tabs = categories().filter((item) => item.id !== SEARCH_ID);
+      const category = tabs.find((item) => item.id === back?.category)?.id ?? tabs[0]?.id;
+      if (category) {
+        setCategoryId(category);
+        setSelectedIndex(Math.max(0, games().findIndex((game) => game.id === back?.title)));
+      }
+    }
+    setSearchTerm("");
+    setLaunchingTitle(null);
+    loadIconsAround();
+  };
+  /** Show the titles `term` finds in the search tab. An empty term closes the search. */
+  const applySearch = (term: string) => {
+    if (!term) {
+      clearSearch();
+      return;
+    }
+    if (!searching()) beforeSearch = { category: categoryId(), title: games()[selectedIndex()]?.id };
+    batch(() => {
+      setSearchTerm(term);
+      setCategoryId(SEARCH_ID);
+      setSelectedIndex(0);
+      setLaunchingTitle(null);
+    });
+    loadIconsAround();
+  };
+  /** The cancel button with no panel open: leave the search tab. */
+  const closeSearch = () => {
+    if (searching()) clearSearch();
+  };
 
   const launchSelected = () => {
     const game = games()[selectedIndex()];
@@ -560,7 +617,12 @@ export function createLauncherState(catalog: Catalog) {
   const keyboardLimit = () => {
     const kind = keyboardTarget().kind;
     if (kind === "apiKey") return KEY_MAX;
-    return kind === "title" || kind === "search" ? TITLE_MAX : CATEGORY_LABEL_MAX;
+    return kind === "title" || kind === "search" || kind === "library" ? TITLE_MAX : CATEGORY_LABEL_MAX;
+  };
+  /** A line beside the typed text: how many titles the search term finds so far. */
+  const keyboardNote = () => {
+    if (keyboardTarget().kind !== "library" || !keyboardText().trim()) return "";
+    return `${searchTitles(allGames(), keyboardText()).length} found`;
   };
 
   const openKeyboard = (target: KeyboardTarget, text: string) => {
@@ -600,6 +662,8 @@ export function createLauncherState(catalog: Catalog) {
         // Typing the original title back removes the override.
         patchOverride(game.id, { title: !text || text === baseOf(game.id)?.title ? undefined : text });
       }
+    } else if (target.kind === "library") {
+      applySearch(text);
     } else if (target.kind === "search") {
       online.submitTerm(text);
     } else if (target.kind === "apiKey") {
@@ -923,6 +987,11 @@ export function createLauncherState(catalog: Catalog) {
     select,
     page,
     launchSelected,
+    searching,
+    searchTerm,
+    openSearch,
+    closeSearch,
+    keyboardNote,
     menuOpen,
     menuRow,
     openMenu,

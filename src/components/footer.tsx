@@ -1,9 +1,18 @@
 import { Show } from "solid-js";
 import { Text, View } from "@pocketjs/framework/components";
 import type { LauncherState } from "../state.ts";
+import { fitTitle } from "../catalog.ts";
+import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
 
-/** Button legend on the left, position in the current category on the right. */
+// Room for the search term beside the position. The "Menu" hint leaves the
+// legend on the search tab to make this room.
+const TERM_W = 96;
+
+/**
+ * Button legend on the left, position in the current category on the right.
+ * On the search tab the search term stands before the position.
+ */
 export function Footer(props: { state: LauncherState }) {
   const { state } = props;
   const position = () => (state.games().length === 0 ? 0 : state.selectedIndex() + 1);
@@ -14,7 +23,12 @@ export function Footer(props: { state: LauncherState }) {
         fallback={
           <Prompt
             state={state}
-            parts={hints([state.confirmButton(), "Launch"], ["triangle", "Edit"], ["select", "Menu"])}
+            parts={hints(
+              [state.confirmButton(), "Launch"],
+              ["triangle", "Edit"],
+              ["square", "Search"],
+              state.searching() ? [state.cancelButton(), "Close"] : ["select", "Menu"],
+            )}
           />
         }
       >
@@ -22,9 +36,16 @@ export function Footer(props: { state: LauncherState }) {
           {`Launching ${state.launchingTitle()}...`}
         </Text>
       </Show>
-      <Text class={state.text().small} style={{ textColor: state.theme().faint }}>
-        {`${position()} / ${state.games().length}`}
-      </Text>
+      <View class="flex-row items-center gap-2 shrink-0">
+        <Show when={state.searching()}>
+          <Text class={state.text().smallBold} style={{ textColor: state.theme().accent }}>
+            {`"${fitTitle(state.searchTerm(), TERM_W, fontSlot(state.font(), "smallBold"))}"`}
+          </Text>
+        </Show>
+        <Text class={state.text().small} style={{ textColor: state.theme().faint }}>
+          {`${position()} / ${state.games().length}`}
+        </Text>
+      </View>
     </View>
   );
 }
