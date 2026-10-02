@@ -32,7 +32,7 @@ import { createOnlineFlow } from "./online.ts";
 import { KEY_MAX } from "./steamgriddb.ts";
 import { TINT_COLORS, type Catalog } from "./catalog.ts";
 import { DEFAULT_LANGUAGE, LANGUAGES, MESSAGES, fill, type Language } from "./i18n.ts";
-import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "./keyboard.ts";
+import { KEY_PAGES, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn, type KeyPage } from "./keyboard.ts";
 import {
   NO_BACKDROP,
   TITLE_MAX,
@@ -623,8 +623,12 @@ export function createLauncherState(catalog: Catalog) {
   const [keyRow, setKeyRow] = createSignal(1);
   const [keyCol, setKeyCol] = createSignal(0);
   const [shift, setShift] = createSignal(false);
-  const [symbols, setSymbols] = createSignal(false);
-  const keyRows = () => (symbols() ? SYMBOL_ROWS : LETTER_ROWS);
+  const [keyPage, setKeyPage] = createSignal<KeyPage>("letters");
+  const accentKeys = createMemo(() => accentRows(language()));
+  const keyRows = () => {
+    const page = keyPage();
+    return page === "symbols" ? SYMBOL_ROWS : page === "accents" ? accentKeys() : LETTER_ROWS;
+  };
 
   const [keyboardTarget, setKeyboardTarget] = createSignal<KeyboardTarget>({ kind: "title" });
   const keyboardLimit = () => {
@@ -644,7 +648,7 @@ export function createLauncherState(catalog: Catalog) {
     setKeyRow(1);
     setKeyCol(0);
     setShift(false);
-    setSymbols(false);
+    setKeyPage("letters");
     setKeyboardOpen(true);
   };
   const closeKeyboard = () => setKeyboardOpen(false);
@@ -665,7 +669,13 @@ export function createLauncherState(catalog: Catalog) {
     setKeyboardText((current) => (current + text).slice(0, keyboardLimit()));
   const backspace = () => setKeyboardText((current) => current.slice(0, -1));
   const toggleShift = () => setShift((on) => !on);
-  const toggleSymbols = () => setSymbols((on) => !on);
+  /** Step to the next page: letters, symbols, accents. The highlight keeps its row. */
+  const nextKeyPage = () => {
+    const from = keyRows()[keyRow()].length;
+    setKeyPage((page) => cycle(KEY_PAGES, page, 1));
+    // Rows differ in length between pages; a column past the end has no key.
+    setKeyCol((col) => mapColumn(from, keyRows()[keyRow()].length, col));
+  };
   const commitKeyboard = () => {
     const text = keyboardText().trim();
     const target = keyboardTarget();
@@ -711,7 +721,7 @@ export function createLauncherState(catalog: Catalog) {
     } else if (key.action === "space") typeText(" ");
     else if (key.action === "delete") backspace();
     else if (key.action === "shift") toggleShift();
-    else if (key.action === "symbols") toggleSymbols();
+    else if (key.action === "symbols") nextKeyPage();
     else commitKeyboard();
   };
 
@@ -1028,10 +1038,10 @@ export function createLauncherState(catalog: Catalog) {
     keyRow,
     keyCol,
     shift,
-    symbols,
+    keyPage,
     keyRows,
     toggleShift,
-    toggleSymbols,
+    nextKeyPage,
     backspace,
     commitKeyboard,
     artFiles,

@@ -199,6 +199,12 @@ read.
 - **Do not store a translated text in saved data.** Built-in categories carry
   a `name` key and get their label from the language; notes are translated
   when they are set. SteamGridDB errors are `SgdbProblem` keys, not text.
+- **The keyboard has three pages**, stepped with R or the page key: letters,
+  symbols, accents. The accents page holds the same thirty letters in every
+  language (`ACCENTS` in `keyboard.ts`), with the current language's own
+  first (`ACCENTS_FIRST`). `searchKey` matches them by their plain spelling
+  (`ı` as `i`, `ß` as `ss`). A new letter there also has to be in the baked
+  font ranges.
 - `upper` in `i18n.ts` handles the Turkish dotted and dotless i for the drawer
   headings.
 - `bun run shelf:preview 60-` renders twelve screens per translated language.

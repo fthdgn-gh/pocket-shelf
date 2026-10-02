@@ -347,6 +347,8 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("categories", [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.SQUARE]),
     shot("hidden", [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.START]),
     shot("keyboard", [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE]),
+    // R twice: the accents page. Its first key, typed plain and shifted.
+    shot("accents", [BTN.SQUARE, ...tap(BTN.RTRIGGER, 2), BTN.CIRCLE, BTN.LTRIGGER, BTN.CIRCLE]),
     shot("search", [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.UP, ...tap(BTN.RIGHT, 3), BTN.CIRCLE, BTN.START]),
     shot("no-match", [BTN.SQUARE, ...tap(BTN.CIRCLE, 2), BTN.START]),
     shot("launching", [BTN.RIGHT, BTN.CIRCLE]),
@@ -469,6 +471,15 @@ const SHOTS: Shot[] = [
   {
     name: "46-search-mono",
     steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.START],
+  },
+  // A category named with letters from the accents page, kept across a restart.
+  {
+    name: "48-accent-category",
+    steps: [
+      BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, BTN.TRIANGLE,
+      ...tap(BTN.RTRIGGER, 2), BTN.LTRIGGER, BTN.CIRCLE, BTN.DOWN, BTN.CIRCLE, BTN.DOWN, BTN.CIRCLE, BTN.START,
+      "restart", BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, BTN.UP,
+    ],
   },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
   ...LANGUAGE_SHOTS,
