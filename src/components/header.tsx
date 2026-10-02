@@ -5,14 +5,15 @@ import { getOps, hostViewport } from "@pocketjs/framework/host";
 import { fitTitle } from "../catalog.ts";
 import { fontSlot } from "../text.ts";
 import { SCREEN_W } from "../../contracts/spec/spec.ts";
-import { HEADER_SIDE, TAB_GAP, TAB_W } from "../layout.ts";
+import { HEADER_SIDE, TAB_COUNT_GAP, TAB_COUNT_PAD, TAB_GAP, TAB_W } from "../layout.ts";
 import type { LauncherState } from "../state.ts";
+import { alpha } from "../themes.ts";
 import { Icon } from "./icons.tsx";
 
 /**
  * Category header: the L and R buttons on the sides, the category names between
- * them. The strip slides so the current category sits in the center, marked
- * by a bar under its name.
+ * them, each followed by its number of titles. The strip slides so the current
+ * category sits in the center, marked by a bar under its name.
  */
 export function Header(props: { state: LauncherState }) {
   const { state } = props;
@@ -50,14 +51,35 @@ export function Header(props: { state: LauncherState }) {
           <For each={state.categories()}>
             {(item) => {
               const active = () => state.categoryId() === item.id;
+              const count = () => String(state.categoryCount(item.id));
+              // The name gets what the count's badge leaves of the tab.
+              const labelW = () =>
+                TAB_W -
+                2 -
+                TAB_COUNT_GAP -
+                TAB_COUNT_PAD * 2 -
+                getOps().measureText(count(), fontSlot(state.font(), "smallBold"));
               return (
-                <View class="flex-col items-center justify-center gap-[3] w-[92] h-[30] shrink-0">
-                  <Text
-                    class={active() ? state.text().bodyBold : state.text().body}
-                    style={{ textColor: active() ? state.theme().text : state.theme().dim }}
-                  >
-                    {fitTitle(item.label, TAB_W - 2, fontSlot(state.font(), active() ? "bodyBold" : "body"))}
-                  </Text>
+                <View class="flex-col items-center justify-center gap-[3] w-[112] h-[30] shrink-0">
+                  <View class="flex-row items-center justify-center gap-1">
+                    <Text
+                      class={active() ? state.text().bodyBold : state.text().body}
+                      style={{ textColor: active() ? state.theme().text : state.theme().dim }}
+                    >
+                      {fitTitle(item.label, labelW(), fontSlot(state.font(), active() ? "bodyBold" : "body"))}
+                    </Text>
+                    <View
+                      class="flex-row items-center justify-center h-[14] px-1 rounded-[7] shrink-0"
+                      style={{ bgColor: active() ? alpha(state.theme().accent, "30") : state.theme().line }}
+                    >
+                      <Text
+                        class={state.text().smallBold}
+                        style={{ textColor: active() ? state.theme().accent : state.theme().dim }}
+                      >
+                        {count()}
+                      </Text>
+                    </View>
+                  </View>
                   <View
                     class="w-[20] h-[2] rounded-[1]"
                     style={{ bgColor: active() ? state.theme().accent : "#00000000" }}

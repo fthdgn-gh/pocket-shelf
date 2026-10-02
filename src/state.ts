@@ -194,6 +194,11 @@ export function createLauncherState(catalog: Catalog) {
     categories()[0]?.id ?? BUILTIN_CATEGORIES[0].id,
   );
   const games = createMemo(() => titlesOf(categoryId()));
+  /** How many titles each category in the tab bar lists. */
+  const categoryCounts = createMemo(
+    () => new Map(categories().map((item) => [item.id, titlesOf(item.id).length])),
+  );
+  const categoryCount = (id: CategoryId) => categoryCounts().get(id) ?? 0;
 
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [launchingTitle, setLaunchingTitle] = createSignal<string | null>(null);
@@ -895,6 +900,7 @@ export function createLauncherState(catalog: Catalog) {
     games,
     categories,
     categoryId,
+    categoryCount,
     changeCategory,
     native,
     selectedIndex,
