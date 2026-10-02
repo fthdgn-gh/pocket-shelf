@@ -8,6 +8,7 @@ import { categoryOf, cycleCategory, makeCategoryId } from "../categories.ts";
 import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
+import { RECENT_MAX, pushRecent } from "../recent.ts";
 
 describe("moveSelection", () => {
   test("carousel moves on the horizontal axis only", () => {
@@ -98,6 +99,26 @@ describe("categories", () => {
     expect(makeCategoryId("Retro Games", new Set(["retro-games"]))).toBe("retro-games-2");
     expect(makeCategoryId("Retro Games", new Set(["retro-games", "retro-games-2"]))).toBe("retro-games-3");
     expect(makeCategoryId("!!!", new Set())).toBe("category");
+  });
+});
+
+describe("last played", () => {
+  test("pushRecent puts the started title first and lists it once", () => {
+    expect(pushRecent([], "PCSA00001")).toEqual(["PCSA00001"]);
+    expect(pushRecent(["PCSA00001", "PCSA00002"], "PCSA00003")).toEqual(["PCSA00003", "PCSA00001", "PCSA00002"]);
+    expect(pushRecent(["PCSA00001", "PCSA00002", "PCSA00003"], "PCSA00003")).toEqual([
+      "PCSA00003",
+      "PCSA00001",
+      "PCSA00002",
+    ]);
+  });
+
+  test("pushRecent drops the oldest title past the limit", () => {
+    const full = Array.from({ length: RECENT_MAX }, (_, index) => `PCSA${String(index).padStart(5, "0")}`);
+    const next = pushRecent(full, "PCSB00000");
+    expect(next.length).toBe(RECENT_MAX);
+    expect(next[0]).toBe("PCSB00000");
+    expect(next).not.toContain(full[RECENT_MAX - 1]);
   });
 });
 

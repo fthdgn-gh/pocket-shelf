@@ -9,7 +9,7 @@ import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
 // Room for a value beside its label in a wide drawer, with its arrow.
 const VALUE_W = 160;
 
-/** Per-title editor: category, title, box art, backdrop, SteamGridDB and reset. */
+/** Per-title editor: favorite, category, title, box art, backdrop, SteamGridDB and reset. */
 export function EditorOverlay(props: { state: LauncherState }) {
   const { state } = props;
   const fit = (value: string) => fitTitle(value, VALUE_W, fontSlot(state.font(), "bodyBold"));
@@ -28,6 +28,7 @@ export function EditorOverlay(props: { state: LauncherState }) {
     const game = state.editorGame();
     const category = state.categoryLabel(game?.category ?? "");
     return [
+      { label: "Favorite", value: game?.favorite ? "On" : "Off", step: "both" as const },
       { label: "Category", value: category, step: "both" as const },
       { label: "Title", value: fit(game?.title ?? ""), step: "right" as const },
       { label: "Box art", value: fit(art()), step: "right" as const },

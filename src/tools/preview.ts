@@ -342,8 +342,8 @@ const SHOTS: Shot[] = [
   { name: "05-grid", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.DOWN] },
   { name: "06-list", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.DOWN, 2)] },
   { name: "07-editor", steps: [BTN.RIGHT, BTN.TRIANGLE] },
-  { name: "08-keyboard", steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN] },
-  { name: "09-art-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE] },
+  { name: "08-keyboard", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, BTN.RIGHT, BTN.DOWN] },
+  { name: "09-art-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE] },
   { name: "10-categories", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, BTN.DOWN] },
   // Icon box off: SELECT, down to "Icon box", right once.
   { name: "29-icon-box-off", steps: [BTN.SELECT, ...tap(BTN.DOWN, 5), BTN.RIGHT, BTN.SELECT, BTN.RIGHT] },
@@ -363,28 +363,28 @@ const SHOTS: Shot[] = [
     steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 4)],
   },
   // Title editor, down to "SteamGridDB": no API key saved yet.
-  { name: "22-online-key", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE] },
+  { name: "22-online-key", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE] },
   // With a key: the search runs and lists games.
-  { name: "23-online-games", key: true, steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 30]] },
+  { name: "23-online-games", key: true, steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE, [0, 30]] },
   // Choose the first game: its icon candidates, third one on screen.
   {
     name: "24-online-icon",
     key: true,
-    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.RIGHT, [0, 20], BTN.RIGHT, [0, 20]],
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.RIGHT, [0, 20], BTN.RIGHT, [0, 20]],
   },
   // The backdrop row, applied: it shows behind the screen once the drawers close.
   {
     name: "25-online-backdrop",
     key: true,
-    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.DOWN, [0, 20], BTN.RIGHT, [0, 20], BTN.CIRCLE],
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.DOWN, [0, 20], BTN.RIGHT, [0, 20], BTN.CIRCLE],
   },
   {
     name: "26-online-applied",
     key: true,
-    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.CIRCLE, BTN.DOWN, [0, 20], BTN.CIRCLE, ...tap(BTN.CROSS, 3), [0, 30]],
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.CIRCLE, BTN.DOWN, [0, 20], BTN.CIRCLE, ...tap(BTN.CROSS, 3), [0, 30]],
   },
-  { name: "27-editor-rows", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3)] },
-  { name: "28-backdrop-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.DOWN] },
+  { name: "27-editor-rows", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4)] },
+  { name: "28-backdrop-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, BTN.DOWN] },
   // Dynamic theme: one step left of Midnight. The colors follow the selected title.
   { name: "31-dynamic", steps: [BTN.SELECT, BTN.LEFT, BTN.SELECT, [0, 30]] },
   { name: "32-dynamic-next", steps: [BTN.SELECT, BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 2), [0, 40]] },
@@ -409,6 +409,22 @@ const SHOTS: Shot[] = [
   { name: "16-restored", steps: [...tap(BTN.RTRIGGER, 2), ...tap(BTN.RIGHT, 2), BTN.CIRCLE, "restart"] },
   { name: "13-theme", steps: [BTN.SELECT, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
   { name: "14-theme-light", steps: [BTN.SELECT, ...tap(BTN.LEFT, 2), BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
+  // Mark the second and third titles as favorites, then go to the new tab.
+  {
+    name: "38-favorites",
+    steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.CIRCLE, BTN.CROSS, BTN.RIGHT, BTN.TRIANGLE, BTN.CIRCLE, BTN.CROSS, BTN.LTRIGGER],
+  },
+  { name: "39-favorite-row", steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.CIRCLE] },
+  // Start three titles, start again: "Last Played" lists them, newest first.
+  {
+    name: "40-last-played",
+    steps: [BTN.CIRCLE, ...tap(BTN.RIGHT, 2), BTN.CIRCLE, BTN.RTRIGGER, BTN.CIRCLE, "restart", ...tap(BTN.LTRIGGER, 2)],
+  },
+  // The same tab in the monospace font, the widest of the three.
+  {
+    name: "41-last-played-mono",
+    steps: [BTN.CIRCLE, BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, BTN.LTRIGGER],
+  },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
 ];
 

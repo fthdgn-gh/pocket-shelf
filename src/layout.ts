@@ -43,6 +43,6 @@ export function carouselLayout(screenW: number, detail: DetailLevel): CarouselLa
 
 // Category header: a badge on each side (24 wide, 12 from the edge, 6 gap)
 // around a clipped strip of fixed-width tabs.
-export const TAB_W = 76;
+export const TAB_W = 92;
 export const TAB_GAP = 4;
 export const HEADER_SIDE = 42;

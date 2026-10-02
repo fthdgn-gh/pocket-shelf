@@ -10,6 +10,8 @@ export interface TitleOverride {
   art?: string;
   /** File name in the backdrops folder, or "none" to draw no backdrop. */
   backdrop?: string;
+  /** Present when the title is in the "Favorites" category. */
+  favorite?: true;
 }
 
 export type Overrides = Record<string, TitleOverride>;
@@ -47,6 +49,7 @@ function sanitize(value: unknown): TitleOverride {
   if (raw.backdrop === NO_BACKDROP || (typeof raw.backdrop === "string" && pngName(raw.backdrop))) {
     clean.backdrop = raw.backdrop;
   }
+  if (raw.favorite === true) clean.favorite = true;
   return clean;
 }
 
