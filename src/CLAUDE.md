@@ -47,7 +47,8 @@ simulator and writes frames to `.pocket-build/validation/shelf-preview/`
 (ignored by git). It fakes the Vita host: a title table (including a
 125-title category), icons, backdrops, the network and SteamGridDB, and it
 answers "still decoding" at first like the real host. Shots are button
-scripts; adding a menu row shifts the `DOWN` counts in existing shots. It
+scripts; adding a menu or editor row shifts the `DOWN` counts in existing
+shots. Its launch op does not end the app, so a shot can start several titles. It
 needs the `wasm32-unknown-unknown` Rust target.
 
 **Vita3K.** Its window cannot be seen or screenshotted from here, and it
@@ -59,7 +60,7 @@ cannot be driven. Evidence comes from its log and from files under
 - It runs the real firmware `libssl`/`libhttp` modules, so TLS results there
   match hardware.
 - `sceAppMgrLaunchAppByUri` is unimplemented: launching a title only works on
-  hardware.
+  hardware. If the stub reports success, pressing launch there ends the app.
 - `Unhandled EXC_BAD_ACCESS` in its log is not fatal by itself. It appears when
   a freed texture's memory is reused for a new upload. A real crash is followed
   by `Game closed`.
@@ -111,6 +112,18 @@ cannot be driven. Evidence comes from its log and from files under
   `ur0:appmeta/<id>/` (exists only after the home screen opened that game's
   LiveArea), then `sceAppMgrGameDataMount` on `ux0:app/<id>`. All three are
   confirmed on hardware. `param.sfo` is readable without a mount.
+- **A launch ends this process.** `installed::launch` sends
+  `psgm:play?titleid=<id>`; `main.rs` presents that frame, then
+  `installed::finish_launch` sends the request again after 10 ms and calls
+  `sceKernelExitProcess(0)` (the sequence in VitaShell's updater). A process
+  that stays alive gets the system's "close this application?" prompt, since
+  one game-category title runs at a time. Confirmed on hardware: no prompt,
+  and the "Launching" line shows before the switch.
+- **Staying open next to a game ("system mode") was looked at and not done.**
+  ElevenMPV-A does it with `CATEGORY=gdc` in `param.sfo` (ours is the default
+  `gd`) and `libvita2d_sys`: `sceGxmInitializeInternal`, drawing into the
+  shell's `sceSharedFb`, textures on the `USER_NC` heap, no CDRAM. The host
+  uses stock `vita2d` and the game memory budget, so this is a renderer port.
 - **The Vita's own SSL cannot reach Cloudflare-fronted sites** that serve only
   an ECDSA certificate; the handshake fails (`0x80435061`). `http.rs` uses
   `rustls` with `rustls-rustcrypto` (an unaudited alpha) and Mozilla's roots,
@@ -135,9 +148,20 @@ cannot be driven. Evidence comes from its log and from files under
 
 ## Data folder (`ux0:/data/PocketShelf/`)
 
-`settings.json`, `categories.json`, `titles/<title id>.json` (per-title
-overrides: category, title, art, backdrop), `art/`, `backdrops/`,
+`settings.json`, `categories.json`, `recent.json` (title ids, the one started
+last first, at most 15), `titles/<title id>.json` (per-title overrides:
+category, title, art, backdrop, favorite), `art/`, `backdrops/`,
 `steamgriddb.txt`.
+
+## Smart categories
+
+"Last Played" (`smart-recent`) and "Favorites" (`smart-favorites`) are filled
+by the launcher (`SMART_CATEGORIES` in `categories.ts`, `titlesOf` in
+`state.ts`). A title keeps its own category; the editor's Category row skips
+the smart ones. They show no tab while empty, sit before the other tabs until
+the user reorders them, and can be hidden or moved in the category manager.
+`launchSelected` writes `recent.json` after the host accepts the launch.
+"Reset to defaults" keeps the favorite mark.
 
 ## Open items
 

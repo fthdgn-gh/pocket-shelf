@@ -51,12 +51,12 @@ export function Header(props: { state: LauncherState }) {
             {(item) => {
               const active = () => state.categoryId() === item.id;
               return (
-                <View class="flex-col items-center justify-center gap-[3] w-[76] h-[30] shrink-0">
+                <View class="flex-col items-center justify-center gap-[3] w-[92] h-[30] shrink-0">
                   <Text
                     class={active() ? state.text().bodyBold : state.text().body}
                     style={{ textColor: active() ? state.theme().text : state.theme().dim }}
                   >
-                    {fitTitle(item.label, 74, fontSlot(state.font(), active() ? "bodyBold" : "body"))}
+                    {fitTitle(item.label, TAB_W - 2, fontSlot(state.font(), active() ? "bodyBold" : "body"))}
                   </Text>
                   <View
                     class="w-[20] h-[2] rounded-[1]"

@@ -6,7 +6,24 @@ export interface Category {
   label: string;
   /** True for categories the user created. */
   custom?: boolean;
+  /** True for a category the launcher fills itself; a title cannot be moved into it. */
+  smart?: boolean;
 }
+
+// The ids carry a prefix so they cannot match one made from a label the user
+// typed before these categories existed.
+export const RECENT_ID = "smart-recent";
+export const FAVORITES_ID = "smart-favorites";
+
+/**
+ * Categories filled by the launcher: the titles started last, newest first,
+ * and the titles marked as favorite in the editor. They sit before the other
+ * tabs until the user reorders them, and are left out while they are empty.
+ */
+export const SMART_CATEGORIES: readonly Category[] = [
+  { id: RECENT_ID, label: "Last Played", smart: true },
+  { id: FAVORITES_ID, label: "Favorites", smart: true },
+];
 
 export const BUILTIN_CATEGORIES: readonly Category[] = [
   { id: "games", label: "Games" },
@@ -79,7 +96,7 @@ export function loadCategoryConfig(): CategoryConfig {
       order?: unknown;
       hidden?: unknown;
     };
-    const seen = new Set(BUILTIN_CATEGORIES.map((item) => item.id));
+    const seen = new Set([...SMART_CATEGORIES, ...BUILTIN_CATEGORIES].map((item) => item.id));
     for (const value of Array.isArray(object.custom) ? object.custom : []) {
       const id = value?.id;
       const label = typeof value?.label === "string" ? value.label.trim().slice(0, CATEGORY_LABEL_MAX) : "";

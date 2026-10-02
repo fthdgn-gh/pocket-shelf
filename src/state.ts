@@ -4,7 +4,10 @@ import { appIcon, launchApp } from "@pocketjs/framework/launcher";
 import {
   BUILTIN_CATEGORIES,
   CATEGORY_LABEL_MAX,
+  FAVORITES_ID,
+  RECENT_ID,
   SHOW_EMPTY_CATEGORIES,
+  SMART_CATEGORIES,
   cycleCategory,
   loadCategoryConfig,
   makeCategoryId,
@@ -36,6 +39,7 @@ import {
   type Overrides,
   type TitleOverride,
 } from "./overrides.ts";
+import { loadRecent, pushRecent, saveRecent } from "./recent.ts";
 import { loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
 import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
@@ -57,8 +61,8 @@ const BACKDROP_RETRY = 2;
 /** Frames between two requests for the icons the host is still decoding. */
 const ICON_RETRY = 2;
 
-/** Rows in the per-title editor: category, title, box art, backdrop, SteamGridDB, reset. */
-export const EDITOR_ROWS = 6;
+/** Rows in the per-title editor: favorite, category, title, box art, backdrop, SteamGridDB, reset. */
+export const EDITOR_ROWS = 7;
 
 /** Art picker rows visible at once. */
 export const PICKER_ROWS = 5;
@@ -102,22 +106,24 @@ export function createLauncherState(catalog: Catalog) {
     return undefined;
   };
 
-  // Built-in categories, then the ones the user created (categories.json).
+  // Smart and built-in categories, then the ones the user created (categories.json).
   const savedCategories = loadCategoryConfig();
   const [customCategories, setCustomCategories] = createSignal<Category[]>(savedCategories.custom);
   const [categoryOrder, setCategoryOrder] = createSignal<string[]>(savedCategories.order);
   const [hiddenCategories, setHiddenCategories] = createSignal<string[]>(savedCategories.hidden);
-  // Every category in tab order. Ids missing from the saved order (new ones)
-  // follow at the end, built-ins first.
+  // Every category in tab order. Of the ids missing from the saved order, the
+  // smart ones go first and the others (new ones) follow at the end,
+  // built-ins before custom.
   const allCategories = createMemo<Category[]>(() => {
-    const base = [...BUILTIN_CATEGORIES, ...customCategories()];
-    const position = (id: string) => {
-      const index = categoryOrder().indexOf(id);
-      return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+    const base = [...SMART_CATEGORIES, ...BUILTIN_CATEGORIES, ...customCategories()];
+    const position = (item: Category) => {
+      const index = categoryOrder().indexOf(item.id);
+      if (index >= 0) return index;
+      return item.smart ? -1 : Number.MAX_SAFE_INTEGER;
     };
     return base
       .map((item, index) => ({ item, index }))
-      .sort((a, b) => position(a.item.id) - position(b.item.id) || a.index - b.index)
+      .sort((a, b) => position(a.item) - position(b.item) || a.index - b.index)
       .map(({ item }) => item);
   });
   const isHidden = (id: string) => hiddenCategories().includes(id);
@@ -145,6 +151,7 @@ export function createLauncherState(catalog: Catalog) {
         ...game,
         title,
         category,
+        favorite: change?.favorite === true,
         art,
         backdrop: change?.backdrop,
         artAuto: !forceIcon && chosen === undefined && art !== undefined,
@@ -164,18 +171,29 @@ export function createLauncherState(catalog: Catalog) {
       return copy;
     });
 
+  // Title ids in the order they were last started, newest first (recent.json).
+  const [recent, setRecent] = createSignal<string[]>(loadRecent());
+  /** The titles a category lists. A title that was uninstalled drops out of "Last Played". */
+  const titlesOf = (id: CategoryId): Game[] => {
+    if (id === RECENT_ID) {
+      const byId = new Map(allGames().map((game) => [game.id, game]));
+      return recent().flatMap((titleId) => byId.get(titleId) ?? []);
+    }
+    if (id === FAVORITES_ID) return allGames().filter((game) => game.favorite);
+    return allGames().filter((game) => game.category === id);
+  };
+
   // Categories in the tab bar, and the titles of the current one.
   const categories = createMemo(() =>
     allCategories().filter(
       (item) =>
-        !isHidden(item.id) &&
-        (item.custom || SHOW_EMPTY_CATEGORIES || allGames().some((game) => game.category === item.id)),
+        !isHidden(item.id) && (item.custom || SHOW_EMPTY_CATEGORIES || titlesOf(item.id).length > 0),
     ),
   );
   const [categoryId, setCategoryId] = createSignal<CategoryId>(
     categories()[0]?.id ?? BUILTIN_CATEGORIES[0].id,
   );
-  const games = createMemo(() => allGames().filter((game) => game.category === categoryId()));
+  const games = createMemo(() => titlesOf(categoryId()));
 
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [launchingTitle, setLaunchingTitle] = createSignal<string | null>(null);
@@ -297,9 +315,22 @@ export function createLauncherState(catalog: Catalog) {
     const game = games()[selectedIndex()];
     if (!game) return;
     setLaunchingTitle(game.title);
-    persist();
     console.log(`Launch requested: ${game.id}`);
-    if (native && !launchApp(game.id)) console.log(`Launch rejected: ${game.id}`);
+    if (native && !launchApp(game.id)) {
+      console.log(`Launch rejected: ${game.id}`);
+      persist();
+      return;
+    }
+    // The host ends this process once this frame is on screen, so the list
+    // and the selection are written now.
+    const list = pushRecent(recent(), game.id);
+    batch(() => {
+      setRecent(list);
+      // In "Last Played" the started title moves to the front; follow it.
+      if (categoryId() === RECENT_ID) setSelectedIndex(0);
+    });
+    saveRecent(list);
+    persist();
   };
 
   const setView = (next: ViewMode) => {
@@ -480,12 +511,20 @@ export function createLauncherState(catalog: Catalog) {
     loadIconsAround();
   };
 
+  /** Add the edited title to "Favorites" or take it out. */
+  const toggleFavorite = () => {
+    const game = editorGame();
+    if (!game) return;
+    patchOverride(game.id, { favorite: game.favorite ? undefined : true });
+    clampSelection();
+  };
+
   /** Move the edited title to the next or previous category. The tab stays put. */
   const changeGameCategory = (delta: number) => {
     const game = editorGame();
     if (!game) return;
     const choices = allCategories()
-      .filter((item) => !isHidden(item.id) || item.id === game.category)
+      .filter((item) => !item.smart && (!isHidden(item.id) || item.id === game.category))
       .map((item) => item.id);
     const next = cycle(choices, game.category, delta);
     patchOverride(game.id, { category: next === baseOf(game.id)?.category ? undefined : next });
@@ -495,7 +534,10 @@ export function createLauncherState(catalog: Catalog) {
   const resetGame = () => {
     const game = editorGame();
     if (!game) return;
-    setOverrides(({ [game.id]: _removed, ...rest }) => rest);
+    // The favorite mark is not a change to how the title looks; it stays.
+    setOverrides(({ [game.id]: removed, ...rest }) =>
+      removed?.favorite ? { ...rest, [game.id]: { favorite: true } } : rest,
+    );
     clampSelection();
     setEditorNote("Reset to the defaults");
   };
@@ -737,7 +779,8 @@ export function createLauncherState(catalog: Catalog) {
       setCatNote(`${item.label} is shown`);
       return;
     }
-    if (allCategories().filter((other) => !isHidden(other.id)).length <= 1) {
+    // A smart category shows no tab while it is empty, so it does not count.
+    if (!item.smart && allCategories().filter((other) => !other.smart && !isHidden(other.id)).length <= 1) {
       setCatNote("At least one category has to stay visible.");
       return;
     }
@@ -776,7 +819,8 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "editor":
         if (dy !== 0) setEditorRow((row) => (row + dy + EDITOR_ROWS) % EDITOR_ROWS);
-        else if (editorRow() === 0) changeGameCategory(dx);
+        else if (editorRow() === 0) toggleFavorite();
+        else if (editorRow() === 1) changeGameCategory(dx);
         break;
       case "keyboard":
         keyboardMove(dx, dy);
@@ -799,11 +843,12 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "editor": {
         const row = editorRow();
-        if (row === 0) changeGameCategory(1);
-        else if (row === 1) openKeyboard({ kind: "title" }, editorGame()?.title ?? "");
-        else if (row === 2) openArtPicker("art");
-        else if (row === 3) openArtPicker("backdrop");
-        else if (row === 4) online.start();
+        if (row === 0) toggleFavorite();
+        else if (row === 1) changeGameCategory(1);
+        else if (row === 2) openKeyboard({ kind: "title" }, editorGame()?.title ?? "");
+        else if (row === 3) openArtPicker("art");
+        else if (row === 4) openArtPicker("backdrop");
+        else if (row === 5) online.start();
         else resetGame();
         break;
       }

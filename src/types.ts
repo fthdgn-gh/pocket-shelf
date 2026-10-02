@@ -1,5 +1,5 @@
 export type ViewMode = "carousel" | "grid" | "list";
-/** Built-in ids are "games", "apps" and "homebrew"; custom categories have their own. */
+/** Built-in ids are "games", "apps" and "homebrew"; smart and custom categories have their own. */
 export type CategoryId = string;
 /** How much text each title shows: none, its title, or title and title id. */
 export type DetailLevel = "basic" | "normal" | "detailed";
@@ -12,6 +12,8 @@ export interface Game {
   id: string;
   genre: string;
   category: CategoryId;
+  /** True when the user marked the title as a favorite. */
+  favorite?: boolean;
   /** Custom box art: a file name in the launcher's art folder. */
   art?: string;
   /** True when `art` was found by name, not chosen by the user. */
