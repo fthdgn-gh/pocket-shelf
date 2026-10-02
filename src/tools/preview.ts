@@ -290,6 +290,13 @@ function installHost(ops: Record<string, unknown>): void {
       current: "PBCF7609D",
       resume: null,
     });
+  ops.__processMs = (): number => Math.round(performance.now()) + 420;
+  ops.__startupMarks = (): string => "main=3,graphics=120,dev=125,pak=400,quickjs=420,eval=900,frame=930";
+  // A scan finds a title that was installed after the list was last read.
+  ops.__appRescan = (): number => {
+    if (!TITLES.some(([id]) => id === "PCSH00999")) TITLES.splice(13, 0, ["PCSH00999", "Fresh Install"]);
+    return TITLES.length;
+  };
   ops.appLaunch = (id: string): number => (TITLES.some(([known]) => known === id) ? 1 : 0);
   ops.appIcon = (id: string): number => {
     const index = TITLES.findIndex(([known]) => known === id);
@@ -348,8 +355,8 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
   const shot = (name: string, steps: Step[]): Shot => ({ name: `60-${language}-${name}`, language, steps });
   return [
     shot("shelf", [BTN.RIGHT]),
-    // The language row is one press up from the first row.
-    shot("menu", [BTN.SELECT, BTN.UP]),
+    // The language row is two presses up from the first row.
+    shot("menu", [BTN.SELECT, ...tap(BTN.UP, 2)]),
     shot("editor", [BTN.RIGHT, BTN.TRIANGLE]),
     shot("reset", [BTN.RIGHT, BTN.TRIANGLE, BTN.UP, BTN.CIRCLE]),
     shot("categories", [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.SQUARE]),
@@ -364,6 +371,7 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("online-key", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE]),
     shot("scrape", [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE]),
     shot("clean", [BTN.SELECT, ...tap(BTN.DOWN, 8), BTN.CIRCLE, BTN.RIGHT]),
+    shot("rescan", [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.CIRCLE, [0, 20]]),
   ];
 });
 
@@ -572,6 +580,16 @@ const SHOTS: Shot[] = [
     key: true,
     steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2), ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]],
   },
+  // Rescan titles: before, and after a scan that finds one more title.
+  { name: "71-rescan", steps: [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE] },
+  { name: "72-rescan-done", steps: [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.CIRCLE, [0, 20]] },
+  // Mark a favorite, start again: the changes come back from the one-file cache.
+  { name: "73-changes-kept", steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.CIRCLE, BTN.CROSS, "restart", [0, 20]] },
+  // Diagnostics: the startup timing, first lines and scrolled.
+  // It is the last row of the menu: one press up from the first.
+  { name: "74-diagnostics", steps: [BTN.SELECT, BTN.UP, BTN.CIRCLE] },
+  { name: "75-diagnostics-scrolled", steps: [BTN.SELECT, BTN.UP, BTN.CIRCLE, ...tap(BTN.DOWN, 12)] },
+  { name: "76-menu-end", steps: [BTN.SELECT, BTN.UP] },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
   ...LANGUAGE_SHOTS,
 ];

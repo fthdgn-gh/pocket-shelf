@@ -166,6 +166,14 @@ export const en = {
   cleanConfirm: "Press again to delete {count} files.",
   cleanDone: "{count} files deleted.",
   cleanNothing: "There is nothing to delete.",
+
+  // Rescan titles
+  diagnostics: "Diagnostics",
+  rescan: "Rescan titles",
+  scan: "Scan",
+  scanHelp: "Reads the installed titles again. Use it after installing or removing a title.",
+  scanning: "Scanning...",
+  scanDone: "{count} titles found in {seconds} s.",
 };
 
 export type Messages = typeof en;

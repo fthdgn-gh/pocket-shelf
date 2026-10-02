@@ -151,4 +151,11 @@ export const es: Messages = {
   cleanConfirm: "Pulsa otra vez para borrar {count} archivos.",
   cleanDone: "{count} archivos borrados.",
   cleanNothing: "No hay nada que borrar.",
+
+  diagnostics: "Diagnóstico",
+  rescan: "Volver a leer títulos",
+  scan: "Escanear",
+  scanHelp: "Vuelve a leer los títulos instalados. Úsalo después de instalar o quitar un título.",
+  scanning: "Escaneando...",
+  scanDone: "{count} títulos encontrados en {seconds} s.",
 };

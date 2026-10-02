@@ -17,6 +17,7 @@ import { ArtPickerOverlay } from "./components/art-picker.tsx";
 import { Backdrop } from "./components/backdrop.tsx";
 import { CategoryManagerOverlay } from "./components/category-manager.tsx";
 import { CleanupOverlay } from "./components/cleanup.tsx";
+import { DiagnosticsOverlay } from "./components/diagnostics.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
 import { Footer } from "./components/footer.tsx";
 import { Header } from "./components/header.tsx";
@@ -24,7 +25,9 @@ import { hints, Prompt, withButton } from "./components/icons.tsx";
 import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
 import { OnlineOverlay } from "./components/online.tsx";
+import { RescanOverlay } from "./components/rescan.tsx";
 import { ScrapeOverlay } from "./components/scrape.tsx";
+import { setupDone, timed } from "./diagnostics.ts";
 import { fill } from "./i18n.ts";
 import { installInput } from "./input.ts";
 import { createLauncherState } from "./state.ts";
@@ -34,13 +37,15 @@ import { GridView } from "./views/grid.tsx";
 import { ListView } from "./views/list.tsx";
 
 export default function App() {
-  const state = createLauncherState(loadCatalog());
+  setupDone();
+  const catalog = timed("catalog", loadCatalog);
+  const state = timed("state", () => createLauncherState(catalog));
 
   onMount(() => installInput(state));
 
   const selected = () => state.games()[state.selectedIndex()];
 
-  return (
+  return timed("tree", () => (
     <View
       class="relative flex-col w-full h-full bg-gradient-to-b from-black to-black"
       style={{ gradFrom: state.theme().bgTop, gradTo: state.theme().bgBottom }}
@@ -50,10 +55,15 @@ export default function App() {
       <Show when={!state.backdrop() && state.theme().id !== "dynamic" ? selected() : undefined}>
         {(game) => <View class={TINT_AMBIENT[game().tint % TINT_AMBIENT.length]} />}
       </Show>
-      <Backdrop state={state} />
+      {timed("backdrop", () => (
+        <Backdrop state={state} />
+      ))}
 
-      <Header state={state} />
+      {timed("header", () => (
+        <Header state={state} />
+      ))}
 
+      {timed("view", () => (
       <Show
         when={state.games().length > 0}
         fallback={
@@ -97,8 +107,11 @@ export default function App() {
           </Show>
         </Show>
       </Show>
+      ))}
 
-      <Footer state={state} />
+      {timed("footer", () => (
+        <Footer state={state} />
+      ))}
 
       <Show when={state.menuOpen()}>
         <MenuOverlay state={state} />
@@ -118,6 +131,12 @@ export default function App() {
       <Show when={state.modal() === "clean"}>
         <CleanupOverlay state={state} />
       </Show>
+      <Show when={state.modal() === "rescan"}>
+        <RescanOverlay state={state} />
+      </Show>
+      <Show when={state.modal() === "diagnostics"}>
+        <DiagnosticsOverlay state={state} />
+      </Show>
       <Show when={state.modal() === "art"}>
         <ArtPickerOverlay state={state} />
       </Show>
@@ -125,5 +144,5 @@ export default function App() {
         <KeyboardOverlay state={state} />
       </Show>
     </View>
-  );
+  ));
 }

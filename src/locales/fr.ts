@@ -151,4 +151,11 @@ export const fr: Messages = {
   cleanConfirm: "Appuyez encore pour supprimer {count} fichiers.",
   cleanDone: "{count} fichiers supprimés.",
   cleanNothing: "Il n'y a rien à supprimer.",
+
+  diagnostics: "Diagnostic",
+  rescan: "Relire les titres",
+  scan: "Analyser",
+  scanHelp: "Relit les titres installés. À utiliser après l'installation ou la suppression d'un titre.",
+  scanning: "Analyse...",
+  scanDone: "{count} titres trouvés en {seconds} s.",
 };

@@ -32,7 +32,8 @@ import { boxColors, type BoxColors } from "./accent.ts";
 import { pumpNet } from "./net.ts";
 import { createOnlineFlow } from "./online.ts";
 import { KEY_MAX, fileBelongsTo } from "./steamgriddb.ts";
-import { TINT_COLORS, type Catalog } from "./catalog.ts";
+import { TINT_COLORS, loadCatalog, rescanTitles, type Catalog } from "./catalog.ts";
+import { timed } from "./diagnostics.ts";
 import { DEFAULT_LANGUAGE, LANGUAGES, MESSAGES, fill, type Language } from "./i18n.ts";
 import { KEY_PAGES, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn, type KeyPage } from "./keyboard.ts";
 import {
@@ -41,6 +42,7 @@ import {
   USE_ICON,
   filesInUse,
   loadOverrides,
+  reloadOverrides,
   saveOverrides,
   withoutFiles,
   type Overrides,
@@ -57,11 +59,11 @@ import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./typ
 
 /**
  * Rows in the SELECT menu: theme, font, view, details, backdrop, icon box,
- * categories, fetch artwork, clean up artwork, confirm button, language.
- * Language is last, one press up from the first row, so it can be found in a
- * language the user cannot read.
+ * categories, fetch artwork, clean up artwork, rescan titles, confirm button,
+ * language, diagnostics. Language is second to last, two presses up from the
+ * first row, so it can be found in a language the user cannot read.
  */
-export const MENU_ROWS = 11;
+export const MENU_ROWS = 13;
 
 /** Menu rows visible at once; the menu scrolls with the highlight. */
 export const MENU_VISIBLE = 7;
@@ -71,6 +73,9 @@ const BACKDROP_DELAY = 15;
 
 /** Frames between two requests for a backdrop the host is still decoding. */
 const BACKDROP_RETRY = 2;
+
+/** Frames between the press that starts a scan and the scan, which blocks. */
+const RESCAN_DELAY = 3;
 
 /** Frames the picker's highlight rests on a row before its picture is loaded. */
 const PREVIEW_DELAY = 8;
@@ -87,7 +92,17 @@ export const EDITOR_ROWS = 7;
 /** Art picker rows visible at once. */
 export const PICKER_ROWS = 5;
 
-export type Modal = "menu" | "editor" | "keyboard" | "art" | "online" | "categories" | "scrape" | "clean";
+export type Modal =
+  | "menu"
+  | "editor"
+  | "keyboard"
+  | "art"
+  | "online"
+  | "categories"
+  | "scrape"
+  | "clean"
+  | "rescan"
+  | "diagnostics";
 
 /** What the file picker is choosing: a title's icon or its backdrop. */
 export type PickerKind = "art" | "backdrop";
@@ -109,21 +124,23 @@ function cycle<T>(list: readonly T[], current: T, delta: number): T {
 /** All launcher state. Views render it; input.ts and the menu change it. */
 export function createLauncherState(catalog: Catalog) {
   const { native } = catalog;
-  const saved = loadSettings();
+  // The installed titles; replaced when the user scans again.
+  const [catalogGames, setCatalogGames] = createSignal(catalog.games);
+  const saved = timed("settings", loadSettings);
 
   // The launcher's own texts in the chosen language.
   const [language, setLanguage] = createSignal<Language>(saved?.language ?? DEFAULT_LANGUAGE);
   const t = createMemo(() => MESSAGES[language()]);
 
   // The user's changes per title id, saved to titles.json.
-  const [overrides, setOverrides] = createSignal<Overrides>(loadOverrides());
+  const [overrides, setOverrides] = createSignal<Overrides>(timed("changes", loadOverrides));
   createEffect(on(overrides, saveOverrides, { defer: true }));
-  const baseOf = (id: string) => catalog.games.find((game) => game.id === id);
+  const baseOf = (id: string) => catalogGames().find((game) => game.id === id);
 
   // Art files matched by name: `<title id>.png`, then `<title>.png`, ignoring
   // case. A file the user picked in the editor wins over a match.
   const readArtIndex = () => new Map(listArt().map((name) => [name.toLowerCase(), name]));
-  const [artIndex, setArtIndex] = createSignal(readArtIndex());
+  const [artIndex, setArtIndex] = createSignal(timed("art", readArtIndex));
   const findArt = (...names: string[]) => {
     for (const name of names) {
       const found = artIndex().get(`${name}.png`.toLowerCase());
@@ -133,7 +150,7 @@ export function createLauncherState(catalog: Catalog) {
   };
 
   // Smart and built-in categories, then the ones the user created (categories.json).
-  const savedCategories = loadCategoryConfig();
+  const savedCategories = timed("categories", loadCategoryConfig);
   const [customCategories, setCustomCategories] = createSignal<Category[]>(savedCategories.custom);
   const [categoryOrder, setCategoryOrder] = createSignal<string[]>(savedCategories.order);
   const [hiddenCategories, setHiddenCategories] = createSignal<string[]>(savedCategories.hidden);
@@ -164,7 +181,7 @@ export function createLauncherState(catalog: Catalog) {
   const categoryLabel = (id: string) => allCategories().find((item) => item.id === id)?.label ?? id;
 
   const allGames = createMemo<Game[]>(() =>
-    catalog.games.map((game) => {
+    catalogGames().map((game) => {
       const change = overrides()[game.id];
       const title = change?.title ?? game.title;
       const chosen = change?.art;
@@ -198,7 +215,7 @@ export function createLauncherState(catalog: Catalog) {
     });
 
   // Title ids in the order they were last started, newest first (recent.json).
-  const [recent, setRecent] = createSignal<string[]>(loadRecent());
+  const [recent, setRecent] = createSignal<string[]>(timed("recent", loadRecent));
   // The term of the open search (square button); empty when no search is open.
   const [searchTerm, setSearchTerm] = createSignal("");
   /** The titles a category lists. A title that was uninstalled drops out of "Last Played". */
@@ -552,6 +569,7 @@ export function createLauncherState(catalog: Catalog) {
     blendDynamicColor();
     if (backdropWait > 0 && --backdropWait === 0) loadBackdrop();
     if (previewWait > 0 && --previewWait === 0) loadPickerPreview();
+    if (rescanWait > 0 && --rescanWait === 0) runRescan();
   };
 
   // --- SELECT menu -------------------------------------------------------
@@ -571,8 +589,10 @@ export function createLauncherState(catalog: Catalog) {
     else if (row === 6) openCategoryManager();
     else if (row === 7) scrape.start();
     else if (row === 8) openCleanup();
-    else if (row === 9) toggleConfirm();
-    else setLanguage((id) => cycle(LANGUAGES.map((item) => item.id), id, delta));
+    else if (row === 9) openRescan();
+    else if (row === 10) toggleConfirm();
+    else if (row === 11) setLanguage((id) => cycle(LANGUAGES.map((item) => item.id), id, delta));
+    else openDiagnostics();
   };
 
   // --- Per-title editor (triangle) ---------------------------------------
@@ -1013,6 +1033,51 @@ export function createLauncherState(catalog: Catalog) {
     }
   };
 
+  // --- Rescan titles (SELECT menu -> Rescan titles) -------------------------
+  // The host reads the title list from a file; a scan of the installed
+  // titles runs on the first start and when the user asks for one here.
+  const [rescanOpen, setRescanOpen] = createSignal(false);
+  const [rescanNote, setRescanNote] = createSignal("");
+  // Frames until the scan runs. The scan blocks for seconds, so "Scanning..."
+  // gets on screen first.
+  let rescanWait = 0;
+  const openRescan = () => {
+    setRescanNote("");
+    setRescanOpen(true);
+  };
+  const closeRescan = () => {
+    if (rescanWait === 0) setRescanOpen(false);
+  };
+  const startRescan = () => {
+    if (rescanWait > 0) return;
+    setRescanNote(t().scanning);
+    rescanWait = RESCAN_DELAY;
+  };
+  const runRescan = () => {
+    const started = Date.now();
+    rescanTitles();
+    const games = loadCatalog().games;
+    // The files the user may have edited by hand are read again too.
+    const changes = reloadOverrides();
+    const seconds = ((Date.now() - started) / 1000).toFixed(1);
+    batch(() => {
+      setCatalogGames(games);
+      setOverrides(changes);
+      setRescanNote(fill(t().scanDone, { count: games.length, seconds }));
+    });
+    clampSelection();
+  };
+
+  // --- Diagnostics (SELECT menu -> Diagnostics) ------------------------------
+  // The startup timing of this launch (diagnostics.ts), as a scrolling list.
+  const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
+  // Counted without a limit; the screen wraps it to its number of lines.
+  const [diagnosticsRow, setDiagnosticsRow] = createSignal(0);
+  const openDiagnostics = () => {
+    setDiagnosticsRow(0);
+    setDiagnosticsOpen(true);
+  };
+
   // --- Category manager (SELECT menu -> Categories) ------------------------
   const [catOpen, setCatOpen] = createSignal(false);
   const [catRow, setCatRow] = createSignal(0);
@@ -1115,6 +1180,8 @@ export function createLauncherState(catalog: Catalog) {
     if (online.open()) return "online";
     if (scrape.open()) return "scrape";
     if (cleanOpen()) return "clean";
+    if (rescanOpen()) return "rescan";
+    if (diagnosticsOpen()) return "diagnostics";
     if (editorOpen()) return "editor";
     if (catOpen()) return "categories";
     return menuOpen() ? "menu" : null;
@@ -1145,6 +1212,10 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "clean":
         cleanMove(dx, dy);
+        break;
+      case "diagnostics":
+        // Up from the first line stays there; the screen wraps going down.
+        if (dy !== 0) setDiagnosticsRow((row) => Math.max(0, row + dy));
         break;
       case "categories":
         if (dy !== 0) catMove(dy);
@@ -1182,6 +1253,9 @@ export function createLauncherState(catalog: Catalog) {
       case "clean":
         cleanConfirm();
         break;
+      case "rescan":
+        startRescan();
+        break;
       case "categories":
         catConfirm();
         break;
@@ -1204,6 +1278,12 @@ export function createLauncherState(catalog: Catalog) {
       case "clean":
         closeCleanup();
         break;
+      case "rescan":
+        closeRescan();
+        break;
+      case "diagnostics":
+        setDiagnosticsOpen(false);
+        break;
       case "editor":
         closeEditor();
         break;
@@ -1216,7 +1296,7 @@ export function createLauncherState(catalog: Catalog) {
     }
   };
 
-  loadIconsAround();
+  timed("icons", loadIconsAround);
 
   return {
     games,
@@ -1292,8 +1372,11 @@ export function createLauncherState(catalog: Catalog) {
     cleanArmed,
     cleanNote,
     cleanCount,
+    rescanNote,
+    diagnosticsRow,
+    titleCount: () => catalogGames().length,
     allCategories,
-    hasTitles: () => catalog.games.length > 0,
+    hasTitles: () => catalogGames().length > 0,
     customCategories,
     categoryLabel,
     catRow,

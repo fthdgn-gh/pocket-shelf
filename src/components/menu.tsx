@@ -27,9 +27,11 @@ export function MenuOverlay(props: { state: LauncherState }) {
     { label: t().categoriesRow, value: t().manage, step: "right" },
     { label: t().fetchArt, value: "SteamGridDB", step: "right" },
     { label: t().cleanArt, step: "right" },
+    { label: t().rescan, step: "right" },
     { label: t().confirm, icon: state.confirmButton(), step: "both" },
     // Each language under its own name, whatever the current one is.
     { label: t().language, value: LANGUAGES.find((item) => item.id === state.language())?.name ?? "", step: "both" },
+    { label: t().diagnostics, step: "right" },
   ];
   // The menu has more rows than fit: it scrolls so the highlighted row stays in view.
   const first = () => {
