@@ -95,6 +95,10 @@ cannot be driven. Evidence comes from its log and from files under
   reaches a later handler bound to the new panel: square opened the search
   keyboard and deleted a character with the same press. Square and START
   dispatch on `state.modal()` in one handler each (`input.ts`).
+- **A D-pad press wraps around the list; a held direction does not.**
+  `moveSelection` takes `wrap`, and `input.ts` passes it for the first press
+  only, so holding a direction stops at the end. In the grid, up and down
+  keep the column between the first and last rows.
 - **Mount only what is on screen.** Each view windows its list
   (`views/window.ts`) and places items by index. With every title mounted, a
   125-title category was 500 to 850 nodes; windowed it is about 100.

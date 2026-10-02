@@ -23,12 +23,17 @@ export function iconRadius(view: ViewMode): number {
 /**
  * The index a D-pad press selects, or null when the press goes nowhere
  * (an edge of the list, or an axis the view does not use).
+ *
+ * With `wrap`, a press past an edge continues at the other one: after the
+ * last item comes the first, and in the grid a press up from the first row
+ * lands in the same column of the last row.
  */
 export function moveSelection(
   view: ViewMode,
   direction: FocusDirection,
   index: number,
   count: number,
+  wrap = false,
 ): number | null {
   const step = direction === "left" || direction === "up" ? -1 : 1;
   const horizontal = direction === "left" || direction === "right";
@@ -46,6 +51,14 @@ export function moveSelection(
       next = count - 1;
     }
   }
-  if (next === null || next < 0 || next >= count) return null;
-  return next;
+  if (next === null) return null;
+  if (next >= 0 && next < count) return next;
+  if (!wrap || count < 2) return null;
+  if (view !== "grid" || horizontal) return next < 0 ? count - 1 : 0;
+  // Grid, up or down: the same column at the other end. A last row too short
+  // to have that column gives its last item.
+  const column = index % GRID_COLUMNS;
+  const lastRow = Math.floor((count - 1) / GRID_COLUMNS) * GRID_COLUMNS;
+  if (lastRow === 0) return null;
+  return next < 0 ? Math.min(lastRow + column, count - 1) : column;
 }
