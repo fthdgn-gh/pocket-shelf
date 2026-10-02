@@ -250,6 +250,9 @@ pub unsafe fn table_json() -> String {
     output
 }
 
+/// URI of an accepted launch, held until `finish_launch` ends this process.
+static mut LAUNCHED: Option<CString> = None;
+
 /// spec op 40 (native flavour): start the title with this id. Only ids found by
 /// the scan are accepted, so the URI is never built from guest-controlled text.
 /// Returns whether the app manager accepted the request.
@@ -260,7 +263,27 @@ pub unsafe fn launch(title_id: &str) -> bool {
     let Ok(uri) = CString::new(format!("psgm:play?titleid={title_id}")) else {
         return false;
     };
-    vitasdk_sys::sceAppMgrLaunchAppByUri(LAUNCH_FLAGS, uri.as_ptr()) >= 0
+    let accepted = vitasdk_sys::sceAppMgrLaunchAppByUri(LAUNCH_FLAGS, uri.as_ptr()) >= 0;
+    if accepted {
+        LAUNCHED = Some(uri);
+    }
+    accepted
+}
+
+/// End this process after an accepted launch. Called by main once the frame
+/// that made the request has presented.
+///
+/// The system runs one game-category title at a time. While this process is
+/// alive the system asks the user whether to close it before the new title
+/// starts; a process that exits is not asked about. The request is sent a
+/// second time before the exit, 10 ms apart, as VitaShell's updater does.
+pub unsafe fn finish_launch() {
+    let Some(uri) = LAUNCHED.take() else {
+        return;
+    };
+    vitasdk_sys::sceKernelDelayThread(10_000);
+    vitasdk_sys::sceAppMgrLaunchAppByUri(LAUNCH_FLAGS, uri.as_ptr());
+    vitasdk_sys::sceKernelExitProcess(0);
 }
 
 /// The title's `icon0.png` as tightly packed RGBA: from the first folder of

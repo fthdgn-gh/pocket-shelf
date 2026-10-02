@@ -271,6 +271,10 @@ unsafe fn run_guest(app_index: usize, dev: &mut dev::Host) -> usize {
             }
         }
 
+        // A started title replaces this process; the frame above is its last.
+        #[cfg(feature = "installed-apps")]
+        pocketjs_vita::installed::finish_launch();
+
         // appLaunch/SELECT requests become visible only after the outgoing
         // current frame has presented. A summon additionally freezes that
         // DrawList before the outgoing core is dropped.
