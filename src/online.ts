@@ -9,6 +9,7 @@ import {
   listBackdrops,
   releaseBackdrop,
 } from "./art-files.ts";
+import { fill, type Messages } from "./i18n.ts";
 import { getText, netAvailable, saveFile } from "./net.ts";
 import {
   assetFile,
@@ -23,6 +24,7 @@ import {
   type AssetKind,
   type SgdbAsset,
   type SgdbGame,
+  type SgdbProblem,
 } from "./steamgriddb.ts";
 import type { Game } from "./types.ts";
 
@@ -40,6 +42,8 @@ export type OnlineStep = "key" | "games" | "assets";
 export const ASSET_KINDS: readonly AssetKind[] = ["icon", "backdrop"];
 
 interface Deps {
+  /** The texts of the chosen language. */
+  t: () => Messages;
   /** The title being edited. */
   game: () => Game | undefined;
   /** Open the keyboard for the search term or the API key. */
@@ -90,6 +94,10 @@ export function createOnlineFlow(deps: Deps) {
     backdropHandle = -1;
   };
 
+  const t = deps.t;
+  const problemText = (found: SgdbProblem) => fill(t()[found.problem], { status: found.status });
+  const unreachable = (error: string) => fill(t().unreachable, { error });
+
   const kindOfRow = (): AssetKind => ASSET_KINDS[row()] ?? "icon";
   const current = (kind: AssetKind): SgdbAsset | undefined => assets()[kind][index()[kind]];
 
@@ -110,26 +118,26 @@ export function createOnlineFlow(deps: Deps) {
       setGames([]);
       setRow(0);
       setBusy(true);
-      setStatus("Searching...");
+      setStatus(t().searching);
     });
     cancels.push(
       getText(searchUrl(term()), authorization(key), (result) => {
         if (mine !== turn) return;
         setBusy(false);
         if (!result.ok) {
-          setStatus(`Could not reach SteamGridDB (${result.error}).`);
+          setStatus(unreachable(result.error));
           return;
         }
         const found = parseGames(result.status, result.text);
-        if (typeof found === "string") {
-          setStatus(found);
+        if (!Array.isArray(found)) {
+          setStatus(problemText(found));
           if (result.status === 401) setStep("key");
           return;
         }
         batch(() => {
           setGames(found);
           setRow(found.length > 0 ? 1 : 0);
-          setStatus(found.length > 0 ? "" : "No games found. Change the search.");
+          setStatus(found.length > 0 ? "" : t().noGames);
         });
       }),
     );
@@ -142,7 +150,7 @@ export function createOnlineFlow(deps: Deps) {
     batch(() => {
       setChosen(game);
       setBusy(true);
-      setStatus("Loading artwork...");
+      setStatus(t().loadingArt);
     });
     const lists: Partial<Record<AssetKind, SgdbAsset[]>> = {};
     let problem = "";
@@ -150,9 +158,10 @@ export function createOnlineFlow(deps: Deps) {
       cancels.push(
         getText(assetsUrl(kind, game.id), authorization(key), (result) => {
           if (mine !== turn) return;
-          const found = result.ok ? parseAssets(result.status, result.text) : `Could not reach SteamGridDB (${result.error}).`;
+          const found = result.ok ? parseAssets(result.status, result.text) : unreachable(result.error);
           if (typeof found === "string") problem = found;
-          lists[kind] = typeof found === "string" ? [] : found;
+          else if (!Array.isArray(found)) problem = problemText(found);
+          lists[kind] = Array.isArray(found) ? found : [];
           if (lists.icon === undefined || lists.backdrop === undefined) return;
           batch(() => {
             setBusy(false);
@@ -179,20 +188,20 @@ export function createOnlineFlow(deps: Deps) {
     setPreview((previous) => ({ ...previous, [kind]: undefined }));
     if (kind === "backdrop") dropBackdropPreview();
     if (!asset || !id) {
-      setStatus(kind === "icon" ? "No icons for this game." : "No backdrops for this game.");
+      setStatus(kind === "icon" ? t().noIcons : t().noBackdrops);
       return;
     }
     const file = assetFile(asset);
     const display = () => {
       const handle = kind === "icon" ? artTexture(file) : acquireBackdrop(id, file);
       if (handle === TEXTURE_PENDING) {
-        setStatus("Loading...");
+        setStatus(t().loading);
         retry = display;
         return;
       }
       retry = undefined;
       if (handle < 0) {
-        setStatus("That image could not be read.");
+        setStatus(t().unreadable);
         return;
       }
       if (kind === "backdrop") backdropHandle = handle;
@@ -211,7 +220,7 @@ export function createOnlineFlow(deps: Deps) {
     }
     batch(() => {
       setBusy(true);
-      setStatus("Downloading...");
+      setStatus(t().downloading);
     });
     cancels.push(
       saveFile(
@@ -221,7 +230,8 @@ export function createOnlineFlow(deps: Deps) {
           if (mine !== turn) return;
           setBusy(false);
           if (!result.ok || result.status !== 200) {
-            setStatus(`Download failed (${result.ok ? `status ${result.status}` : result.error}).`);
+            const error = result.ok ? fill(t().statusCode, { status: result.status }) : result.error;
+            setStatus(fill(t().downloadFailed, { error }));
             return;
           }
           onDisk[kind].add(file);
@@ -231,7 +241,11 @@ export function createOnlineFlow(deps: Deps) {
         (received, total) => {
           if (mine !== turn) return;
           const kib = Math.round(received / 1024);
-          setStatus(total > 0 ? `Downloading... ${Math.round((received * 100) / total)}%` : `Downloading... ${kib} KB`);
+          setStatus(
+            total > 0
+              ? fill(t().downloadingPercent, { percent: Math.round((received * 100) / total) })
+              : fill(t().downloadingSize, { size: kib }),
+          );
         },
       ),
     );
@@ -256,7 +270,7 @@ export function createOnlineFlow(deps: Deps) {
     if (!netAvailable()) {
       batch(() => {
         setStep("games");
-        setStatus("This device has no network support.");
+        setStatus(t().noNetwork);
       });
       return;
     }
@@ -312,7 +326,7 @@ export function createOnlineFlow(deps: Deps) {
       const asset = current(kind);
       if (!asset || preview()[kind] === undefined) return;
       deps.apply(kind, assetFile(asset));
-      setStatus(kind === "icon" ? "Icon applied." : "Backdrop applied.");
+      setStatus(kind === "icon" ? t().iconApplied : t().backdropApplied);
     }
   };
 
@@ -343,7 +357,7 @@ export function createOnlineFlow(deps: Deps) {
   /** The keyboard's result for the API key. */
   const submitKey = (text: string) => {
     if (saveKey(text)) search();
-    else setStatus("That does not look like an API key.");
+    else setStatus(t().badKey);
   };
 
   return {

@@ -31,6 +31,7 @@ import { pumpNet } from "./net.ts";
 import { createOnlineFlow } from "./online.ts";
 import { KEY_MAX } from "./steamgriddb.ts";
 import { TINT_COLORS, type Catalog } from "./catalog.ts";
+import { DEFAULT_LANGUAGE, LANGUAGES, MESSAGES, fill, type Language } from "./i18n.ts";
 import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "./keyboard.ts";
 import {
   NO_BACKDROP,
@@ -49,8 +50,12 @@ import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
 import { DEFAULT_THEME, THEMES, dynamicTheme, themeById, type ThemeId } from "./themes.ts";
 import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./types.ts";
 
-/** Rows in the SELECT menu: theme, font, view, details, backdrop, icon box, categories, confirm button. */
-export const MENU_ROWS = 8;
+/**
+ * Rows in the SELECT menu: theme, font, view, details, backdrop, icon box,
+ * categories, confirm button, language. Language is last, one press up from
+ * the first row, so it can be found in a language the user cannot read.
+ */
+export const MENU_ROWS = 9;
 
 /** Menu rows visible at once; the menu scrolls with the highlight. */
 export const MENU_VISIBLE = 7;
@@ -92,6 +97,11 @@ function cycle<T>(list: readonly T[], current: T, delta: number): T {
 /** All launcher state. Views render it; input.ts and the menu change it. */
 export function createLauncherState(catalog: Catalog) {
   const { native } = catalog;
+  const saved = loadSettings();
+
+  // The launcher's own texts in the chosen language.
+  const [language, setLanguage] = createSignal<Language>(saved?.language ?? DEFAULT_LANGUAGE);
+  const t = createMemo(() => MESSAGES[language()]);
 
   // The user's changes per title id, saved to titles.json.
   const [overrides, setOverrides] = createSignal<Overrides>(loadOverrides());
@@ -128,7 +138,7 @@ export function createLauncherState(catalog: Catalog) {
     return base
       .map((item, index) => ({ item, index }))
       .sort((a, b) => position(a.item) - position(b.item) || a.index - b.index)
-      .map(({ item }) => item);
+      .map(({ item }) => (item.name ? { ...item, label: t().categories[item.name] } : item));
   });
   const isHidden = (id: string) => hiddenCategories().includes(id);
   createEffect(
@@ -197,7 +207,7 @@ export function createLauncherState(catalog: Catalog) {
       (item) =>
         !isHidden(item.id) && (item.custom || SHOW_EMPTY_CATEGORIES || titlesOf(item.id).length > 0),
     );
-    return searchTerm() ? [SEARCH_CATEGORY, ...tabs] : tabs;
+    return searchTerm() ? [{ ...SEARCH_CATEGORY, label: t().categories.search }, ...tabs] : tabs;
   });
   const [categoryId, setCategoryId] = createSignal<CategoryId>(
     categories()[0]?.id ?? BUILTIN_CATEGORIES[0].id,
@@ -211,7 +221,6 @@ export function createLauncherState(catalog: Catalog) {
 
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [launchingTitle, setLaunchingTitle] = createSignal<string | null>(null);
-  const saved = loadSettings();
   const [themeId, setThemeId] = createSignal<ThemeId>(saved?.theme ?? DEFAULT_THEME);
   const [font, setFont] = createSignal<FontId>(saved?.font ?? DEFAULT_FONT);
   const [detail, setDetail] = createSignal<DetailLevel>(saved?.detail ?? "normal");
@@ -235,6 +244,7 @@ export function createLauncherState(catalog: Catalog) {
     // under its own category.
     const category = categoryId() === SEARCH_ID ? (game?.category ?? beforeSearch?.category) : categoryId();
     saveSettings({
+      language: language(),
       theme: themeId(),
       font: font(),
       view: view(),
@@ -247,7 +257,9 @@ export function createLauncherState(catalog: Catalog) {
     });
   };
   // Persist on change; the initial run is skipped so a fresh start writes nothing.
-  createEffect(on([themeId, font, view, detail, confirmMode, backdropOn, iconBoxOn], persist, { defer: true }));
+  createEffect(
+    on([language, themeId, font, view, detail, confirmMode, backdropOn, iconBoxOn], persist, { defer: true }),
+  );
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [menuRow, setMenuRow] = createSignal(0);
 
@@ -543,7 +555,8 @@ export function createLauncherState(catalog: Catalog) {
     else if (row === 4) setBackdropOn((on) => !on);
     else if (row === 5) setIconBoxOn((on) => !on);
     else if (row === 6) openCategoryManager();
-    else toggleConfirm();
+    else if (row === 7) toggleConfirm();
+    else setLanguage((id) => cycle(LANGUAGES.map((item) => item.id), id, delta));
   };
 
   // --- Per-title editor (triangle) ---------------------------------------
@@ -601,7 +614,7 @@ export function createLauncherState(catalog: Catalog) {
       removed?.favorite ? { ...rest, [game.id]: { favorite: true } } : rest,
     );
     clampSelection();
-    setEditorNote("Reset to the defaults");
+    setEditorNote(t().resetDone);
   };
 
   // --- Title keyboard ----------------------------------------------------
@@ -622,7 +635,7 @@ export function createLauncherState(catalog: Catalog) {
   /** A line beside the typed text: how many titles the search term finds so far. */
   const keyboardNote = () => {
     if (keyboardTarget().kind !== "library" || !keyboardText().trim()) return "";
-    return `${searchTitles(allGames(), keyboardText()).length} found`;
+    return fill(t().found, { count: searchTitles(allGames(), keyboardText()).length });
   };
 
   const openKeyboard = (target: KeyboardTarget, text: string) => {
@@ -675,9 +688,9 @@ export function createLauncherState(catalog: Catalog) {
           (target.kind === "newCategory" || item.id !== target.id),
       );
       if (used) {
-        setCatNote("There is already a category with that name.");
+        setCatNote(t().nameTaken);
       } else if (target.kind === "newCategory") {
-        const id = makeCategoryId(text, new Set(allCategories().map((item) => item.id)));
+        const id = makeCategoryId(text, new Set([SEARCH_ID, ...allCategories().map((item) => item.id)]));
         setCustomCategories((list) => [...list, { id, label: text, custom: true }]);
         setCatRow(allCategories().length);
         setCatNote("");
@@ -759,6 +772,7 @@ export function createLauncherState(catalog: Catalog) {
 
   // --- SteamGridDB (title editor -> SteamGridDB) ----------------------------
   const online = createOnlineFlow({
+    t,
     game: editorGame,
     askText: (target, text) => openKeyboard({ kind: target }, text),
     apply: (kind, file) => {
@@ -801,7 +815,7 @@ export function createLauncherState(catalog: Catalog) {
     const item = catItem();
     if (!item) catNew();
     else if (item.custom) openKeyboard({ kind: "category", id: item.id }, item.label);
-    else setCatNote("Built-in categories keep their names.");
+    else setCatNote(t().builtinKeepNames);
   };
   const deleteCategory = (id: string) => {
     setCustomCategories((list) => list.filter((item) => item.id !== id));
@@ -825,17 +839,17 @@ export function createLauncherState(catalog: Catalog) {
     const item = catItem();
     if (!item) return;
     if (!item.custom) {
-      setCatNote("Built-in categories can't be deleted. Hide them instead.");
+      setCatNote(t().builtinNoDelete);
       return;
     }
     if (catArmed() === item.id) {
       deleteCategory(item.id);
       setCatArmed(null);
-      setCatNote("Deleted");
+      setCatNote(t().deleted);
     } else {
+      // While a row is armed the manager shows the "press again" prompt, not this note.
       setCatArmed(item.id);
-      // The manager shows the square button in front of this note while a row is armed.
-      setCatNote(`again to delete ${item.label}`);
+      setCatNote("");
     }
   };
   /** Show or hide the highlighted category in the tab bar. */
@@ -845,16 +859,16 @@ export function createLauncherState(catalog: Catalog) {
     setCatArmed(null);
     if (isHidden(item.id)) {
       setHiddenCategories((list) => list.filter((id) => id !== item.id));
-      setCatNote(`${item.label} is shown`);
+      setCatNote(fill(t().nowShown, { name: item.label }));
       return;
     }
     // A smart category shows no tab while it is empty, so it does not count.
     if (!item.smart && allCategories().filter((other) => !other.smart && !isHidden(other.id)).length <= 1) {
-      setCatNote("At least one category has to stay visible.");
+      setCatNote(t().oneVisible);
       return;
     }
     setHiddenCategories((list) => [...list, item.id]);
-    setCatNote(`${item.label} is hidden`);
+    setCatNote(fill(t().nowHidden, { name: item.label }));
   };
   /** Move the highlighted category earlier or later in the tab order. */
   const catReorder = (delta: number) => {
@@ -967,6 +981,8 @@ export function createLauncherState(catalog: Catalog) {
     categoryCount,
     changeCategory,
     native,
+    language,
+    t,
     selectedIndex,
     launchingTitle,
     font,

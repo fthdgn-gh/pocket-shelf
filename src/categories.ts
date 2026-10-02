@@ -1,9 +1,15 @@
 import { readFileSync, writeFileSync } from "@pocketjs/framework/fs";
 import type { CategoryId } from "./types.ts";
 
+/** A category whose label comes from the language's `categories` texts. */
+export type CategoryName = "recent" | "favorites" | "search" | "games" | "system" | "homebrew";
+
 export interface Category {
   id: CategoryId;
+  /** The label the user typed, or the English label of a category with a `name`. */
   label: string;
+  /** Set for every category the user did not create: the key of its translated label. */
+  name?: CategoryName;
   /** True for categories the user created. */
   custom?: boolean;
   /** True for a category the launcher fills itself; a title cannot be moved into it. */
@@ -26,17 +32,20 @@ export const FAVORITES_ID = "smart-favorites";
  * not list it.
  */
 export const SEARCH_ID = "smart-search";
-export const SEARCH_CATEGORY: Category = { id: SEARCH_ID, label: "Search", smart: true };
+export const SEARCH_CATEGORY: Category = { id: SEARCH_ID, label: "Search", name: "search", smart: true };
 
 export const SMART_CATEGORIES: readonly Category[] = [
-  { id: RECENT_ID, label: "Last Played", smart: true },
-  { id: FAVORITES_ID, label: "Favorites", smart: true },
+  { id: RECENT_ID, label: "Last Played", name: "recent", smart: true },
+  { id: FAVORITES_ID, label: "Favorites", name: "favorites", smart: true },
 ];
 
+/** The firmware's own applications. */
+export const SYSTEM_ID = "system";
+
 export const BUILTIN_CATEGORIES: readonly Category[] = [
-  { id: "games", label: "Games" },
-  { id: "apps", label: "Apps" },
-  { id: "homebrew", label: "Homebrew" },
+  { id: "games", label: "Games", name: "games" },
+  { id: SYSTEM_ID, label: "System", name: "system" },
+  { id: "homebrew", label: "Homebrew", name: "homebrew" },
 ];
 
 /**
@@ -54,7 +63,7 @@ export const CATEGORY_ID_PATTERN = /^[a-z0-9-]{1,32}$/;
  */
 export function categoryOf(titleId: string): CategoryId {
   if (titleId.startsWith("PCS")) return "games";
-  if (titleId.startsWith("NPXS")) return "apps";
+  if (titleId.startsWith("NPXS")) return SYSTEM_ID;
   return "homebrew";
 }
 

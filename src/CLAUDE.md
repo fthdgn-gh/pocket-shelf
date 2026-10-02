@@ -113,6 +113,15 @@ cannot be driven. Evidence comes from its log and from files under
   frees a backdrop only when the app says so; `art-files.ts` counts users per
   handle, keeps the three most recent idle ones, and frees others a few frames
   after their last use. Icon and art textures are never freed.
+- **System applications are in `vs0:app`**, not `ux0:app` (ids `NPXS` plus
+  digits, `CATEGORY` `gda`). `installed.rs` scans both. Their `param.sfo`,
+  `icon0.png` and `pic0.png` are plain files. The folder holds about 55
+  entries, most of them services and dialogs; `SYSTEM_APPS` in `catalog.ts`
+  names the 16 that are listed, and they fill the built-in `system` category.
+  A system application is launched with flags `0x40000` (as vita-launcher does), others with
+  `0xFFFFF`. Listing, titles and icons
+  are confirmed in Vita3K, whose firmware has the same folder; the launch is
+  not confirmed on hardware.
 - **Retail games' files are encrypted.** For an icon or backdrop the host
   tries, in order: `ux0:/app/<id>/sce_sys` (plain for homebrew),
   `ur0:appmeta/<id>/` (exists only after the home screen opened that game's
@@ -154,7 +163,8 @@ cannot be driven. Evidence comes from its log and from files under
 
 ## Data folder (`ux0:/data/PocketShelf/`)
 
-`settings.json`, `categories.json`, `recent.json` (title ids, the one started
+`settings.json` (settings, the language among them, and the last selection),
+`categories.json`, `recent.json` (title ids, the one started
 last first, at most 15), `titles/<title id>.json` (per-title overrides:
 category, title, art, backdrop, favorite), `art/`, `backdrops/`,
 `steamgriddb.txt`.
@@ -168,6 +178,30 @@ the smart ones. They show no tab while empty, sit before the other tabs until
 the user reorders them, and can be hidden or moved in the category manager.
 `launchSelected` writes `recent.json` after the host accepts the launch.
 "Reset to defaults" keeps the favorite mark.
+
+## Languages
+
+English, Turkish, German, French and Spanish. `locales/en.ts` defines the
+texts and their type; the other files in `locales/` follow it, and `i18n.ts`
+lists them. `state.t()` gives the texts of the chosen language; the choice is
+the last row of the SELECT menu (one press up from the first row) and is
+saved in `settings.json`. English is the default; the system language is not
+read.
+
+- **A character draws only if the font was baked with it.** `fonts.json`
+  bakes Basic Latin, Latin-1 Supplement and Latin Extended-A (322 glyphs per
+  size). A language outside those ranges needs its range added there.
+- **Text does not wrap by itself.** `Note` breaks its text into lines with
+  `wrapText`; `Prompt` keeps each hint whole and moves hints that do not fit
+  to the next line. A translated label can therefore be longer than the
+  English one, at the cost of a line. The category manager shows 4 rows and
+  the menu uses the wide drawer to leave room for that.
+- **Do not store a translated text in saved data.** Built-in categories carry
+  a `name` key and get their label from the language; notes are translated
+  when they are set. SteamGridDB errors are `SgdbProblem` keys, not text.
+- `upper` in `i18n.ts` handles the Turkish dotted and dotless i for the drawer
+  headings.
+- `bun run shelf:preview 60-` renders twelve screens per translated language.
 
 ## Search
 

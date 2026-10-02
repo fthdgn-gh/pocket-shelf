@@ -9,8 +9,6 @@ import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
 import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
 
-const KIND_LABELS: Record<AssetKind, string> = { icon: "Icon", backdrop: "Backdrop" };
-
 // A candidate at the size it is judged at: an icon as a tile, a backdrop in
 // the screen's shape.
 const PREVIEW: Record<AssetKind, string> = {
@@ -22,11 +20,13 @@ const PREVIEW: Record<AssetKind, string> = {
 export function OnlineOverlay(props: { state: LauncherState }) {
   const { state } = props;
   const online = state.online;
+  const t = state.t;
+  const kindLabel = (which: AssetKind) => (which === "icon" ? t().icon : t().backdrop);
   const fit = (text: string, width: number) => fitTitle(text, width, fontSlot(state.font(), "bodyBold"));
 
   // Games list: the search row, then the games; it scrolls with the highlight.
   const entries = () => [
-    { label: "Search", value: fit(online.term(), 170) },
+    { label: t().search, value: fit(online.term(), 170) },
     ...online.games().map((game) => ({
       label: fit(game.name, game.year ? 200 : 240),
       value: game.year ? String(game.year) : "",
@@ -41,25 +41,22 @@ export function OnlineOverlay(props: { state: LauncherState }) {
   const kind = (): AssetKind => ASSET_KINDS[online.row()] ?? "icon";
   const position = (which: AssetKind) => {
     const count = online.assets()[which].length;
-    return count === 0 ? "None" : `${online.index()[which] + 1} / ${count}`;
+    return count === 0 ? t().none : `${online.index()[which] + 1} / ${count}`;
   };
 
   return (
     <Drawer state={state} title="SteamGridDB" size="wide">
       <Switch>
         <Match when={online.step() === "key"}>
-          <OptionRow state={state} active label="Enter API key" step="right" />
+          <OptionRow state={state} active label={t().enterKey} step="right" />
           <View class="h-[4] shrink-0" />
-          <Note state={state}>SteamGridDB needs your own API key.</Note>
-          <Note state={state}>Create one at steamgriddb.com, under</Note>
-          <Note state={state}>Preferences, API. Type it here, or save</Note>
-          <Note state={state}>it as one line in the file</Note>
+          <Note state={state}>{t().keyHelp}</Note>
           <Note state={state}>{`${dataFolder()}/steamgriddb.txt`}</Note>
           <Spacer />
           <Show when={online.status()}>
             <Note state={state}>{online.status()}</Note>
           </Show>
-          <Prompt state={state} parts={hints([state.confirmButton(), "Type"], [state.cancelButton(), "Back"])} />
+          <Prompt state={state} parts={hints([state.confirmButton(), t().type], [state.cancelButton(), t().back])} />
         </Match>
 
         <Match when={online.step() === "games"}>
@@ -75,10 +72,13 @@ export function OnlineOverlay(props: { state: LauncherState }) {
             )}
           </For>
           <Spacer />
-          <Note state={state}>{online.status() || " "}</Note>
+          <Note state={state}>{online.status()}</Note>
           <Prompt
             state={state}
-            parts={hints([state.confirmButton(), online.row() === 0 ? "Edit" : "Choose"], [state.cancelButton(), "Back"])}
+            parts={hints(
+              [state.confirmButton(), online.row() === 0 ? t().edit : t().choose],
+              [state.cancelButton(), t().back],
+            )}
           />
         </Match>
 
@@ -88,7 +88,7 @@ export function OnlineOverlay(props: { state: LauncherState }) {
               <OptionRow
                 state={state}
                 active={online.row() === index()}
-                label={KIND_LABELS[which]}
+                label={kindLabel(which)}
                 value={position(which)}
                 step="both"
               />
@@ -104,9 +104,9 @@ export function OnlineOverlay(props: { state: LauncherState }) {
           <Prompt
             state={state}
             parts={hints(
-              [state.confirmButton(), "Use"],
-              ["dpadHorizontal", "Next"],
-              [state.cancelButton(), "Back"],
+              [state.confirmButton(), t().use],
+              ["dpadHorizontal", t().next],
+              [state.cancelButton(), t().back],
             )}
           />
         </Match>

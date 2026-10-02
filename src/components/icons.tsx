@@ -36,8 +36,11 @@ export function Icon(props: { name: IconName }) {
   );
 }
 
-/** A piece of a prompt: words, an icon, or the wider space between two hints. */
-export type Part = string | { icon: IconName } | { gap: true };
+/**
+ * A piece of a prompt: words, an icon, the wider space between two hints, or
+ * a place where the line may break with a normal space.
+ */
+export type Part = string | { icon: IconName } | { gap: true } | { wrap: true };
 
 /**
  * Button hints as prompt parts: each hint is its button (or buttons) followed
@@ -53,25 +56,84 @@ export function hints(...items: [buttons: IconName | IconName[], label: string][
   return parts;
 }
 
-/** One line of dim text and button icons. */
-export function Prompt(props: { state: LauncherState; parts: Part[] }) {
+/**
+ * A text with a `{button}` place as prompt parts: its words around the
+ * button's icon. The line may break between any two of them.
+ */
+export function withButton(text: string, icon: IconName): Part[] {
+  const parts: Part[] = [];
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (parts.length > 0) parts.push({ wrap: true });
+    const [before, after] = word.split("{button}");
+    if (after === undefined) {
+      parts.push(word);
+      continue;
+    }
+    // Punctuation written against the place stays next to the icon.
+    if (before) parts.push(before);
+    parts.push({ icon });
+    if (after) parts.push(after);
+  }
+  return parts;
+}
+
+/** The parts between two breaks, and whether the wider space follows them. */
+interface Group {
+  parts: (string | { icon: IconName })[];
+  spaced: boolean;
+}
+
+function groupsOf(parts: Part[]): Group[] {
+  const groups: Group[] = [{ parts: [], spaced: false }];
+  for (const part of parts) {
+    const last = groups[groups.length - 1];
+    if (typeof part === "object" && ("gap" in part || "wrap" in part)) {
+      last.spaced = "gap" in part;
+      groups.push({ parts: [], spaced: false });
+    } else last.parts.push(part);
+  }
+  return groups.filter((group) => group.parts.length > 0);
+}
+
+/**
+ * Dim text and button icons. A hint stays whole; hints that do not fit the
+ * width move to the next line, since a translated label can be longer than
+ * the English one the line was sized for. `center` centers each line in a
+ * parent that gives the prompt a width.
+ */
+export function Prompt(props: { state: LauncherState; parts: Part[]; center?: boolean }) {
   return (
-    <View class="flex-row items-center gap-1 h-[16] shrink-0">
-      <For each={props.parts}>
-        {(part) => (
-          <Switch>
-            <Match when={typeof part === "string"}>
-              <Text class={props.state.text().small} style={{ textColor: props.state.theme().dim }}>
-                {part as string}
-              </Text>
-            </Match>
-            <Match when={typeof part === "object" && "icon" in part ? part.icon : undefined}>
-              {(name) => <Icon name={name()} />}
-            </Match>
-            <Match when={typeof part === "object" && "gap" in part}>
-              <View class="w-[4] h-[16] shrink-0" />
-            </Match>
-          </Switch>
+    <View
+      class={
+        props.center
+          ? "flex-row flex-wrap items-center justify-center gap-1 shrink-0"
+          : "flex-row flex-wrap items-center gap-1 shrink-0"
+      }
+    >
+      <For each={groupsOf(props.parts)}>
+        {(group) => (
+          <View
+            class={
+              group.spaced
+                ? "flex-row items-center gap-1 h-[16] shrink-0 pr-2"
+                : "flex-row items-center gap-1 h-[16] shrink-0"
+            }
+          >
+            <For each={group.parts}>
+              {(part) => (
+                <Switch>
+                  <Match when={typeof part === "string"}>
+                    <Text class={props.state.text().small} style={{ textColor: props.state.theme().dim }}>
+                      {part as string}
+                    </Text>
+                  </Match>
+                  <Match when={typeof part === "object" ? part.icon : undefined}>
+                    {(name) => <Icon name={name()} />}
+                  </Match>
+                </Switch>
+              )}
+            </For>
+          </View>
         )}
       </For>
     </View>

@@ -2,8 +2,8 @@
 //!
 //! Implements the native flavour of the launcher ops (docs/LAUNCHER.md,
 //! "Native process navigation"): `appTable()` lists the titles installed under
-//! `ux0:/app` and `appLaunch(titleId)` starts one through the system app
-//! manager. The table carries `kind: "native"`, so the framework treats the
+//! `ux0:/app` and the system applications under `vs0:/app`, and
+//! `appLaunch(titleId)` starts one through the system app manager. The table carries `kind: "native"`, so the framework treats the
 //! call as a process switch, not as a guest swap inside this process.
 //!
 //! Titles are read from each `sce_sys/param.sfo`. The list is scanned once per
@@ -34,6 +34,11 @@ const SELF_TITLE_ID: &str = match option_env!("VITA_DEFAULT_TITLE_ID") {
 };
 
 const APP_ROOT: &str = "ux0:/app";
+/// The firmware's own applications (Settings, Browser, ...), ids `NPXS` plus
+/// digits. Their `sce_sys` files are plain. The folder also holds background
+/// services and dialogs with no bubble on the home screen; all of them are
+/// reported and the guest chooses which to show.
+const SYSTEM_ROOT: &str = "vs0:/app";
 /// Where the system keeps a plain copy of each title's `sce_sys` files (icon,
 /// pictures, LiveArea) for the home screen.
 const META_ROOT: &str = "ur0:appmeta";
@@ -44,6 +49,8 @@ const ICON_MAX: usize = 2 * 1024 * 1024;
 const SFO_MAX: usize = 256 * 1024;
 /// Flags value used by every launcher that calls sceAppMgrLaunchAppByUri.
 const LAUNCH_FLAGS: i32 = 0xFFFFF;
+/// Flags value for a system application, as vita-launcher passes it.
+const SYSTEM_LAUNCH_FLAGS: i32 = 0x40000;
 
 /// Read the UTF-8 string entry `key` from an SFO image.
 ///
@@ -89,8 +96,15 @@ fn valid_title_id(id: &str) -> bool {
 
 fn scan() -> Vec<Title> {
     let mut titles = Vec::new();
-    let Ok(entries) = fs::read_dir(APP_ROOT) else {
-        return titles;
+    scan_root(APP_ROOT, &mut titles);
+    scan_root(SYSTEM_ROOT, &mut titles);
+    titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
+    titles
+}
+
+fn scan_root(root: &str, titles: &mut Vec<Title>) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
     };
     for entry in entries.flatten() {
         let Some(name) = entry.file_name().to_str().map(String::from) else {
@@ -99,7 +113,10 @@ fn scan() -> Vec<Title> {
         if !valid_title_id(&name) || name == SELF_TITLE_ID {
             continue;
         }
-        let path = format!("{APP_ROOT}/{name}/sce_sys/param.sfo");
+        if titles.iter().any(|item| item.title_id == name) {
+            continue;
+        }
+        let path = format!("{root}/{name}/sce_sys/param.sfo");
         let Ok(meta) = fs::metadata(&path) else {
             continue;
         };
@@ -109,8 +126,9 @@ fn scan() -> Vec<Title> {
         let Ok(sfo) = fs::read(&path) else {
             continue;
         };
-        // CATEGORY "gd…" is an application; patches, DLC and system content
-        // use other prefixes and are not launchable from here.
+        // CATEGORY "gd…" is an application ("gda" for the system's own);
+        // patches, DLC and system content use other prefixes and are not
+        // launchable from here.
         if !sfo_string(&sfo, "CATEGORY").is_some_and(|category| category.starts_with("gd")) {
             continue;
         }
@@ -123,8 +141,11 @@ fn scan() -> Vec<Title> {
             title,
         });
     }
-    titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
-    titles
+}
+
+/// Whether the id belongs to a system application.
+fn is_system(title_id: &str) -> bool {
+    title_id.starts_with("NPXS")
 }
 
 unsafe fn titles() -> &'static [Title] {
@@ -139,8 +160,9 @@ unsafe fn titles() -> &'static [Title] {
 /// files are encrypted and do not decode; the system's copy is plain, and
 /// exists once the home screen has opened the game's LiveArea.
 pub fn metadata_dirs(title_id: &str) -> [String; 2] {
+    let root = if is_system(title_id) { SYSTEM_ROOT } else { APP_ROOT };
     [
-        format!("{APP_ROOT}/{title_id}/sce_sys"),
+        format!("{root}/{title_id}/sce_sys"),
         format!("{META_ROOT}/{title_id}"),
     ]
 }
@@ -250,8 +272,8 @@ pub unsafe fn table_json() -> String {
     output
 }
 
-/// URI of an accepted launch, held until `finish_launch` ends this process.
-static mut LAUNCHED: Option<CString> = None;
+/// URI and flags of an accepted launch, held until `finish_launch` ends this process.
+static mut LAUNCHED: Option<(CString, i32)> = None;
 
 /// spec op 40 (native flavour): start the title with this id. Only ids found by
 /// the scan are accepted, so the URI is never built from guest-controlled text.
@@ -263,11 +285,17 @@ pub unsafe fn launch(title_id: &str) -> bool {
     let Ok(uri) = CString::new(format!("psgm:play?titleid={title_id}")) else {
         return false;
     };
-    let accepted = vitasdk_sys::sceAppMgrLaunchAppByUri(LAUNCH_FLAGS, uri.as_ptr()) >= 0;
-    if accepted {
-        LAUNCHED = Some(uri);
+    let flags = if is_system(title_id) { SYSTEM_LAUNCH_FLAGS } else { LAUNCH_FLAGS };
+    let code = vitasdk_sys::sceAppMgrLaunchAppByUri(flags, uri.as_ptr());
+    if code < 0 {
+        crate::vita_log(format_args!(
+            "[PocketJS installed] launch {title_id} failed: {:#x}",
+            code as u32
+        ));
+        return false;
     }
-    accepted
+    LAUNCHED = Some((uri, flags));
+    true
 }
 
 /// End this process after an accepted launch. Called by main once the frame
@@ -278,11 +306,11 @@ pub unsafe fn launch(title_id: &str) -> bool {
 /// starts; a process that exits is not asked about. The request is sent a
 /// second time before the exit, 10 ms apart, as VitaShell's updater does.
 pub unsafe fn finish_launch() {
-    let Some(uri) = LAUNCHED.take() else {
+    let Some((uri, flags)) = LAUNCHED.take() else {
         return;
     };
     vitasdk_sys::sceKernelDelayThread(10_000);
-    vitasdk_sys::sceAppMgrLaunchAppByUri(LAUNCH_FLAGS, uri.as_ptr());
+    vitasdk_sys::sceAppMgrLaunchAppByUri(flags, uri.as_ptr());
     vitasdk_sys::sceKernelExitProcess(0);
 }
 

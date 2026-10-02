@@ -327,11 +327,33 @@ interface Shot {
   steps: Step[];
   /** Save an API key before the app starts. */
   key?: boolean;
+  /** Language saved in the settings before the app starts. */
+  language?: string;
 }
 
 
 
 const tap = (button: number, times = 1): Step[] => Array<Step>(times).fill(button);
+
+// The screens with the most text, once per translated language.
+const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
+  const shot = (name: string, steps: Step[]): Shot => ({ name: `60-${language}-${name}`, language, steps });
+  return [
+    shot("shelf", [BTN.RIGHT]),
+    // The language row is one press up from the first row.
+    shot("menu", [BTN.SELECT, BTN.UP]),
+    shot("editor", [BTN.RIGHT, BTN.TRIANGLE]),
+    shot("reset", [BTN.RIGHT, BTN.TRIANGLE, BTN.UP, BTN.CIRCLE]),
+    shot("categories", [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.SQUARE]),
+    shot("hidden", [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.START]),
+    shot("keyboard", [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE]),
+    shot("search", [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.UP, ...tap(BTN.RIGHT, 3), BTN.CIRCLE, BTN.START]),
+    shot("no-match", [BTN.SQUARE, ...tap(BTN.CIRCLE, 2), BTN.START]),
+    shot("launching", [BTN.RIGHT, BTN.CIRCLE]),
+    shot("picker", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, BTN.DOWN]),
+    shot("online-key", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE]),
+  ];
+});
 
 const SHOTS: Shot[] = [
   { name: "01-shelf", steps: tap(BTN.RIGHT, 3) },
@@ -449,6 +471,7 @@ const SHOTS: Shot[] = [
     steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.START],
   },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
+  ...LANGUAGE_SHOTS,
 ];
 
 function advance(world: SimWorld, mask: number, frames: number): void {
@@ -471,6 +494,14 @@ async function capture(shot: Shot): Promise<void> {
     (files.ns as { write(path: string, data: string, mode: number): number }).write(
       "steamgriddb.txt",
       JSON.stringify(PREVIEW_KEY),
+      0,
+    );
+  }
+  if (shot.language) {
+    (files.ns as { write(path: string, data: string, mode: number): number }).write(
+      "settings.json",
+      // The payload is a JSON string holding the file's text.
+      JSON.stringify(JSON.stringify({ language: shot.language })),
       0,
     );
   }

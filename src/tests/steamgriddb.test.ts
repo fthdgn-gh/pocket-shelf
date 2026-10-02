@@ -96,17 +96,18 @@ describe("parseAssets", () => {
 });
 
 describe("failed replies", () => {
-  test("a rejected key, a busy server and an unknown status each get a message", () => {
-    expect(parseGames(401, '{"success":false,"errors":["Authentication Required"]}')).toBe(
-      "SteamGridDB did not accept the API key.",
-    );
-    expect(parseAssets(429, "")).toBe("SteamGridDB is busy. Try again in a moment.");
-    expect(parseAssets(503, "")).toBe("SteamGridDB answered with status 503.");
+  test("a rejected key, a busy server and an unknown status are each named", () => {
+    expect(parseGames(401, '{"success":false,"errors":["Authentication Required"]}')).toEqual({
+      problem: "keyRejected",
+      status: 401,
+    });
+    expect(parseAssets(429, "")).toEqual({ problem: "serverBusy", status: 429 });
+    expect(parseAssets(503, "")).toEqual({ problem: "serverStatus", status: 503 });
   });
 
-  test("a reply that is not the expected JSON gets a message", () => {
+  test("a reply that is not the expected JSON is named", () => {
     for (const text of ["", "<html>", '{"success":false}', '{"success":true,"data":{}}']) {
-      expect(parseGames(200, text)).toBe("SteamGridDB sent an unexpected reply.");
+      expect(parseGames(200, text)).toEqual({ problem: "badReply", status: 200 });
     }
   });
 });
