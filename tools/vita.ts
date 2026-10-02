@@ -320,8 +320,10 @@ if (!existsSync(eboot))
 
 // cargo-vita defaults to a safe SELF. Kernel driver loading and writing the
 // inactive native slot require the standard unsafe-homebrew SELF permissions.
+// `-c` compresses the segments: the system reads the whole SELF from the
+// memory card at every launch, and an uncompressed release SELF is 12 MB.
 if (usbDebug) {
-  await $`${vitasdk}/bin/vita-make-fself ${targetDirectory}/pocketjs-vita.velf ${eboot}`;
+  await $`${vitasdk}/bin/vita-make-fself -c ${targetDirectory}/pocketjs-vita.velf ${eboot}`;
 }
 
 await $`${vitasdk}/bin/vita-mksfoex -d ATTRIBUTE2=12 -s TITLE_ID=${titleId} ${packageTitle} ${sfo}`;

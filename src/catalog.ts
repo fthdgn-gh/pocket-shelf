@@ -109,6 +109,15 @@ export function isListed(titleId: string): boolean {
 }
 
 /**
+ * Ask the host to read the installed titles again. The Vita host keeps the
+ * list in a file between starts (hosts/vita/src/installed.rs) and scans only
+ * when asked; this takes seconds. Hosts without the extra do nothing.
+ */
+export function rescanTitles(): void {
+  (getOps() as unknown as { __appRescan?(): number }).__appRescan?.();
+}
+
+/**
  * The host's installed-title table (kind "native"), less the titles
  * `isListed` leaves out. Hosts without app navigation report no table, which
  * leaves the list empty.

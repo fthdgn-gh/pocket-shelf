@@ -37,6 +37,9 @@ struct Texture {
     ptr: *mut vita2d_texture,
     w: u32,
     h: u32,
+    /// One byte per texel, read as alpha under white (`U8_R111`): a font
+    /// atlas. Every other texture is four bytes per texel.
+    coverage: bool,
 }
 
 struct RetiredTexture {
@@ -98,10 +101,13 @@ unsafe fn ensure_rendering_done() {
     }
 }
 
-unsafe fn take_recycled_texture(w: u32, h: u32) -> Option<Texture> {
+unsafe fn take_recycled_texture(w: u32, h: u32, coverage: bool) -> Option<Texture> {
     let recycled = RECYCLED_TEXTURES.as_mut()?;
     let index = recycled.iter().position(|entry| {
-        entry.texture.w == w && entry.texture.h == h && (!SCENE_OPEN || entry.reusable_in_scene)
+        entry.texture.w == w
+            && entry.texture.h == h
+            && entry.texture.coverage == coverage
+            && (!SCENE_OPEN || entry.reusable_in_scene)
     })?;
     ensure_rendering_done();
     Some(recycled.swap_remove(index).texture)
@@ -111,7 +117,8 @@ unsafe fn take_recycled_texture(w: u32, h: u32) -> Option<Texture> {
 fn texture_bytes(texture: Texture) -> usize {
     // libvita2d aligns RGBA row widths to 8 pixels and CDRAM allocations to
     // 256 KiB. Counting only logical pixels let tiny textures evade the cap.
-    let bytes = (texture.w as usize).div_ceil(8) * 8 * texture.h as usize * 4;
+    let texel = if texture.coverage { 1 } else { 4 };
+    let bytes = (texture.w as usize).div_ceil(8) * 8 * texture.h as usize * texel;
     bytes.div_ceil(256 * 1024) * (256 * 1024)
 }
 
@@ -291,7 +298,7 @@ unsafe fn upload_rgba(w: u32, h: u32, rgba: &[u8], linear: bool) -> Option<Textu
     // bounds each power-of-two size bucket by its historical resident high
     // water mark. `take_recycled_texture` drains GXM before handing an
     // allocation back, so a recycled allocation is no longer in flight.
-    let ptr = take_recycled_texture(w, h)
+    let ptr = take_recycled_texture(w, h, false)
         .map(|texture| texture.ptr)
         .unwrap_or_else(|| {
             vita2d_create_empty_texture_format(
@@ -319,7 +326,12 @@ unsafe fn upload_rgba(w: u32, h: u32, rgba: &[u8], linear: bool) -> Option<Textu
         SceGxmTextureFilter_SCE_GXM_TEXTURE_FILTER_POINT
     };
     vita2d_texture_set_filters(ptr, filter, filter);
-    Some(Texture { ptr, w, h })
+    Some(Texture {
+        ptr,
+        w,
+        h,
+        coverage: false,
+    })
 }
 
 pub fn register_texture(ui: &Ui, handle: i32) {
@@ -468,38 +480,55 @@ pub fn register_font_atlas(slot: u8, atlas: &Atlas) {
         ));
         return;
     };
-    let Some(rgba_len) = (tex_w as usize)
-        .checked_mul(tex_h as usize)
-        .and_then(|pixels| pixels.checked_mul(4))
-    else {
-        evict_font(slot);
-        crate::vita_log(format_args!(
-            "[PocketJS Vita] font atlas slot {slot} rejected: {tex_w}x{tex_h} RGBA size overflow"
-        ));
-        return;
-    };
-    let mut rgba = vec![0u8; rgba_len];
-    for gid in 0..atlas.glyph_count {
-        let src = atlas.glyph_rows(gid);
-        let gx = (gid as u32 % cols) * coverage_w;
-        let gy = (gid as u32 / cols) * coverage_h;
-        for y in 0..coverage_h as usize {
-            for x in 0..coverage_w as usize {
-                let dst = ((gy as usize + y) * tex_w as usize + gx as usize + x) * 4;
-                rgba[dst] = 255;
-                rgba[dst + 1] = 255;
-                rgba[dst + 2] = 255;
-                rgba[dst + 3] = src[y * atlas.bytes_per_row() + x];
-            }
-        }
-    }
+    // The atlas is coverage: one byte per texel. `U8_R111` samples it as
+    // alpha under white, the format vita2d's own fonts use, so the tint
+    // colors the glyph as before. Four bytes per texel made eleven atlases
+    // of 322 glyphs 36 MB and took 1.9 s of every start to fill and copy.
     unsafe {
-        let Some(texture) = upload_rgba(tex_w, tex_h, &rgba, false) else {
+        let ptr = take_recycled_texture(tex_w, tex_h, true)
+            .map(|texture| texture.ptr)
+            .unwrap_or_else(|| {
+                vita2d_create_empty_texture_format(
+                    tex_w,
+                    tex_h,
+                    SceGxmTextureFormat_SCE_GXM_TEXTURE_FORMAT_U8_R111,
+                )
+            });
+        if ptr.is_null() {
             evict_font(slot);
             crate::vita_log(format_args!(
                 "[PocketJS Vita] font atlas slot {slot} GPU upload failed: {tex_w}x{tex_h}"
             ));
             return;
+        }
+        let stride = vita2d_texture_get_stride(ptr) as usize;
+        let dst = vita2d_texture_get_datap(ptr) as *mut u8;
+        // The cells do not cover the power-of-two padding, and a recycled
+        // texture holds its previous atlas.
+        core::ptr::write_bytes(dst, 0, stride * tex_h as usize);
+        let row_len = coverage_w as usize;
+        let row_step = atlas.bytes_per_row();
+        for gid in 0..atlas.glyph_count {
+            let src = atlas.glyph_rows(gid);
+            let gx = (gid as u32 % cols) as usize * row_len;
+            let gy = (gid as u32 / cols) as usize * coverage_h as usize;
+            for y in 0..coverage_h as usize {
+                let Some(row) = src.get(y * row_step..y * row_step + row_len) else {
+                    break;
+                };
+                core::ptr::copy_nonoverlapping(row.as_ptr(), dst.add((gy + y) * stride + gx), row_len);
+            }
+        }
+        vita2d_texture_set_filters(
+            ptr,
+            SceGxmTextureFilter_SCE_GXM_TEXTURE_FILTER_POINT,
+            SceGxmTextureFilter_SCE_GXM_TEXTURE_FILTER_POINT,
+        );
+        let texture = Texture {
+            ptr,
+            w: tex_w,
+            h: tex_h,
+            coverage: true,
         };
         let font = FontTexture {
             texture,

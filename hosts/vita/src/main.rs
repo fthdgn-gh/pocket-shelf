@@ -127,6 +127,7 @@ unsafe fn boot_guest(app_index: usize, active: &Option<Arc<Bundle>>) -> Result<R
         runtime.shutdown();
         return Err(error);
     }
+    pocketjs_vita::startup_mark("eval");
     Ok(runtime)
 }
 
@@ -232,6 +233,7 @@ unsafe fn run_guest(app_index: usize, dev: &mut dev::Host) -> usize {
         }
         dev.overlay();
         graphics::present();
+        pocketjs_vita::startup_mark("frame");
         if pending.is_some() {
             vita2d_sys::vita2d_wait_rendering_done();
         }
@@ -379,9 +381,12 @@ unsafe fn run_guest(app_index: usize, dev: &mut dev::Host) -> usize {
 
 fn main() {
     unsafe {
+        pocketjs_vita::startup_mark("main");
         graphics::init().unwrap_or_else(|error| fail(error));
+        pocketjs_vita::startup_mark("graphics");
         input::init();
         let mut dev = dev::Host::new();
+        pocketjs_vita::startup_mark("dev");
         let mut next = 0usize;
         loop {
             next = run_guest(next, &mut dev);

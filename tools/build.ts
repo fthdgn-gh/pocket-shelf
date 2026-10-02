@@ -15,7 +15,7 @@ import { BuildInputs } from "../framework/compiler/build-inputs.ts";
 //         placeholder); pak.ts packs it all -> dist/<app>.pak.
 // pass 2  Bun.build (plugin serves the CACHED pass-1 transforms plus this
 //         build's in-memory generated styles, iife, target browser,
-//         minify false) -> dist/<app>.js.
+//         minify only with POCKET_MINIFY=1) -> dist/<app>.js.
 //
 // Flags:
 //   --framework=solid|vue-vapor|octane  select the framework for this build
@@ -547,7 +547,9 @@ const result = await Bun.build({
       ? { document: "globalThis.__pocketDocument" }
       : {}),
   },
-  minify: false,
+  // POCKET_MINIFY=1 shortens the bundle to about half. The host's JS engine
+  // parses the whole bundle at every start, which is slow on a handheld.
+  minify: process.env.POCKET_MINIFY === "1",
   metafile: true,
   sourcemap: "none",
   plugins: [jsxPlugin(framework, {

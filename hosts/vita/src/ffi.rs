@@ -883,6 +883,42 @@ unsafe extern "C" fn js_installed_table(
     JS_NewStringLen(ctx, value.as_ptr(), value.len())
 }
 
+/// ui.__appRescan() -> number of titles. Host extra: scans the installed
+/// titles again and saves the list `appTable` reads at the next start.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_installed_rescan(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    JS_NewInt32(ctx, crate::installed::rescan() as i32)
+}
+
+/// ui.__startupMarks() -> "label=ms,...". Host extra: when each startup
+/// phase finished (`startup_mark`), for the guest's diagnostics screen.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_startup_marks(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    new_js_string(ctx, &crate::startup_marks())
+}
+
+/// ui.__processMs() -> milliseconds since the process started. Host extra:
+/// the clock of `__startupMarks`, so the guest can time its own steps on it.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_process_ms(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    JS_NewInt32(ctx, (vitasdk_sys::sceKernelGetProcessTimeWide() / 1000) as i32)
+}
+
 /// ui.appIcon(titleId) -> texture handle | -1 | -2 (spec op 57).
 #[cfg(feature = "installed-apps")]
 unsafe extern "C" fn js_installed_icon(
@@ -1164,6 +1200,9 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"__appBackdrop\0", js_app_backdrop, 2);
         add_fn(ctx, ui_obj, b"__appBackdropFree\0", js_app_backdrop_free, 1);
         add_fn(ctx, ui_obj, b"__artAccent\0", js_art_accent, 1);
+        add_fn(ctx, ui_obj, b"__appRescan\0", js_installed_rescan, 0);
+        add_fn(ctx, ui_obj, b"__startupMarks\0", js_startup_marks, 0);
+        add_fn(ctx, ui_obj, b"__processMs\0", js_process_ms, 0);
     }
 
     #[cfg(feature = "http")]

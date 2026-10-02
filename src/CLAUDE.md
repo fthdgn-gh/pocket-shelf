@@ -23,6 +23,11 @@ PocketJS framework and builds from the root `pocket.json`.
 - After a change, build and open Vita3K so the user can look. The user also
   installs `dist/vita/pocket-shelf.vpk` on a real Vita; several features have
   only ever been confirmed there.
+- **Build release (`bun run shelf:build:release`) for the VPK the user
+  installs.** The system reads the whole executable from the memory card at
+  every launch. The debug executable is 105 MB; the release one is 2.4 MB
+  (`tools/vita.ts` compresses it with `vita-make-fself -c`). The user
+  measured about seven seconds to start with the debug build.
 - State plainly what was verified in the preview, in Vita3K, and on hardware.
 
 ## Commands
@@ -30,7 +35,7 @@ PocketJS framework and builds from the root `pocket.json`.
 | Command | Does |
 |---|---|
 | `bun run shelf:build` | Debug VPK to `dist/vita/pocket-shelf.vpk` |
-| `bun run shelf:build:release` | Release VPK (about 2.6 MB against 25 MB debug) |
+| `bun run shelf:build:release` | Release VPK (2.4 MB; the debug one is 25 MB and unpacks to 105 MB) |
 | `bun run shelf:run` | Build, then open in Vita3K |
 | `bun run shelf:check` | Manifest check for the Vita target, then `tsc` |
 | `bun run shelf:test` | Unit tests under `src/tests/` |
@@ -107,7 +112,8 @@ cannot be driven. Evidence comes from its log and from files under
 
 - **Prefer host extras over new spec ops.** Extras are `ui.__name` functions
   outside the numbered contract (`__appArt`, `__appBackdrop`,
-  `__appBackdropFree`, `__artAccent`, `__netGet`, `__netSave`, `__netState`,
+  `__appBackdropFree`, `__artAccent`, `__appRescan`, `__startupMarks`,
+  `__processMs`, `__netGet`, `__netSave`, `__netState`,
   `__netText`, `__netClose`). The one spec op added, `appIcon`, collided with
   upstream at 52 and is now **57**.
 - **Pictures decode on worker threads** (`jobs.rs`). Icons, custom art and
@@ -126,6 +132,14 @@ cannot be driven. Evidence comes from its log and from files under
   `0xFFFFF`. Listing, titles and icons
   are confirmed in Vita3K, whose firmware has the same folder; the launch is
   not confirmed on hardware.
+- **The title list is kept in `titles.tsv` in the data folder.** A scan reads
+  one `param.sfo` per title, which the user measured at about ten seconds for
+  a hundred titles on hardware. `installed.rs` scans on the first start,
+  writes the list, and reads it on later starts. A title installed or removed
+  afterwards is not noticed until "Rescan titles" in the SELECT menu
+  (`__appRescan`), which also reports how long the scan took. The scan blocks
+  the main thread. In Vita3K a second start opens `titles.tsv` and neither
+  app folder; the time saved on hardware is not measured yet.
 - **Retail games' files are encrypted.** For an icon or backdrop the host
   tries, in order: `ux0:/app/<id>/sce_sys` (plain for homebrew),
   `ur0:appmeta/<id>/` (exists only after the home screen opened that game's
@@ -194,6 +208,9 @@ cannot be driven. Evidence comes from its log and from files under
 
 ## Data folder (`ux0:/data/PocketShelf/`)
 
+`titles.tsv` (the host's list of installed titles; deleting it forces a scan),
+`titles.cache.json` (every title's changes in one file, rebuilt from `titles/`),
+`bundle.qjsc` (the app's compiled code, rebuilt when the app changes),
 `settings.json` (settings, the language among them, and the last selection),
 `categories.json`, `recent.json` (title ids, the one started
 last first, at most 15), `titles/<title id>.json` (per-title overrides:
@@ -215,8 +232,8 @@ the user reorders them, and can be hidden or moved in the category manager.
 English, Turkish, German, French and Spanish. `locales/en.ts` defines the
 texts and their type; the other files in `locales/` follow it, and `i18n.ts`
 lists them. `state.t()` gives the texts of the chosen language; the choice is
-the last row of the SELECT menu (one press up from the first row) and is
-saved in `settings.json`. English is the default; the system language is not
+the second to last row of the SELECT menu (two presses up from the first row)
+and is saved in `settings.json`. English is the default; the system language is not
 read.
 
 - **A character draws only if the font was baked with it.** `fonts.json`
@@ -251,6 +268,49 @@ term before the position, in place of the "Menu" hint. Matching and order are in
 `search.ts`. `persist` saves a selected result under its own category, since
 the tab does not exist after a restart.
 
+## Startup time
+
+Measured by the user on hardware with the release build, 111 titles, in
+milliseconds since the process started: `main` 340, `graphics` 582, `pak`
+2449, `quickjs` 2550, `eval` 4053, first frame 4088. The stopwatch time from
+the bubble is about seven seconds, so about three are the system's own launch.
+
+- **Fonts were 1.9 s of it (`pak`).** Each baked size is an atlas; eleven
+  atlases of 322 glyphs came to 36 MB as four-byte textures.
+  `register_font_atlas` in `hosts/vita/src/graphics.rs` now uploads them as
+  one byte per texel (`U8_R111`, alpha under white). The result is not yet
+  measured: `pak` fell from 2449 to 1066 and the first frame from 4088 to
+  2695.
+- **`eval` is 1.5 s:** about 0.55 s reading the app's files (0.43 s of it the
+  per-title files in `titles/`), the rest QuickJS parsing the bundle and
+  mounting the first screen. Two changes, not yet measured on hardware:
+  `overrides.ts` reads every title's changes from `titles.cache.json` (the
+  per-title files stay the source; "Rescan titles" reads them again and
+  rebuilds the cache), and the shelf scripts set `POCKET_MINIFY=1`, which
+  halves the bundle (376 KB to 182 KB) through a switch in `tools/build.ts`.
+- **A second reading** (second launch, release build): `quickjs` 1070, app
+  code begins 1708, `eval` 2699. So the engine parses the bundle for about
+  0.64 s, and the app's code runs for about 0.96 s: 0.17 s reading files
+  (the changes cache cut that from 0.55 s), 0.24 s building the header, view
+  and footer, and about 0.5 s not yet attributed. Minifying did not show a
+  gain in that reading.
+- **Bytecode file.** `Runtime::eval` in `hosts/vita/src/lib.rs` compiles the
+  bundle on the first start, writes the bytecode to `bundle.qjsc` in the data
+  folder (719 KB) with the source's hash and its own, and reads it on later
+  starts so the parser is skipped. A file that does not match is compiled
+  over. Measured on hardware: the gap between `quickjs` and the app's code
+  beginning fell from about 640 ms to 158 ms.
+- **Where it stands (2026-10-03, second launch, release build):** `quickjs`
+  1152, app code begins 1310, `eval` 1832, first frame 1847. The first frame
+  was at 4088 before this work. Inside the app's code: `mount` 516, of which
+  `tree` 284 and the framework's `setup` 20. The stopwatch time from the
+  bubble has not been taken again.
+- **Diagnostics screen.** SELECT menu, "Diagnostics" (the last row): the startup timing of
+  the current launch as a list. "Host" lines say when a phase finished
+  (`startup_mark` in `lib.rs`, read through `__startupMarks`); "App" lines
+  say how long a step took (`timed` in `diagnostics.ts`). Wrap a new startup
+  step in `timed` to see it there.
+- A full title scan is 2.8 to 3.5 s, which the title list file avoids.
 ## Open items
 
 - **Next planned work:** list PSP and PS1 Classics that install on the Vita,

@@ -6,9 +6,12 @@
 //! `appLaunch(titleId)` starts one through the system app manager. The table carries `kind: "native"`, so the framework treats the
 //! call as a process switch, not as a guest swap inside this process.
 //!
-//! Titles are read from each `sce_sys/param.sfo`. The list is scanned once per
-//! process and cached: apps cannot be installed while this process is in the
-//! foreground, so a later scan would return the same set.
+//! Titles are read from each `sce_sys/param.sfo`. One file read per title is
+//! slow on the memory card (about ten seconds for a hundred titles), so the
+//! list is kept in a file in the data folder (cargo feature `data-fs`): the
+//! first start scans and writes it, later starts read it, and `rescan` scans
+//! again when the guest asks. A title installed or removed since the last
+//! scan is not noticed until then.
 
 use std::ffi::CString;
 use std::fs;
@@ -148,11 +151,83 @@ fn is_system(title_id: &str) -> bool {
     title_id.starts_with("NPXS")
 }
 
+/// First line of the list file. A file that starts otherwise is scanned over.
+#[cfg(feature = "data-fs")]
+const LIST_HEADER: &str = "pocket-shelf titles 1";
+
+#[cfg(feature = "data-fs")]
+fn list_path() -> String {
+    format!("{}/titles.tsv", crate::datafs::data_dir())
+}
+
+/// The saved list: the header, then one `<title id><TAB><title>` line per
+/// title in scan order. None when there is no usable file.
+#[cfg(feature = "data-fs")]
+fn load_list() -> Option<Vec<Title>> {
+    let text = fs::read_to_string(list_path()).ok()?;
+    let mut lines = text.lines();
+    if lines.next()? != LIST_HEADER {
+        return None;
+    }
+    let mut titles = Vec::new();
+    for line in lines {
+        let (id, title) = line.split_once('\t')?;
+        if !valid_title_id(id) || title.is_empty() {
+            return None;
+        }
+        titles.push(Title {
+            title_id: String::from(id),
+            title: String::from(title),
+        });
+    }
+    // An empty list is what a failed scan leaves; scan again.
+    (!titles.is_empty()).then_some(titles)
+}
+
+#[cfg(feature = "data-fs")]
+fn save_list(titles: &[Title]) {
+    let mut text = String::from(LIST_HEADER);
+    text.push('\n');
+    for item in titles {
+        // A title is one line: `scan` collapsed its whitespace to single spaces.
+        text.push_str(&item.title_id);
+        text.push('\t');
+        text.push_str(&item.title);
+        text.push('\n');
+    }
+    let _ = fs::create_dir_all(crate::datafs::data_dir());
+    if let Err(error) = fs::write(list_path(), text) {
+        crate::vita_log(format_args!("[PocketJS installed] title list not saved: {error}"));
+    }
+}
+
+#[cfg(not(feature = "data-fs"))]
+fn load_list() -> Option<Vec<Title>> {
+    None
+}
+
+#[cfg(not(feature = "data-fs"))]
+fn save_list(_titles: &[Title]) {}
+
 unsafe fn titles() -> &'static [Title] {
     if CACHE.is_none() {
-        CACHE = Some(scan());
+        CACHE = Some(load_list().unwrap_or_else(|| {
+            let found = scan();
+            save_list(&found);
+            found
+        }));
     }
     CACHE.as_deref().unwrap_or(&[])
+}
+
+/// Read the installed titles again and save the list. Returns how many were
+/// found. Icon handles already handed out stay valid: they are kept per id.
+pub unsafe fn rescan() -> usize {
+    let found = scan();
+    save_list(&found);
+    let count = found.len();
+    CACHE = Some(found);
+    count
 }
 
 /// Folders that hold a title's icon and pictures, in the order to try them:

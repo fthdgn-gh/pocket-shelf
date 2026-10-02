@@ -151,4 +151,11 @@ export const tr: Messages = {
   cleanConfirm: "{count} dosyayı silmek için yeniden basın.",
   cleanDone: "{count} dosya silindi.",
   cleanNothing: "Silinecek bir şey yok.",
+
+  diagnostics: "Tanılama",
+  rescan: "Başlıkları yeniden tara",
+  scan: "Tara",
+  scanHelp: "Yüklü başlıkları yeniden okur. Bir başlık yükledikten ya da kaldırdıktan sonra kullanın.",
+  scanning: "Taranıyor...",
+  scanDone: "{seconds} sn içinde {count} başlık bulundu.",
 };

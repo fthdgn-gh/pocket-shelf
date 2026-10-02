@@ -151,4 +151,11 @@ export const de: Messages = {
   cleanConfirm: "Erneut drücken, um {count} Dateien zu löschen.",
   cleanDone: "{count} Dateien gelöscht.",
   cleanNothing: "Es gibt nichts zu löschen.",
+
+  diagnostics: "Diagnose",
+  rescan: "Titel neu einlesen",
+  scan: "Einlesen",
+  scanHelp: "Liest die installierten Titel neu ein. Nach dem Installieren oder Entfernen eines Titels verwenden.",
+  scanning: "Wird eingelesen...",
+  scanDone: "{count} Titel in {seconds} s gefunden.",
 };

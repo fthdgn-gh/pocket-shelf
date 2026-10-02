@@ -78,8 +78,58 @@ export function withoutFiles(overrides: Overrides): Overrides {
   return next;
 }
 
+// Every title's changes in one file, ux0:/data/PocketShelf/titles.cache.json.
+// Reading one file per title cost 0.43 s of each start with a hundred
+// titles. The per-title files stay the source: this file is rewritten with
+// them, and `reloadOverrides` rebuilds it from them.
+const CACHE_FILE = "titles.cache.json";
+const CACHE_VERSION = 1;
+
+function readCache(): Overrides | null {
+  try {
+    const raw = JSON.parse(readFileSync(CACHE_FILE, "utf8")) as { version?: unknown; titles?: unknown };
+    if (raw.version !== CACHE_VERSION || !raw.titles || typeof raw.titles !== "object") return null;
+    const result: Overrides = {};
+    for (const [id, value] of Object.entries(raw.titles)) {
+      if (!ID_PATTERN.test(id)) continue;
+      const clean = sanitize(value);
+      if (Object.keys(clean).length === 0) continue;
+      result[id] = clean;
+      onDisk.set(id, render(clean));
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(overrides: Overrides): void {
+  writeFileSync(CACHE_FILE, `${JSON.stringify({ version: CACHE_VERSION, titles: overrides })}\n`);
+}
+
+/**
+ * The titles' changes: from the one-file cache, or from the per-title files
+ * when there is no cache yet. A per-title file edited, added or deleted by
+ * hand is picked up by `reloadOverrides`.
+ */
 export function loadOverrides(): Overrides {
+  return readCache() ?? reloadOverrides();
+}
+
+/** Read the per-title files again and rebuild the cache from them. */
+export function reloadOverrides(): Overrides {
+  const result = readFolder();
+  try {
+    writeCache(result);
+  } catch {
+    // No fs namespace on this host, or the data folder is not writable.
+  }
+  return result;
+}
+
+function readFolder(): Overrides {
   const result: Overrides = {};
+  onDisk.clear();
   try {
     mkdirSync(TITLES_DIR);
     for (const name of readdirSync(TITLES_DIR)) {
@@ -104,18 +154,22 @@ export function loadOverrides(): Overrides {
 /** Write the titles whose changes differ from disk and delete files for titles that were reset. */
 export function saveOverrides(overrides: Overrides): void {
   try {
+    let changed = false;
     for (const [id, change] of Object.entries(overrides)) {
       if (!ID_PATTERN.test(id)) continue;
       const text = render(change);
       if (onDisk.get(id) === text) continue;
       writeFileSync(fileOf(id), text);
       onDisk.set(id, text);
+      changed = true;
     }
     for (const id of [...onDisk.keys()]) {
       if (id in overrides) continue;
       rmSync(fileOf(id), { force: true });
       onDisk.delete(id);
+      changed = true;
     }
+    if (changed) writeCache(overrides);
   } catch (error) {
     console.log(`Title changes not saved: ${error}`);
   }

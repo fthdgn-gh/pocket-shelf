@@ -46,7 +46,17 @@ static mut INPUT_INITIALIZED: bool = false;
 /// one crossed `Runtime::shutdown` at a safe frame boundary.
 static mut GUEST_NATIVE_ACTIVE: bool = false;
 
+// Bytecode entry points and flags of the engine (quickjs.h). The bindings
+// built for this target do not list them.
+const JS_EVAL_FLAG_COMPILE_ONLY: u32 = 1 << 5;
+const JS_WRITE_OBJ_BYTECODE: u32 = 1 << 0;
+const JS_READ_OBJ_BYTECODE: u32 = 1 << 0;
+
 extern "C" {
+    fn JS_WriteObject(ctx: *mut JSContext, psize: *mut size_t, obj: JSValue, flags: i32) -> *mut u8;
+    fn JS_ReadObject(ctx: *mut JSContext, buf: *const u8, buf_len: size_t, flags: i32) -> JSValue;
+    fn JS_EvalFunction(ctx: *mut JSContext, fun_obj: JSValue) -> JSValue;
+    fn js_free(ctx: *mut JSContext, ptr: *mut c_void);
     fn JS_SetInterruptHandler(
         rt: *mut JSRuntime,
         callback: Option<unsafe extern "C" fn(*mut JSRuntime, *mut c_void) -> i32>,
@@ -69,6 +79,57 @@ extern "C" {
     ) -> JSValue;
     fn JS_ExecutePendingJob(rt: *mut JSRuntime, pctx: *mut *mut JSContext) -> i32;
     fn sceClibPrintf(fmt: *const i8, ...) -> i32;
+}
+
+/// Bytecode file header: magic, FNV-1a of the source, FNV-1a of the bytecode.
+#[cfg(feature = "data-fs")]
+const COMPILED_MAGIC: &[u8; 8] = b"PKTQJS01";
+#[cfg(feature = "data-fs")]
+const COMPILED_HEADER: usize = 24;
+
+#[cfg(feature = "data-fs")]
+fn compiled_path() -> String {
+    format!("{}/bundle.qjsc", crate::datafs::data_dir())
+}
+
+/// 64-bit FNV-1a.
+#[cfg(feature = "data-fs")]
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &byte in bytes {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// Startup timing for the guest's diagnostics screen: milliseconds since the
+/// process started, per phase.
+static mut STARTUP_MARKS: Vec<(&'static str, u64)> = Vec::new();
+
+/// Record how long after process start `label` was reached. The first call
+/// per label counts; a guest that boots again does not overwrite it.
+pub fn startup_mark(label: &'static str) {
+    unsafe {
+        let marks = &mut *core::ptr::addr_of_mut!(STARTUP_MARKS);
+        if marks.iter().any(|(known, _)| *known == label) {
+            return;
+        }
+        let micros = vitasdk_sys::sceKernelGetProcessTimeWide();
+        marks.push((label, micros / 1000));
+    }
+}
+
+/// The marks as `label=ms` joined by commas, in the order they were reached.
+pub fn startup_marks() -> String {
+    unsafe {
+        let marks = &*core::ptr::addr_of!(STARTUP_MARKS);
+        marks
+            .iter()
+            .map(|(label, ms)| format!("{label}={ms}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    }
 }
 
 pub fn vita_log(args: fmt::Arguments<'_>) {
@@ -136,6 +197,7 @@ impl Runtime {
         let (textures, sprites) = pak::feed(ui, app_pak);
         switch::upload_shot(ui);
         GUEST_NATIVE_ACTIVE = true;
+        startup_mark("pak");
 
         let rt = JS_NewRuntime();
         if rt.is_null() {
@@ -158,6 +220,7 @@ impl Runtime {
             );
         }
         ffi::register(ctx, global, &textures, &sprites);
+        startup_mark("quickjs");
         if !app_pak.is_empty() {
             let ptr = app_pak.as_ptr() as *mut u8;
             let buffer = JS_NewArrayBuffer(ctx, ptr, app_pak.len(), None, ptr as *mut c_void, 0);
@@ -221,13 +284,24 @@ impl Runtime {
         else {
             return Err(String::from("PocketJS Vita bundle must be NUL-terminated"));
         };
-        let result = JS_Eval(
-            self.ctx,
-            app_js.as_ptr() as *const i8,
-            len,
-            c"game.js".as_ptr(),
-            JS_EVAL_TYPE_GLOBAL as i32,
-        );
+        let result = match self.load_compiled(&app_js.as_bytes()[..len]) {
+            Some(function) => JS_EvalFunction(self.ctx, function),
+            None => {
+                // Compile, keep the bytecode for the next start, then run it.
+                let function = JS_Eval(
+                    self.ctx,
+                    app_js.as_ptr() as *const i8,
+                    len,
+                    c"game.js".as_ptr(),
+                    (JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY) as i32,
+                );
+                if JS_IsException(function) {
+                    return Err(exception_string(self.ctx));
+                }
+                self.save_compiled(&app_js.as_bytes()[..len], function);
+                JS_EvalFunction(self.ctx, function)
+            }
+        };
         if JS_IsException(result) {
             return Err(exception_string(self.ctx));
         }
@@ -243,6 +317,65 @@ impl Runtime {
         self.frame_fn = frame_fn;
         Ok(())
     }
+
+    /// The bundle's bytecode from the data folder, when the file was written
+    /// from this exact source. Parsing the bundle took 0.64 s of every start
+    /// on hardware; reading bytecode skips the parser.
+    #[cfg(feature = "data-fs")]
+    unsafe fn load_compiled(&mut self, source: &[u8]) -> Option<JSValue> {
+        let file = std::fs::read(compiled_path()).ok()?;
+        let header = file.get(..COMPILED_HEADER)?;
+        let payload = file.get(COMPILED_HEADER..)?;
+        // The engine trusts bytecode it reads, so the file has to be whole
+        // and has to belong to this bundle.
+        if header[..8] != *COMPILED_MAGIC
+            || header[8..16] != fnv1a64(source).to_le_bytes()
+            || header[16..24] != fnv1a64(payload).to_le_bytes()
+        {
+            return None;
+        }
+        let function = JS_ReadObject(
+            self.ctx,
+            payload.as_ptr(),
+            payload.len(),
+            JS_READ_OBJ_BYTECODE as i32,
+        );
+        if JS_IsException(function) {
+            // Drop the pending exception and compile from source instead.
+            JS_FreeValue(self.ctx, JS_GetException(self.ctx));
+            return None;
+        }
+        Some(function)
+    }
+
+    #[cfg(feature = "data-fs")]
+    unsafe fn save_compiled(&mut self, source: &[u8], function: JSValue) {
+        let mut size: size_t = 0;
+        let bytes = JS_WriteObject(self.ctx, &mut size, function, JS_WRITE_OBJ_BYTECODE as i32);
+        if bytes.is_null() {
+            JS_FreeValue(self.ctx, JS_GetException(self.ctx));
+            return;
+        }
+        let payload = core::slice::from_raw_parts(bytes, size);
+        let mut file = Vec::with_capacity(COMPILED_HEADER + payload.len());
+        file.extend_from_slice(COMPILED_MAGIC);
+        file.extend_from_slice(&fnv1a64(source).to_le_bytes());
+        file.extend_from_slice(&fnv1a64(payload).to_le_bytes());
+        file.extend_from_slice(payload);
+        js_free(self.ctx, bytes as *mut c_void);
+        let _ = std::fs::create_dir_all(crate::datafs::data_dir());
+        if let Err(error) = std::fs::write(compiled_path(), file) {
+            vita_log(format_args!("[PocketJS Vita] bytecode not saved: {error}"));
+        }
+    }
+
+    #[cfg(not(feature = "data-fs"))]
+    unsafe fn load_compiled(&mut self, _source: &[u8]) -> Option<JSValue> {
+        None
+    }
+
+    #[cfg(not(feature = "data-fs"))]
+    unsafe fn save_compiled(&mut self, _source: &[u8], _function: JSValue) {}
 
     unsafe fn call_frame(&mut self, values: &mut [JSValue]) -> Result<(), String> {
         *self.deadline = std::time::Instant::now() + std::time::Duration::from_millis(250);
