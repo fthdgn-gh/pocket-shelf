@@ -59,8 +59,39 @@ describe("moveSelection", () => {
     for (const view of ["carousel", "grid", "list"] as const) {
       for (const direction of ["left", "right", "up", "down"] as const) {
         expect(moveSelection(view, direction, 0, 0)).toBeNull();
+        expect(moveSelection(view, direction, 0, 0, true)).toBeNull();
       }
     }
+  });
+
+  test("with wrap, a press past an end continues at the other end", () => {
+    expect(moveSelection("carousel", "right", 2, 3, true)).toBe(0);
+    expect(moveSelection("carousel", "left", 0, 3, true)).toBe(2);
+    expect(moveSelection("list", "down", 2, 3, true)).toBe(0);
+    expect(moveSelection("list", "up", 0, 3, true)).toBe(2);
+    expect(moveSelection("grid", "right", GRID_COUNT - 1, GRID_COUNT, true)).toBe(0);
+    expect(moveSelection("grid", "left", 0, GRID_COUNT, true)).toBe(GRID_COUNT - 1);
+    // Inside the list, wrap changes nothing.
+    expect(moveSelection("carousel", "right", 0, 3, true)).toBe(1);
+    // The axis a view does not use stays unused.
+    expect(moveSelection("carousel", "up", 0, 3, true)).toBeNull();
+    expect(moveSelection("list", "left", 0, 3, true)).toBeNull();
+  });
+
+  test("with wrap, the grid keeps the column between its first and last rows", () => {
+    // Column 1 exists in the last row (two items).
+    expect(moveSelection("grid", "up", 1, GRID_COUNT, true)).toBe(GRID_COLUMNS * 2 + 1);
+    expect(moveSelection("grid", "down", GRID_COLUMNS * 2 + 1, GRID_COUNT, true)).toBe(1);
+    // Column 3 does not: up from the first row lands on the last item.
+    expect(moveSelection("grid", "up", 3, GRID_COUNT, true)).toBe(GRID_COUNT - 1);
+    // A single row has no other row to go to.
+    expect(moveSelection("grid", "up", 1, 3, true)).toBeNull();
+    expect(moveSelection("grid", "down", 1, 3, true)).toBeNull();
+  });
+
+  test("with wrap, a list of one item has nowhere to go", () => {
+    expect(moveSelection("carousel", "right", 0, 1, true)).toBeNull();
+    expect(moveSelection("list", "up", 0, 1, true)).toBeNull();
   });
 });
 

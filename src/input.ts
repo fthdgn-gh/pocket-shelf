@@ -20,7 +20,7 @@ const DIRECTIONS: readonly [mask: number, direction: FocusDirection, dx: number,
  *
  *  - D-pad: moves the selection in the current view, or drives the panel that
  *    is open (SELECT menu, title editor, keyboard, art picker). Holding a
- *    direction repeats it.
+ *    direction repeats it. A press at an end of the list goes to the other end.
  *  - L / R: previous / next category (shift / next page on the keyboard).
  *  - Confirm button (circle or cross): launch, or act in the open panel.
  *  - The other face button: back out of the open panel.
@@ -36,7 +36,9 @@ export function installInput(state: LauncherState): void {
   const move = (direction: FocusDirection, dx: number, dy: number, repeated: boolean) => {
     const modal = state.modal();
     if (modal === null) {
-      const next = moveSelection(state.view(), direction, state.selectedIndex(), state.games().length);
+      // A press wraps from one end of the list to the other. A held direction
+      // stops at the end, so holding it does not run around the list.
+      const next = moveSelection(state.view(), direction, state.selectedIndex(), state.games().length, !repeated);
       if (next !== null) state.select(next);
       return;
     }

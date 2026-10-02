@@ -513,6 +513,13 @@ const SHOTS: Shot[] = [
     steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE],
   },
   { name: "55-scrape-shelf", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]] },
+  // A press past an end of the list continues at the other end, in each view.
+  { name: "57-wrap-shelf", steps: [BTN.LEFT, [0, 30]] },
+  { name: "58-wrap-shelf-back", steps: [BTN.LEFT, [0, 30], BTN.RIGHT, [0, 30]] },
+  { name: "59-wrap-grid", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2), BTN.UP, [0, 30]] },
+  { name: "61-wrap-list", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.UP, [0, 30]] },
+  // A held direction stops at the end.
+  { name: "62-hold-stops", steps: [...tap(BTN.RTRIGGER, 1), [BTN.RIGHT, 120], [0, 30]] },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
   ...LANGUAGE_SHOTS,
 ];
