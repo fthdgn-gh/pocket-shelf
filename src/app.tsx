@@ -23,6 +23,7 @@ import { hints, Prompt, withButton } from "./components/icons.tsx";
 import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
 import { OnlineOverlay } from "./components/online.tsx";
+import { ScrapeOverlay } from "./components/scrape.tsx";
 import { fill } from "./i18n.ts";
 import { installInput } from "./input.ts";
 import { createLauncherState } from "./state.ts";
@@ -109,6 +110,9 @@ export default function App() {
       </Show>
       <Show when={state.online.open()}>
         <OnlineOverlay state={state} />
+      </Show>
+      <Show when={state.scrape.open()}>
+        <ScrapeOverlay state={state} />
       </Show>
       <Show when={state.modal() === "art"}>
         <ArtPickerOverlay state={state} />

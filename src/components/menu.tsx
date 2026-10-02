@@ -25,6 +25,7 @@ export function MenuOverlay(props: { state: LauncherState }) {
     { label: t().backdrop, value: onOff(state.backdropOn()), step: "both" },
     { label: t().iconBox, value: onOff(state.iconBoxOn()), step: "both" },
     { label: t().categoriesRow, value: t().manage, step: "right" },
+    { label: t().fetchArt, value: "SteamGridDB", step: "right" },
     { label: t().confirm, icon: state.confirmButton(), step: "both" },
     // Each language under its own name, whatever the current one is.
     { label: t().language, value: LANGUAGES.find((item) => item.id === state.language())?.name ?? "", step: "both" },

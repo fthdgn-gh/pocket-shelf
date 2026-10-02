@@ -10,6 +10,7 @@ import {
   SEARCH_ID,
   SHOW_EMPTY_CATEGORIES,
   SMART_CATEGORIES,
+  SYSTEM_ID,
   cycleCategory,
   loadCategoryConfig,
   makeCategoryId,
@@ -43,6 +44,7 @@ import {
   type TitleOverride,
 } from "./overrides.ts";
 import { loadRecent, pushRecent, saveRecent } from "./recent.ts";
+import { createScrapeFlow, type ScrapeScope } from "./scrape.ts";
 import { searchTitles } from "./search.ts";
 import { loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
@@ -52,10 +54,11 @@ import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./typ
 
 /**
  * Rows in the SELECT menu: theme, font, view, details, backdrop, icon box,
- * categories, confirm button, language. Language is last, one press up from
- * the first row, so it can be found in a language the user cannot read.
+ * categories, fetch artwork, confirm button, language. Language is last, one
+ * press up from the first row, so it can be found in a language the user
+ * cannot read.
  */
-export const MENU_ROWS = 9;
+export const MENU_ROWS = 10;
 
 /** Menu rows visible at once; the menu scrolls with the highlight. */
 export const MENU_VISIBLE = 7;
@@ -75,7 +78,7 @@ export const EDITOR_ROWS = 7;
 /** Art picker rows visible at once. */
 export const PICKER_ROWS = 5;
 
-export type Modal = "menu" | "editor" | "keyboard" | "art" | "online" | "categories";
+export type Modal = "menu" | "editor" | "keyboard" | "art" | "online" | "categories" | "scrape";
 
 /** What the file picker is choosing: a title's icon or its backdrop. */
 export type PickerKind = "art" | "backdrop";
@@ -531,6 +534,7 @@ export function createLauncherState(catalog: Catalog) {
     pumpNet();
     pumpBackdrops();
     online.frame();
+    scrape.frame();
     if (iconsPending && ++iconWait >= ICON_RETRY) {
       iconWait = 0;
       iconsPending = false;
@@ -555,7 +559,8 @@ export function createLauncherState(catalog: Catalog) {
     else if (row === 4) setBackdropOn((on) => !on);
     else if (row === 5) setIconBoxOn((on) => !on);
     else if (row === 6) openCategoryManager();
-    else if (row === 7) toggleConfirm();
+    else if (row === 7) scrape.start();
+    else if (row === 8) toggleConfirm();
     else setLanguage((id) => cycle(LANGUAGES.map((item) => item.id), id, delta));
   };
 
@@ -690,7 +695,9 @@ export function createLauncherState(catalog: Catalog) {
     } else if (target.kind === "search") {
       online.submitTerm(text);
     } else if (target.kind === "apiKey") {
-      online.submitKey(text);
+      // The key is asked for by whichever SteamGridDB panel is open.
+      if (scrape.open()) scrape.submitKey(text);
+      else online.submitKey(text);
     } else if (text) {
       const used = allCategories().some(
         (item) =>
@@ -799,6 +806,32 @@ export function createLauncherState(catalog: Catalog) {
       Object.values(overrides()).some((change) => (kind === "icon" ? change.art : change.backdrop) === file),
   });
 
+  // --- Fetch artwork for many titles (SELECT menu -> Fetch artwork) --------
+  // "All" leaves out the system applications: a search for "Settings" or
+  // "Music" finds an unrelated game. Their own category can still be chosen.
+  const scrapeScopes = (): ScrapeScope[] => [
+    { id: "", label: t().allTitles, titles: allGames().filter((game) => baseOf(game.id)?.category !== SYSTEM_ID) },
+    ...allCategories()
+      .filter((item) => !item.smart)
+      .map((item) => ({ id: item.id, label: item.label, titles: titlesOf(item.id) }))
+      .filter((item) => item.titles.length > 0),
+  ];
+  const scrape = createScrapeFlow({
+    t,
+    scopes: scrapeScopes,
+    // Start on the current category when it is one of the choices.
+    startScope: () => Math.max(0, scrapeScopes().findIndex((item) => item.id === categoryId())),
+    askKey: () => openKeyboard({ kind: "apiKey" }, ""),
+    apply: (titleId, kind, file) => {
+      if (kind === "icon") {
+        // The new file has to be in the name index before it can be an icon.
+        setArtIndex(readArtIndex());
+        patchOverride(titleId, { art: file });
+        loadIconsAround();
+      } else patchOverride(titleId, { backdrop: file });
+    },
+  });
+
   // --- Category manager (SELECT menu -> Categories) ------------------------
   const [catOpen, setCatOpen] = createSignal(false);
   const [catRow, setCatRow] = createSignal(0);
@@ -899,6 +932,7 @@ export function createLauncherState(catalog: Catalog) {
     if (keyboardOpen()) return "keyboard";
     if (artOpen()) return "art";
     if (online.open()) return "online";
+    if (scrape.open()) return "scrape";
     if (editorOpen()) return "editor";
     if (catOpen()) return "categories";
     return menuOpen() ? "menu" : null;
@@ -923,6 +957,9 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "online":
         online.move(dx, dy);
+        break;
+      case "scrape":
+        scrape.move(dx, dy);
         break;
       case "categories":
         if (dy !== 0) catMove(dy);
@@ -954,6 +991,9 @@ export function createLauncherState(catalog: Catalog) {
       case "online":
         online.confirm();
         break;
+      case "scrape":
+        scrape.confirm();
+        break;
       case "categories":
         catConfirm();
         break;
@@ -969,6 +1009,9 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "online":
         online.cancel();
+        break;
+      case "scrape":
+        scrape.cancel();
         break;
       case "editor":
         closeEditor();
@@ -1049,6 +1092,7 @@ export function createLauncherState(catalog: Catalog) {
     artNote,
     pickerKind,
     online,
+    scrape,
     allCategories,
     hasTitles: () => catalog.games.length > 0,
     customCategories,

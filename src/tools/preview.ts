@@ -354,6 +354,7 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("launching", [BTN.RIGHT, BTN.CIRCLE]),
     shot("picker", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, BTN.DOWN]),
     shot("online-key", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE]),
+    shot("scrape", [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE]),
   ];
 });
 
@@ -481,6 +482,37 @@ const SHOTS: Shot[] = [
       "restart", BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, BTN.UP,
     ],
   },
+  // SELECT, down to "Fetch artwork": the titles to fetch for, the run, its end.
+  { name: "49-scrape-setup", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE] },
+  { name: "50-scrape-all", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, BTN.LEFT, BTN.DOWN] },
+  {
+    name: "51-scrape-running",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90]],
+  },
+  {
+    name: "52-scrape-done",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900]],
+  },
+  {
+    name: "53-scrape-stopped",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90], BTN.CROSS],
+  },
+  // "All" after a run: every title is fetched for once more.
+  {
+    name: "56-scrape-replace",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, BTN.DOWN, BTN.RIGHT],
+  },
+  // After a run every title of the category has a file: nothing is left to fetch.
+  {
+    name: "54-scrape-again",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE],
+  },
+  { name: "55-scrape-shelf", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]] },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
   ...LANGUAGE_SHOTS,
 ];
