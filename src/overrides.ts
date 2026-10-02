@@ -53,6 +53,31 @@ function sanitize(value: unknown): TitleOverride {
   return clean;
 }
 
+/** The art or backdrop files the titles' changes name. */
+export function filesInUse(overrides: Overrides, kind: "art" | "backdrop"): Set<string> {
+  const used = new Set<string>();
+  for (const change of Object.values(overrides)) {
+    const file = change[kind];
+    if (file !== undefined && file !== USE_ICON && file !== NO_BACKDROP) used.add(file);
+  }
+  return used;
+}
+
+/**
+ * `overrides` without the art and backdrop files they name. The choices that
+ * name no file ("icon", "none") stay.
+ */
+export function withoutFiles(overrides: Overrides): Overrides {
+  const next: Overrides = {};
+  for (const [id, change] of Object.entries(overrides)) {
+    const kept: TitleOverride = { ...change };
+    if (kept.art !== undefined && kept.art !== USE_ICON) delete kept.art;
+    if (kept.backdrop !== undefined && kept.backdrop !== NO_BACKDROP) delete kept.backdrop;
+    if (Object.keys(kept).length > 0) next[id] = kept;
+  }
+  return next;
+}
+
 export function loadOverrides(): Overrides {
   const result: Overrides = {};
   try {

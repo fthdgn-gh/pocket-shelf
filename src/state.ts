@@ -1,5 +1,6 @@
 import { batch, createEffect, createMemo, createSignal, on } from "solid-js";
 import { registerTexture } from "@pocketjs/framework";
+import { rmSync } from "@pocketjs/framework/fs";
 import { appIcon, launchApp } from "@pocketjs/framework/launcher";
 import {
   BUILTIN_CATEGORIES,
@@ -30,7 +31,7 @@ import {
 import { boxColors, type BoxColors } from "./accent.ts";
 import { pumpNet } from "./net.ts";
 import { createOnlineFlow } from "./online.ts";
-import { KEY_MAX } from "./steamgriddb.ts";
+import { KEY_MAX, fileBelongsTo } from "./steamgriddb.ts";
 import { TINT_COLORS, type Catalog } from "./catalog.ts";
 import { DEFAULT_LANGUAGE, LANGUAGES, MESSAGES, fill, type Language } from "./i18n.ts";
 import { KEY_PAGES, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn, type KeyPage } from "./keyboard.ts";
@@ -38,8 +39,10 @@ import {
   NO_BACKDROP,
   TITLE_MAX,
   USE_ICON,
+  filesInUse,
   loadOverrides,
   saveOverrides,
+  withoutFiles,
   type Overrides,
   type TitleOverride,
 } from "./overrides.ts";
@@ -54,11 +57,11 @@ import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./typ
 
 /**
  * Rows in the SELECT menu: theme, font, view, details, backdrop, icon box,
- * categories, fetch artwork, confirm button, language. Language is last, one
- * press up from the first row, so it can be found in a language the user
- * cannot read.
+ * categories, fetch artwork, clean up artwork, confirm button, language.
+ * Language is last, one press up from the first row, so it can be found in a
+ * language the user cannot read.
  */
-export const MENU_ROWS = 10;
+export const MENU_ROWS = 11;
 
 /** Menu rows visible at once; the menu scrolls with the highlight. */
 export const MENU_VISIBLE = 7;
@@ -69,6 +72,12 @@ const BACKDROP_DELAY = 15;
 /** Frames between two requests for a backdrop the host is still decoding. */
 const BACKDROP_RETRY = 2;
 
+/** Frames the picker's highlight rests on a row before its picture is loaded. */
+const PREVIEW_DELAY = 8;
+
+/** Frames between two requests for a picker picture the host is still decoding. */
+const PREVIEW_RETRY = 2;
+
 /** Frames between two requests for the icons the host is still decoding. */
 const ICON_RETRY = 2;
 
@@ -78,7 +87,7 @@ export const EDITOR_ROWS = 7;
 /** Art picker rows visible at once. */
 export const PICKER_ROWS = 5;
 
-export type Modal = "menu" | "editor" | "keyboard" | "art" | "online" | "categories" | "scrape";
+export type Modal = "menu" | "editor" | "keyboard" | "art" | "online" | "categories" | "scrape" | "clean";
 
 /** What the file picker is choosing: a title's icon or its backdrop. */
 export type PickerKind = "art" | "backdrop";
@@ -542,6 +551,7 @@ export function createLauncherState(catalog: Catalog) {
     }
     blendDynamicColor();
     if (backdropWait > 0 && --backdropWait === 0) loadBackdrop();
+    if (previewWait > 0 && --previewWait === 0) loadPickerPreview();
   };
 
   // --- SELECT menu -------------------------------------------------------
@@ -560,7 +570,8 @@ export function createLauncherState(catalog: Catalog) {
     else if (row === 5) setIconBoxOn((on) => !on);
     else if (row === 6) openCategoryManager();
     else if (row === 7) scrape.start();
-    else if (row === 8) toggleConfirm();
+    else if (row === 8) openCleanup();
+    else if (row === 9) toggleConfirm();
     else setLanguage((id) => cycle(LANGUAGES.map((item) => item.id), id, delta));
   };
 
@@ -737,9 +748,32 @@ export function createLauncherState(catalog: Catalog) {
   // rows are "Default" and "Game icon"; for a backdrop, "Default" and "None".
   const [artOpen, setArtOpen] = createSignal(false);
   const [pickerKind, setPickerKind] = createSignal<PickerKind>("art");
-  const [artFiles, setArtFiles] = createSignal<string[]>([]);
+  // Every PNG file of the folder, and whether the picker lists them all or
+  // only the ones named after the edited title.
+  const [folderFiles, setFolderFiles] = createSignal<string[]>([]);
+  const [pickerEvery, setPickerEvery] = createSignal(false);
   const [artRow, setArtRow] = createSignal(0);
   const [artNote, setArtNote] = createSignal("");
+
+  /** The file the edited title uses now, when the user chose one. */
+  const chosenFile = (): string | undefined => {
+    const game = editorGame();
+    if (pickerKind() === "backdrop") return game?.backdrop === NO_BACKDROP ? undefined : game?.backdrop;
+    return game?.artAuto ? undefined : game?.art;
+  };
+  /**
+   * The folder's files named after the edited title: its id, its name, or
+   * the name it came with. Fetched pictures start with the id (see
+   * `assetFile`). The file in use is listed whatever its name.
+   */
+  const titleFiles = (): string[] => {
+    const game = editorGame();
+    if (!game) return [];
+    const names = [game.title, baseOf(game.id)?.title ?? "", game.id];
+    const chosen = chosenFile();
+    return folderFiles().filter((file) => file === chosen || fileBelongsTo(file, names));
+  };
+  const artFiles = createMemo(() => (pickerEvery() ? folderFiles() : titleFiles()));
 
   const openArtPicker = (kind: PickerKind = "art") => {
     const game = editorGame();
@@ -747,19 +781,78 @@ export function createLauncherState(catalog: Catalog) {
     if (kind === "art") {
       const files = listArt();
       setArtIndex(new Map(files.map((name) => [name.toLowerCase(), name])));
-      setArtFiles(files);
-      const current = game?.artAuto ? -1 : files.indexOf(game?.art ?? "");
-      setArtRow(game?.artIcon ? 1 : current >= 0 ? current + 2 : 0);
-    } else {
-      const files = listBackdrops();
-      setArtFiles(files);
-      const current = files.indexOf(game?.backdrop ?? "");
-      setArtRow(game?.backdrop === NO_BACKDROP ? 1 : current >= 0 ? current + 2 : 0);
-    }
+      setFolderFiles(files);
+    } else setFolderFiles(listBackdrops());
+    // A title with no files of its own starts on the whole folder.
+    setPickerEvery(titleFiles().length === 0);
+    const current = artFiles().indexOf(chosenFile() ?? "");
+    const fixed = kind === "art" ? game?.artIcon : game?.backdrop === NO_BACKDROP;
+    setArtRow(fixed ? 1 : current >= 0 ? current + 2 : 0);
     setArtNote("");
     setArtOpen(true);
   };
   const closeArtPicker = () => setArtOpen(false);
+  /** Switch between this title's files and the whole folder. The highlight stays on its file. */
+  const togglePickerFiles = () => {
+    const file = artFiles()[artRow() - 2];
+    setPickerEvery((every) => !every);
+    const index = file === undefined ? -1 : artFiles().indexOf(file);
+    setArtRow((row) => (index >= 0 ? index + 2 : Math.min(row, 1)));
+  };
+
+  // The highlighted row's picture, shown beside the picker. It loads once the
+  // highlight has rested on a row, so scrolling does not decode every file.
+  const [pickerPreview, setPickerPreview] = createSignal<string | undefined>(undefined);
+  let previewWait = 0;
+  // Texture handle of the backdrop shown, given back when it leaves the screen.
+  let previewBackdrop = -1;
+  const clearPickerPreview = () => {
+    releaseBackdrop(previewBackdrop);
+    previewBackdrop = -1;
+    setPickerPreview(undefined);
+  };
+  createEffect(() => {
+    artRow();
+    artFiles();
+    pickerKind();
+    clearPickerPreview();
+    previewWait = artOpen() ? PREVIEW_DELAY : 0;
+  });
+  const loadPickerPreview = () => {
+    const game = editorGame();
+    if (!game || !artOpen()) return;
+    const row = artRow();
+    const file = row >= 2 ? artFiles()[row - 2] : undefined;
+    if (pickerKind() === "backdrop") {
+      // Row 0 is the title's own picture, row 1 is none.
+      if (row === 1) return;
+      const handle = native ? acquireBackdrop(game.id, file ?? "") : -1;
+      if (handle === TEXTURE_PENDING) {
+        previewWait = PREVIEW_RETRY;
+        return;
+      }
+      if (handle < 0) return;
+      const key = `backdrop.${game.id}.${file ?? ""}.${handle}`;
+      registerTexture(key, handle);
+      previewBackdrop = handle;
+      setPickerPreview(key);
+      return;
+    }
+    // Row 0 is a file matched by name, or the title's own icon; row 1 is that icon.
+    const name = file ?? (row === 0 ? findArt(game.id, baseOf(game.id)?.title ?? "", game.title) : undefined);
+    const handle = name ? artTexture(name) : appIcon(game.id);
+    const key = name ? `art.${name}` : `installed.${game.id}`;
+    if (handle === TEXTURE_PENDING) {
+      previewWait = PREVIEW_RETRY;
+      return;
+    }
+    if (handle < 0) return;
+    if (!registeredKeys.has(key)) {
+      registeredKeys.add(key);
+      registerTexture(key, handle);
+    }
+    setPickerPreview(key);
+  };
   const artMove = (dy: number) => {
     const count = artFiles().length + 2;
     setArtRow((row) => (row + dy + count) % count);
@@ -831,6 +924,94 @@ export function createLauncherState(catalog: Catalog) {
       } else patchOverride(titleId, { backdrop: file });
     },
   });
+
+  // --- Clean up artwork (SELECT menu -> Clean up artwork) --------------------
+  // Deletes files from the art and backdrops folders: the ones no title uses,
+  // or all of them. Two rows: which files, then "Delete", pressed twice.
+  const [cleanOpen, setCleanOpen] = createSignal(false);
+  const [cleanRow, setCleanRow] = createSignal(0);
+  const [cleanEvery, setCleanEvery] = createSignal(false);
+  const [cleanArmed, setCleanArmed] = createSignal(false);
+  const [cleanNote, setCleanNote] = createSignal("");
+  // The folders as they were read when the panel opened or last deleted.
+  const [cleanFolders, setCleanFolders] = createSignal<{ art: string[]; backdrop: string[] }>({
+    art: [],
+    backdrop: [],
+  });
+  const readCleanFolders = () => setCleanFolders({ art: listArt(), backdrop: listBackdrops() });
+  /** The files the chosen mode deletes, per folder. */
+  const cleanTargets = (): { art: string[]; backdrop: string[] } => {
+    const folders = cleanFolders();
+    if (cleanEvery()) return folders;
+    // In use: a file a title's changes name, or an icon matched to a title by its name.
+    const art = filesInUse(overrides(), "art");
+    for (const game of allGames()) if (game.art) art.add(game.art);
+    const backdrop = filesInUse(overrides(), "backdrop");
+    return {
+      art: folders.art.filter((file) => !art.has(file)),
+      backdrop: folders.backdrop.filter((file) => !backdrop.has(file)),
+    };
+  };
+  const cleanCount = () => cleanTargets().art.length + cleanTargets().backdrop.length;
+
+  const openCleanup = () => {
+    readCleanFolders();
+    setArtIndex(readArtIndex());
+    batch(() => {
+      setCleanRow(0);
+      setCleanEvery(false);
+      setCleanArmed(false);
+      setCleanNote("");
+      setCleanOpen(true);
+    });
+  };
+  const closeCleanup = () => setCleanOpen(false);
+  const cleanMove = (dx: number, dy: number) => {
+    batch(() => {
+      setCleanArmed(false);
+      setCleanNote("");
+      if (dy !== 0) setCleanRow((row) => (row + dy + 2) % 2);
+      else if (cleanRow() === 0 && dx !== 0) setCleanEvery((every) => !every);
+    });
+  };
+  const deleteCleanTargets = () => {
+    const targets = cleanTargets();
+    let deleted = 0;
+    for (const [folder, files] of [["art", targets.art], ["backdrops", targets.backdrop]] as const) {
+      for (const file of files) {
+        try {
+          rmSync(`${folder}/${file}`, { force: true });
+          deleted++;
+        } catch {
+          // The file stays and is counted again when the folders are read.
+        }
+      }
+    }
+    // With every file gone, the titles that named one go back to their own pictures.
+    if (cleanEvery()) setOverrides(withoutFiles);
+    readCleanFolders();
+    setArtIndex(readArtIndex());
+    loadIconsAround();
+    return deleted;
+  };
+  /** On "Delete", press twice: the first press asks, the second deletes. */
+  const cleanConfirm = () => {
+    if (cleanRow() === 0) {
+      cleanMove(1, 0);
+      return;
+    }
+    if (cleanCount() === 0) {
+      setCleanNote(t().cleanNothing);
+    } else if (cleanArmed()) {
+      const deleted = deleteCleanTargets();
+      batch(() => {
+        setCleanArmed(false);
+        setCleanNote(fill(t().cleanDone, { count: deleted }));
+      });
+    } else {
+      setCleanArmed(true);
+    }
+  };
 
   // --- Category manager (SELECT menu -> Categories) ------------------------
   const [catOpen, setCatOpen] = createSignal(false);
@@ -933,6 +1114,7 @@ export function createLauncherState(catalog: Catalog) {
     if (artOpen()) return "art";
     if (online.open()) return "online";
     if (scrape.open()) return "scrape";
+    if (cleanOpen()) return "clean";
     if (editorOpen()) return "editor";
     if (catOpen()) return "categories";
     return menuOpen() ? "menu" : null;
@@ -960,6 +1142,9 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "scrape":
         scrape.move(dx, dy);
+        break;
+      case "clean":
+        cleanMove(dx, dy);
         break;
       case "categories":
         if (dy !== 0) catMove(dy);
@@ -994,6 +1179,9 @@ export function createLauncherState(catalog: Catalog) {
       case "scrape":
         scrape.confirm();
         break;
+      case "clean":
+        cleanConfirm();
+        break;
       case "categories":
         catConfirm();
         break;
@@ -1012,6 +1200,9 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "scrape":
         scrape.cancel();
+        break;
+      case "clean":
+        closeCleanup();
         break;
       case "editor":
         closeEditor();
@@ -1088,11 +1279,19 @@ export function createLauncherState(catalog: Catalog) {
     backspace,
     commitKeyboard,
     artFiles,
+    pickerEvery,
+    togglePickerFiles,
+    pickerPreview,
     artRow,
     artNote,
     pickerKind,
     online,
     scrape,
+    cleanRow,
+    cleanEvery,
+    cleanArmed,
+    cleanNote,
+    cleanCount,
     allCategories,
     hasTitles: () => catalog.games.length > 0,
     customCategories,

@@ -76,6 +76,8 @@ export const fr: Messages = {
   resetDone: "Valeurs par défaut rétablies",
   gameIcon: "Icône du jeu",
   autoArt: "{file} (auto)",
+  allFiles: "Tous les fichiers",
+  thisTitle: "Ce titre",
   noPng: "Aucun fichier PNG. Copiez des images dans",
 
   newCategory: "Nouvelle catégorie",
@@ -139,4 +141,14 @@ export const fr: Messages = {
   scrapeStopped: "Arrêté.",
   scrapeNothing: "Ici, chaque titre a déjà ses images.",
   scrapeWaiting: "SteamGridDB est occupé. Attente...",
+
+  cleanArt: "Nettoyer les images",
+  cleanMode: "Supprimer",
+  unused: "Inutilisées",
+  cleanCount: "{count} fichiers",
+  cleanHelpUnused: "Supprime les fichiers de jaquette et d'arrière-plan qu'aucun titre n'utilise.",
+  cleanHelpAll: "Supprime tous les fichiers de jaquette et d'arrière-plan, y compris ceux que vous avez copiés. Les titres reprennent leurs propres images.",
+  cleanConfirm: "Appuyez encore pour supprimer {count} fichiers.",
+  cleanDone: "{count} fichiers supprimés.",
+  cleanNothing: "Il n'y a rien à supprimer.",
 };

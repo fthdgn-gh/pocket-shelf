@@ -16,6 +16,7 @@ import { TINT_AMBIENT } from "./components/art.tsx";
 import { ArtPickerOverlay } from "./components/art-picker.tsx";
 import { Backdrop } from "./components/backdrop.tsx";
 import { CategoryManagerOverlay } from "./components/category-manager.tsx";
+import { CleanupOverlay } from "./components/cleanup.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
 import { Footer } from "./components/footer.tsx";
 import { Header } from "./components/header.tsx";
@@ -113,6 +114,9 @@ export default function App() {
       </Show>
       <Show when={state.scrape.open()}>
         <ScrapeOverlay state={state} />
+      </Show>
+      <Show when={state.modal() === "clean"}>
+        <CleanupOverlay state={state} />
       </Show>
       <Show when={state.modal() === "art"}>
         <ArtPickerOverlay state={state} />

@@ -76,6 +76,8 @@ export const de: Messages = {
   resetDone: "Auf Standard zurückgesetzt",
   gameIcon: "Spielsymbol",
   autoArt: "{file} (auto)",
+  allFiles: "Alle Dateien",
+  thisTitle: "Dieser Titel",
   noPng: "Keine PNG-Dateien. Bilder kopieren nach",
 
   newCategory: "Neue Kategorie",
@@ -139,4 +141,14 @@ export const de: Messages = {
   scrapeStopped: "Angehalten.",
   scrapeNothing: "Hier hat jeder Titel schon seine Bilder.",
   scrapeWaiting: "SteamGridDB ist ausgelastet. Warte...",
+
+  cleanArt: "Bilder aufräumen",
+  cleanMode: "Entfernen",
+  unused: "Unbenutzte",
+  cleanCount: "{count} Dateien",
+  cleanHelpUnused: "Löscht die Cover- und Hintergrunddateien, die kein Titel verwendet.",
+  cleanHelpAll: "Löscht alle Cover- und Hintergrunddateien, auch selbst kopierte. Die Titel zeigen wieder ihre eigenen Bilder.",
+  cleanConfirm: "Erneut drücken, um {count} Dateien zu löschen.",
+  cleanDone: "{count} Dateien gelöscht.",
+  cleanNothing: "Es gibt nichts zu löschen.",
 };

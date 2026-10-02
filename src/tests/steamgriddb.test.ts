@@ -7,6 +7,8 @@ import {
   GAMES_MAX,
   assetFile,
   assetPath,
+  fileBelongsTo,
+  fileSlug,
   assetsUrl,
   authorization,
   parseAssets,
@@ -41,9 +43,10 @@ describe("requests", () => {
 
   test("a candidate is saved under its id, in the folder for its kind", () => {
     const asset = { id: 9001, url: "https://cdn2.steamgriddb.com/hero/x.png" };
-    expect(assetFile(asset)).toBe("sgdb-9001.png");
-    expect(assetPath("icon", asset)).toBe("art/sgdb-9001.png");
-    expect(assetPath("backdrop", asset)).toBe("backdrops/sgdb-9001.png");
+    const owner = { id: "PCSA00069" };
+    expect(assetFile(asset, owner)).toBe("PCSA00069-9001.png");
+    expect(assetPath("icon", asset, owner)).toBe("art/PCSA00069-9001.png");
+    expect(assetPath("backdrop", asset, owner)).toBe("backdrops/PCSA00069-9001.png");
   });
 });
 
@@ -92,6 +95,28 @@ describe("parseAssets", () => {
       url: `https://cdn2.steamgriddb.com/icon/${index}.png`,
     }));
     expect(parseAssets(200, reply(many))).toHaveLength(ASSETS_MAX);
+  });
+});
+
+describe("file names", () => {
+  test("fileSlug keeps letters and digits, with a dash between words", () => {
+    expect(fileSlug("Pokémon: Stadium 2")).toBe("pokemon-stadium-2");
+    expect(fileSlug("  Uncharted™ -- Golden Abyss  ")).toBe("uncharted-golden-abyss");
+    expect(fileSlug("Işık Kılıcı")).toBe("isik-kilici");
+    expect(fileSlug("!!!")).toBe("");
+  });
+
+  test("fileBelongsTo matches a file named after the title or its id", () => {
+    const names = ["Gravity Daze", "PCSA00069"];
+    expect(fileBelongsTo("PCSA00069-48213.png", names)).toBe(true);
+    expect(fileBelongsTo("gravity-daze-48213.png", names)).toBe(true);
+    expect(fileBelongsTo("Gravity Daze.png", names)).toBe(true);
+    expect(fileBelongsTo("PCSA00069.png", names)).toBe(true);
+    expect(fileBelongsTo("gravity-rush-48213.png", names)).toBe(false);
+    // The name has to end at a word: "gravity-dazed" is another title.
+    expect(fileBelongsTo("gravity-dazed-1.png", names)).toBe(false);
+    expect(fileBelongsTo("PCSA000690-1.png", names)).toBe(false);
+    expect(fileBelongsTo("anything.png", ["", "!!!"])).toBe(false);
   });
 });
 
