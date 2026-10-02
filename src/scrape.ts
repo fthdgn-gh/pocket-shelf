@@ -197,7 +197,7 @@ export function createScrapeFlow(deps: Deps) {
         after();
         return;
       }
-      const file = assetFile(asset);
+      const file = assetFile(asset, game);
       const use = () => {
         deps.apply(game.id, kind, file);
         setFound((counts) => ({ ...counts, [kind]: counts[kind] + 1 }));
@@ -210,7 +210,7 @@ export function createScrapeFlow(deps: Deps) {
       setStatus(t().downloading);
       cancel = saveFile(
         asset.url,
-        assetPath(kind, asset),
+        assetPath(kind, asset, game),
         (saved) => {
           if (mine !== turn) return;
           if (!saved.ok) {

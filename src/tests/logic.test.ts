@@ -9,6 +9,7 @@ import { LANGUAGES, MESSAGES, fill, upper } from "../i18n.ts";
 import { ACCENTS_FIRST, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
+import { filesInUse, withoutFiles } from "../overrides.ts";
 import { RECENT_MAX, pushRecent } from "../recent.ts";
 import { missingArt } from "../scrape.ts";
 import { searchTitles } from "../search.ts";
@@ -223,6 +224,26 @@ describe("fetching artwork for many titles", () => {
     expect(missingArt({ ...game, backdrop: "neon.png" })).toEqual(["icon"]);
     expect(missingArt({ ...game, backdrop: "none" })).toEqual(["icon"]);
     expect(missingArt({ ...game, art: "neon.png", backdrop: "neon.png" })).toEqual([]);
+  });
+});
+
+describe("cleaning up artwork", () => {
+  const overrides = {
+    PCSA00069: { art: "PCSA00069-1.png", backdrop: "PCSA00069-2.png", favorite: true as const },
+    PCSB00245: { art: "icon", backdrop: "none", title: "Neon" },
+    PCSE00317: { backdrop: "PCSE00317-3.png" },
+  };
+
+  test("filesInUse lists the files the titles name, not the choices without a file", () => {
+    expect([...filesInUse(overrides, "art")]).toEqual(["PCSA00069-1.png"]);
+    expect([...filesInUse(overrides, "backdrop")].sort()).toEqual(["PCSA00069-2.png", "PCSE00317-3.png"]);
+  });
+
+  test("withoutFiles drops the files and keeps every other change", () => {
+    expect(withoutFiles(overrides)).toEqual({
+      PCSA00069: { favorite: true },
+      PCSB00245: { art: "icon", backdrop: "none", title: "Neon" },
+    });
   });
 });
 

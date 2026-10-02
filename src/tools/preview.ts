@@ -186,6 +186,9 @@ function uploadImage(ops: Record<string, unknown>, pixels: Uint8Array, width: nu
   return entry(blob);
 }
 
+/** The in-memory data folder of the shot being captured. */
+let dataFolder: { write(path: string, data: string, mode: number): number } | undefined;
+
 /** The API key the preview "saved": the fake SteamGridDB accepts this one only. */
 const PREVIEW_KEY = "0123456789abcdef0123456789abcdef";
 
@@ -211,18 +214,21 @@ function installNet(ops: Record<string, unknown>): void {
       text = JSON.stringify({ success: false, errors: ["Authentication Required"] });
     } else if (url.includes("/search/autocomplete/")) {
       const term = decodeURIComponent(url.split("/").pop() ?? "");
+      // A game id per search term, so each title gets pictures of its own.
+      const id = 100 + ([...term].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % 800) * 10;
       text = reply([
-        { id: 4501, name: term, release_date: 1339459200 },
-        { id: 4502, name: `${term} 2`, release_date: 1484870400 },
-        { id: 4503, name: `${term} Remastered`, release_date: 1454371200 },
-        { id: 4504, name: `${term}: The Animation`, release_date: 0 },
+        { id, name: term, release_date: 1339459200 },
+        { id: id + 1, name: `${term} 2`, release_date: 1484870400 },
+        { id: id + 2, name: `${term} Remastered`, release_date: 1454371200 },
+        { id: id + 3, name: `${term}: The Animation`, release_date: 0 },
       ]);
     } else if (url.includes("/icons/game/") || url.includes("/heroes/game/")) {
       const kind = url.includes("/icons/") ? "icon" : "hero";
       const count = kind === "icon" ? 14 : 6;
+      const game = Number(/\/game\/(\d+)/.exec(url)?.[1] ?? 0);
       text = reply(
         Array.from({ length: count }, (_, index) => ({
-          id: (kind === "icon" ? 7000 : 9000) + index,
+          id: game * 100 + (kind === "icon" ? 0 : 50) + index,
           url: `https://cdn2.steamgriddb.com/${kind}/${index}.png`,
         })),
       );
@@ -230,7 +236,9 @@ function installNet(ops: Record<string, unknown>): void {
     requests.set(next, { polls: 0, status, text, size: text.length });
     return next++;
   };
-  ops.__netSave = (_url: string, _path: string): number => {
+  ops.__netSave = (_url: string, path: string): number => {
+    // The download lands in the data folder, so the pickers list it.
+    dataFolder?.write(path, JSON.stringify("PNG"), 0);
     requests.set(next, { polls: 0, status: 200, text: "", size: 480 * 1024 });
     return next++;
   };
@@ -355,6 +363,7 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("picker", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, BTN.DOWN]),
     shot("online-key", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE]),
     shot("scrape", [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE]),
+    shot("clean", [BTN.SELECT, ...tap(BTN.DOWN, 8), BTN.CIRCLE, BTN.RIGHT]),
   ];
 });
 
@@ -520,6 +529,49 @@ const SHOTS: Shot[] = [
   { name: "61-wrap-list", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.UP, [0, 30]] },
   // A held direction stops at the end.
   { name: "62-hold-stops", steps: [...tap(BTN.RTRIGGER, 1), [BTN.RIGHT, 120], [0, 30]] },
+  // After fetching for a category: the box art picker lists the title's own
+  // file and shows the highlighted one beside the drawer.
+  {
+    name: "63-picker-title",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]],
+  },
+  // Triangle: every file of the folder.
+  {
+    name: "64-picker-all",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), [0, 40]],
+  },
+  {
+    name: "65-picker-backdrop",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 40]],
+  },
+  // The fixed rows preview too: "Default" is the title's own icon.
+  { name: "66-picker-default", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]] },
+  // Clean up artwork after a fetch: every file is in use, so "Unused" finds none.
+  {
+    name: "67-clean-unused",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE],
+  },
+  // "All", then "Delete" once: the question before the files go.
+  {
+    name: "68-clean-ask",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, BTN.CIRCLE],
+  },
+  {
+    name: "69-clean-done",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2)],
+  },
+  // The titles are back on their own icons.
+  {
+    name: "70-clean-shelf",
+    key: true,
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2), ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]],
+  },
   { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
   ...LANGUAGE_SHOTS,
 ];
@@ -540,6 +592,7 @@ function countNodes(tree: unknown): number {
 
 async function capture(shot: Shot): Promise<void> {
   const files = createSimFsHost();
+  dataFolder = files.ns as typeof dataFolder;
   if (shot.key) {
     (files.ns as { write(path: string, data: string, mode: number): number }).write(
       "steamgriddb.txt",

@@ -85,6 +85,8 @@ export const en = {
   resetDone: "Reset to the defaults",
   gameIcon: "Game icon",
   autoArt: "{file} (auto)",
+  allFiles: "All files",
+  thisTitle: "This title",
   noPng: "No PNG files yet. Copy images to",
 
   // Category manager
@@ -153,6 +155,17 @@ export const en = {
   scrapeStopped: "Stopped.",
   scrapeNothing: "Every title here already has its artwork.",
   scrapeWaiting: "SteamGridDB is busy. Waiting...",
+
+  // Clean up artwork
+  cleanArt: "Clean up artwork",
+  cleanMode: "Remove",
+  unused: "Unused",
+  cleanCount: "{count} files",
+  cleanHelpUnused: "Deletes the box art and backdrop files that no title uses.",
+  cleanHelpAll: "Deletes every box art and backdrop file, including ones you copied here. Titles go back to their own pictures.",
+  cleanConfirm: "Press again to delete {count} files.",
+  cleanDone: "{count} files deleted.",
+  cleanNothing: "There is nothing to delete.",
 };
 
 export type Messages = typeof en;

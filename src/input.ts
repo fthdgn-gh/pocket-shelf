@@ -27,6 +27,7 @@ const DIRECTIONS: readonly [mask: number, direction: FocusDirection, dx: number,
  *  - Triangle: edit the selected title. Square: search. SELECT: menu.
  *  - On the search tab, the back button closes the search.
  *  - Square and START: delete a character and finish, on the keyboard.
+ *  - Art and backdrop pickers: triangle switches between the title's files and all files.
  *  - Category manager: triangle new, square delete, START hide / show, L / R move up / down.
  *
  * Nothing on screen is focusable: the launcher owns the selection, so the
@@ -88,8 +89,13 @@ export function installInput(state: LauncherState): void {
     const modal = state.modal();
     if (modal === null || modal === "menu") state.toggleMenu();
   });
-  onButtonPress(BTN.TRIANGLE, state.openEditor, { active: closed });
-  // One handler each for square and START. With one handler per panel, a
+  onButtonPress(BTN.TRIANGLE, () => {
+    const modal = state.modal();
+    if (modal === null) state.openEditor();
+    else if (modal === "categories") state.catNew();
+    else if (modal === "art") state.togglePickerFiles();
+  });
+  // One handler each for triangle, square and START. With one handler per panel, a
   // press that opens or closes a panel also reached the handler of the panel
   // it led to: opening the search keyboard removed a character.
   onButtonPress(BTN.SQUARE, () => {
@@ -104,7 +110,6 @@ export function installInput(state: LauncherState): void {
     else if (modal === "categories") state.catToggleHidden();
   });
   const managing = () => state.modal() === "categories";
-  onButtonPress(BTN.TRIANGLE, state.catNew, { active: managing });
   onButtonPress(BTN.LTRIGGER, () => state.catReorder(-1), { active: managing });
   onButtonPress(BTN.RTRIGGER, () => state.catReorder(1), { active: managing });
 }

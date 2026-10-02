@@ -76,6 +76,8 @@ export const tr: Messages = {
   resetDone: "Varsayılana sıfırlandı",
   gameIcon: "Oyun simgesi",
   autoArt: "{file} (otomatik)",
+  allFiles: "Tüm dosyalar",
+  thisTitle: "Bu başlık",
   noPng: "PNG yok. Görselleri şuraya kopyalayın:",
 
   newCategory: "Yeni kategori",
@@ -139,4 +141,14 @@ export const tr: Messages = {
   scrapeStopped: "Durduruldu.",
   scrapeNothing: "Buradaki her başlığın görseli zaten var.",
   scrapeWaiting: "SteamGridDB meşgul. Bekleniyor...",
+
+  cleanArt: "Görselleri temizle",
+  cleanMode: "Kaldır",
+  unused: "Kullanılmayanlar",
+  cleanCount: "{count} dosya",
+  cleanHelpUnused: "Hiçbir başlığın kullanmadığı kapak ve arka plan dosyalarını siler.",
+  cleanHelpAll: "Buraya kopyaladıklarınız dahil tüm kapak ve arka plan dosyalarını siler. Başlıklar kendi görsellerine döner.",
+  cleanConfirm: "{count} dosyayı silmek için yeniden basın.",
+  cleanDone: "{count} dosya silindi.",
+  cleanNothing: "Silinecek bir şey yok.",
 };

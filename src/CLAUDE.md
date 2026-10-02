@@ -162,8 +162,16 @@ cannot be driven. Evidence comes from its log and from files under
 - `/search/autocomplete/{term}`, `/icons/game/{id}`, `/heroes/game/{id}`.
   The app asks for static PNG only, since the decoders read PNG. There are no
   thumbnails: a candidate is downloaded in full to preview it.
-- Downloads land in `art/` and `backdrops/` as `sgdb-<id>.png`. Candidates not
-  chosen are deleted when the drawer closes.
+- Downloads land in `art/` and `backdrops/` as `<title id>-<id>.png`: the
+  title id, then the picture's SteamGridDB id (`PCSA00069-48213.png`). Candidates not chosen are deleted when the
+  drawer closes.
+- **The art and backdrop pickers** list the files named after the edited
+  title (`fileBelongsTo`: its name, the name it came with, or its id), or the
+  whole folder; triangle switches. A title with no files of its own starts on
+  the whole folder. The highlighted row's picture shows left of the drawer
+  (`Drawer`'s `aside`) once the highlight has rested 8 frames. An icon
+  preview stays in memory like every art texture (256 px at most); a backdrop
+  preview is released when the highlight moves.
 
 - **Fetch artwork (SELECT menu)** runs the same lookups for many titles
   (`scrape.ts`): all titles or one category, one request at a time, the first
@@ -176,6 +184,13 @@ cannot be driven. Evidence comes from its log and from files under
   megabytes. `http::state` calls `sceKernelPowerTick` while a request runs so
   the console does not suspend during a long run. Checked against the
   preview's stand-in server only.
+
+- **Clean up artwork (SELECT menu)** deletes files from `art/` and
+  `backdrops/`: "Unused" keeps a file a title's changes name and an icon
+  matched to a title by name; "All" deletes every file, the user's own
+  included, and takes the file names out of the titles' changes
+  (`withoutFiles`). "Delete" is pressed twice. A title that is no longer
+  installed still counts as using its files.
 
 ## Data folder (`ux0:/data/PocketShelf/`)
 

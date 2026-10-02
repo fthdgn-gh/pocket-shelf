@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "@pocketjs/framework/fs";
+import { searchKey } from "./search.ts";
 
 // SteamGridDB (https://www.steamgriddb.com/api/v2): search a game by name,
 // then list its icons and heroes. Every call needs the user's own API key,
@@ -68,13 +69,47 @@ export function assetsUrl(kind: AssetKind, gameId: number): string {
     : `${API}/heroes/game/${gameId}?types=static&mimes=image/png&dimensions=1920x620,1600x650`;
 }
 
-/** File a candidate is downloaded to, under the data folder. */
-export function assetPath(kind: AssetKind, asset: SgdbAsset): string {
-  return `${kind === "icon" ? "art" : "backdrops"}/${assetFile(asset)}`;
+/**
+ * A name as part of a file name: lowercase letters without their marks and
+ * digits, with "-" between words ("Pokémon: Stadium 2" gives "pokemon-stadium-2").
+ */
+export function fileSlug(text: string): string {
+  return searchKey(text)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-export function assetFile(asset: SgdbAsset): string {
-  return `sgdb-${asset.id}.png`;
+/** The title a downloaded picture is for. */
+export interface AssetOwner {
+  /** Title id, for example PCSA00069. */
+  id: string;
+}
+
+/** File a candidate is downloaded to, under the data folder. */
+export function assetPath(kind: AssetKind, asset: SgdbAsset, owner: AssetOwner): string {
+  return `${kind === "icon" ? "art" : "backdrops"}/${assetFile(asset, owner)}`;
+}
+
+/**
+ * File name of a candidate: the id of the title it is for, then the picture's
+ * id on SteamGridDB, for example "PCSA00069-48213.png". The title id does not
+ * change when the user renames the title, and it lets the picker list the
+ * files of one title.
+ */
+export function assetFile(asset: SgdbAsset, owner: AssetOwner): string {
+  return `${owner.id}-${asset.id}.png`;
+}
+
+/**
+ * Whether a file is named after one of `names` (a title, its earlier title,
+ * its id): the name alone, or followed by "-" and more.
+ */
+export function fileBelongsTo(file: string, names: readonly string[]): boolean {
+  const base = fileSlug(file.replace(/\.png$/i, ""));
+  return names.some((name) => {
+    const slug = fileSlug(name);
+    return slug !== "" && (base === slug || base.startsWith(`${slug}-`));
+  });
 }
 
 /**

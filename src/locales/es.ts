@@ -76,6 +76,8 @@ export const es: Messages = {
   resetDone: "Valores restablecidos",
   gameIcon: "Icono del juego",
   autoArt: "{file} (auto)",
+  allFiles: "Todos los archivos",
+  thisTitle: "Este título",
   noPng: "No hay archivos PNG. Copia imágenes en",
 
   newCategory: "Nueva categoría",
@@ -139,4 +141,14 @@ export const es: Messages = {
   scrapeStopped: "Detenido.",
   scrapeNothing: "Aquí todos los títulos ya tienen sus imágenes.",
   scrapeWaiting: "SteamGridDB está ocupado. Esperando...",
+
+  cleanArt: "Limpiar imágenes",
+  cleanMode: "Eliminar",
+  unused: "Sin usar",
+  cleanCount: "{count} archivos",
+  cleanHelpUnused: "Borra los archivos de carátula y de fondo que ningún título usa.",
+  cleanHelpAll: "Borra todos los archivos de carátula y de fondo, incluidos los que copiaste. Los títulos vuelven a sus propias imágenes.",
+  cleanConfirm: "Pulsa otra vez para borrar {count} archivos.",
+  cleanDone: "{count} archivos borrados.",
+  cleanNothing: "No hay nada que borrar.",
 };

@@ -21,6 +21,8 @@ export function Drawer(props: {
   state: LauncherState;
   title: string;
   size?: keyof typeof DRAWER;
+  /** Drawn over the dimmed screen, left of the panel. */
+  aside?: JSX.Element;
   children: JSX.Element;
 }) {
   const shape = DRAWER[props.size ?? "narrow"];
@@ -30,6 +32,7 @@ export function Drawer(props: {
   });
   return (
     <View class="absolute inset-0" style={{ bgColor: props.state.theme().scrim }}>
+      {props.aside}
       <View
         ref={(el) => {
           panelRef = el;

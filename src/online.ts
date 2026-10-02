@@ -184,14 +184,15 @@ export function createOnlineFlow(deps: Deps) {
     cancelAll();
     const mine = turn;
     const asset = current(kind);
-    const id = deps.game()?.id;
+    const owner = deps.game();
+    const id = owner?.id;
     setPreview((previous) => ({ ...previous, [kind]: undefined }));
     if (kind === "backdrop") dropBackdropPreview();
-    if (!asset || !id) {
+    if (!asset || !owner || !id) {
       setStatus(kind === "icon" ? t().noIcons : t().noBackdrops);
       return;
     }
-    const file = assetFile(asset);
+    const file = assetFile(asset, owner);
     const display = () => {
       const handle = kind === "icon" ? artTexture(file) : acquireBackdrop(id, file);
       if (handle === TEXTURE_PENDING) {
@@ -225,7 +226,7 @@ export function createOnlineFlow(deps: Deps) {
     cancels.push(
       saveFile(
         asset.url,
-        assetPath(kind, asset),
+        assetPath(kind, asset, owner),
         (result) => {
           if (mine !== turn) return;
           setBusy(false);
@@ -324,8 +325,9 @@ export function createOnlineFlow(deps: Deps) {
     } else {
       const kind = kindOfRow();
       const asset = current(kind);
-      if (!asset || preview()[kind] === undefined) return;
-      deps.apply(kind, assetFile(asset));
+      const owner = deps.game();
+      if (!asset || !owner || preview()[kind] === undefined) return;
+      deps.apply(kind, assetFile(asset, owner));
       setStatus(kind === "icon" ? t().iconApplied : t().backdropApplied);
     }
   };
