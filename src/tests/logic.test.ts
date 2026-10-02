@@ -10,6 +10,7 @@ import { ACCENTS_FIRST, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn } from "
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
 import { RECENT_MAX, pushRecent } from "../recent.ts";
+import { missingArt } from "../scrape.ts";
 import { searchTitles } from "../search.ts";
 
 describe("moveSelection", () => {
@@ -171,6 +172,26 @@ describe("search", () => {
 
   test("a title id matches too", () => {
     expect(ids("pcsf")).toEqual(["PCSF00042"]);
+  });
+});
+
+describe("fetching artwork for many titles", () => {
+  const game = { title: "Neon Drift", id: "PCSB00245", genre: "PS Vita", category: "games", tint: 0 };
+
+  test("a title with no files of its own lacks both pictures", () => {
+    expect(missingArt(game)).toEqual(["icon", "backdrop"]);
+  });
+
+  test("an icon the user chose, one matched by name, and the title's own icon are kept", () => {
+    expect(missingArt({ ...game, art: "neon.png" })).toEqual(["backdrop"]);
+    expect(missingArt({ ...game, art: "PCSB00245.png", artAuto: true })).toEqual(["backdrop"]);
+    expect(missingArt({ ...game, artIcon: true })).toEqual(["backdrop"]);
+  });
+
+  test("a chosen backdrop, or the choice of none, is kept", () => {
+    expect(missingArt({ ...game, backdrop: "neon.png" })).toEqual(["icon"]);
+    expect(missingArt({ ...game, backdrop: "none" })).toEqual(["icon"]);
+    expect(missingArt({ ...game, art: "neon.png", backdrop: "neon.png" })).toEqual([]);
   });
 });
 

@@ -131,6 +131,28 @@ export const en = {
   serverBusy: "SteamGridDB is busy. Try again in a moment.",
   serverStatus: "SteamGridDB answered with status {status}.",
   badReply: "SteamGridDB sent an unexpected reply.",
+
+  // Fetch artwork for many titles
+  fetchArt: "Fetch artwork",
+  scrapeScope: "Titles",
+  allTitles: "All",
+  start: "Start",
+  stop: "Stop",
+  scrapeCount: "{count} without artwork",
+  scrapeHelp: "Looks up each title on SteamGridDB and uses its first icon and backdrop. Titles that already have their own are skipped.",
+  scrapeMode: "Fetch",
+  onlyMissing: "Missing only",
+  everything: "All",
+  scrapeCountAll: "{count} titles",
+  scrapeHelpAll: "Looks up each title on SteamGridDB and replaces its icon and backdrop with the first ones found, including pictures you chose.",
+  progress: "Progress",
+  icons: "Icons",
+  backdrops: "Backdrops",
+  notFound: "Not found",
+  scrapeDone: "Finished.",
+  scrapeStopped: "Stopped.",
+  scrapeNothing: "Every title here already has its artwork.",
+  scrapeWaiting: "SteamGridDB is busy. Waiting...",
 };
 
 export type Messages = typeof en;

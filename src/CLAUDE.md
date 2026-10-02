@@ -161,6 +161,18 @@ cannot be driven. Evidence comes from its log and from files under
 - Downloads land in `art/` and `backdrops/` as `sgdb-<id>.png`. Candidates not
   chosen are deleted when the drawer closes.
 
+- **Fetch artwork (SELECT menu)** runs the same lookups for many titles
+  (`scrape.ts`): all titles or one category, one request at a time, the first
+  game's first icon and first hero. "Missing only" asks for the pictures a
+  title has no file for (`missingArt`); "All" replaces both for every
+  title, the user's own choices included. "All" leaves out system applications,
+  whose names match unrelated games. A busy reply (429) is waited out five
+  times; any other failure halts the run, since it would repeat for every
+  title. A run costs up to five requests per title and a hero PNG is a few
+  megabytes. `http::state` calls `sceKernelPowerTick` while a request runs so
+  the console does not suspend during a long run. Checked against the
+  preview's stand-in server only.
+
 ## Data folder (`ux0:/data/PocketShelf/`)
 
 `settings.json` (settings, the language among them, and the last selection),

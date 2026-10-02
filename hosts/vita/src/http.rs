@@ -391,7 +391,17 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, cancel: &AtomicBool) 
 /// One line describing a request; see the module comment.
 pub fn state(id: i32) -> String {
     with_slot(id, |slot| match &slot.outcome {
-        Outcome::Busy => format!("busy {} {}", slot.received, slot.total),
+        Outcome::Busy => {
+            // The guest polls a running request once per frame. Fetching
+            // artwork for many titles takes minutes with no button pressed;
+            // the tick resets the idle timer so the console does not suspend
+            // and drop the connection.
+            extern "C" {
+                fn sceKernelPowerTick(kind: u32) -> i32;
+            }
+            unsafe { sceKernelPowerTick(0) };
+            format!("busy {} {}", slot.received, slot.total)
+        }
         Outcome::Done { status } => format!("done {} {}", status, slot.received),
         Outcome::Failed(reason) => format!("error {reason}"),
     })
