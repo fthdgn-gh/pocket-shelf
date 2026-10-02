@@ -2,6 +2,7 @@ import { Show } from "solid-js";
 import { Text, View } from "@pocketjs/framework/components";
 import type { LauncherState } from "../state.ts";
 import { fitTitle } from "../catalog.ts";
+import { fill } from "../i18n.ts";
 import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
 
@@ -24,16 +25,16 @@ export function Footer(props: { state: LauncherState }) {
           <Prompt
             state={state}
             parts={hints(
-              [state.confirmButton(), "Launch"],
-              ["triangle", "Edit"],
-              ["square", "Search"],
-              state.searching() ? [state.cancelButton(), "Close"] : ["select", "Menu"],
+              [state.confirmButton(), state.t().launch],
+              ["triangle", state.t().edit],
+              ["square", state.t().search],
+              state.searching() ? [state.cancelButton(), state.t().close] : ["select", state.t().menu],
             )}
           />
         }
       >
         <Text class={state.text().smallBold} style={{ textColor: state.theme().accent }}>
-          {`Launching ${state.launchingTitle()}...`}
+          {fill(state.t().launching, { title: state.launchingTitle() ?? "" })}
         </Text>
       </Show>
       <View class="flex-row items-center gap-2 shrink-0">

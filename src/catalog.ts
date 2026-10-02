@@ -9,9 +9,14 @@ export const TINT_COUNT = 6;
 /** The tints as `0xRRGGBB`, for a title whose icon gives no color of its own. */
 export const TINT_COLORS: readonly number[] = [0xf59e0b, 0x10b981, 0x3b82f6, 0x8b5cf6, 0xec4899, 0x06b6d4];
 
-// The baked font has no trademark glyphs; they render as empty boxes.
+// The baked font has no trademark glyphs; they render as empty boxes. A mark
+// between two words with no space ("PlayStation®Store") becomes a space.
 export function cleanTitle(title: string): string {
-  return title.replace(/[®™©℠]/g, "").replace(/\s+/g, " ").trim();
+  return title
+    .replace(/(\w)[®™©℠](?=\w)/g, "$1 ")
+    .replace(/[®™©℠]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -25,6 +30,25 @@ export function fitTitle(title: string, maxWidth: number, slot: number): string 
   let end = title.length;
   while (end > 1 && width(`${title.slice(0, end).trimEnd()}...`) > maxWidth) end--;
   return `${title.slice(0, end).trimEnd()}...`;
+}
+
+/**
+ * `text` broken into lines of at most `maxWidth` pixels in the given font
+ * slot. Breaks fall between words; a word wider than a line stays whole.
+ */
+export function wrapText(text: string, maxWidth: number, slot: number): string[] {
+  const ops = getOps();
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ops.measureText(next, slot) > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  lines.push(line);
+  return lines;
 }
 
 /** The end of `text` that fits `maxWidth` pixels, led by "..." when it was cut. */
@@ -49,12 +73,38 @@ export interface Catalog {
 const ADRENALINE_ID = "PSPEMUCFW";
 const ADRENALINE_BUBBLE_PREFIX = "PSPEMU";
 
+// The host reports every application in the firmware's `vs0:app`, ids `NPXS`
+// plus digits. Most are background services and dialogs. These are the ones
+// with a bubble on the home screen, the same set vita-launcher lists, less
+// its Package Installer.
+const SYSTEM_APP_PREFIX = "NPXS";
+const SYSTEM_APPS: ReadonlySet<string> = new Set([
+  "NPXS10000", // near
+  "NPXS10001", // Party
+  "NPXS10002", // PlayStation Store
+  "NPXS10003", // Internet Browser
+  "NPXS10004", // Photos
+  "NPXS10006", // Friends
+  "NPXS10008", // Trophy Collection
+  "NPXS10009", // Music
+  "NPXS10010", // Videos
+  "NPXS10014", // Messages
+  "NPXS10015", // Settings
+  "NPXS10026", // Content Manager
+  "NPXS10072", // Email
+  "NPXS10091", // Calendar
+  "NPXS10094", // Parental Controls
+  "NPXS10098", // PS4 Link
+]);
+
 /**
  * Whether an installed title belongs in the launcher. Adrenaline's game
  * bubbles are left out: each one is a shortcut into Adrenaline, not a title
- * of its own. Adrenaline itself stays.
+ * of its own. Adrenaline itself stays. Of the system applications, the ones
+ * in `SYSTEM_APPS` are listed.
  */
 export function isListed(titleId: string): boolean {
+  if (titleId.startsWith(SYSTEM_APP_PREFIX)) return SYSTEM_APPS.has(titleId);
   return titleId === ADRENALINE_ID || !titleId.startsWith(ADRENALINE_BUBBLE_PREFIX);
 }
 

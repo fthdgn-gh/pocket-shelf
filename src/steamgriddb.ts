@@ -77,24 +77,33 @@ export function assetFile(asset: SgdbAsset): string {
   return `sgdb-${asset.id}.png`;
 }
 
-/** The `data` array of an API reply, or a message saying why there is none. */
-function dataOf(status: number, text: string): unknown[] | string {
-  if (status === 401) return "SteamGridDB did not accept the API key.";
+/**
+ * Why a reply has no data. `problem` is the key of its message in the
+ * language files; the message for "serverStatus" names `status`.
+ */
+export interface SgdbProblem {
+  problem: "keyRejected" | "serverBusy" | "serverStatus" | "badReply";
+  status: number;
+}
+
+/** The `data` array of an API reply, or why there is none. */
+function dataOf(status: number, text: string): unknown[] | SgdbProblem {
+  if (status === 401) return { problem: "keyRejected", status };
   if (status === 404) return [];
-  if (status === 429) return "SteamGridDB is busy. Try again in a moment.";
-  if (status !== 200) return `SteamGridDB answered with status ${status}.`;
+  if (status === 429) return { problem: "serverBusy", status };
+  if (status !== 200) return { problem: "serverStatus", status };
   try {
     const reply = JSON.parse(text) as { success?: boolean; data?: unknown };
-    if (reply.success !== true || !Array.isArray(reply.data)) return "SteamGridDB sent an unexpected reply.";
+    if (reply.success !== true || !Array.isArray(reply.data)) return { problem: "badReply", status };
     return reply.data;
   } catch {
-    return "SteamGridDB sent an unexpected reply.";
+    return { problem: "badReply", status };
   }
 }
 
-export function parseGames(status: number, text: string): SgdbGame[] | string {
+export function parseGames(status: number, text: string): SgdbGame[] | SgdbProblem {
   const data = dataOf(status, text);
-  if (typeof data === "string") return data;
+  if (!Array.isArray(data)) return data;
   const games: SgdbGame[] = [];
   for (const item of data as { id?: unknown; name?: unknown; release_date?: unknown }[]) {
     if (typeof item?.id !== "number" || typeof item.name !== "string" || !item.name) continue;
@@ -109,9 +118,9 @@ export function parseGames(status: number, text: string): SgdbGame[] | string {
   return games;
 }
 
-export function parseAssets(status: number, text: string): SgdbAsset[] | string {
+export function parseAssets(status: number, text: string): SgdbAsset[] | SgdbProblem {
   const data = dataOf(status, text);
-  if (typeof data === "string") return data;
+  if (!Array.isArray(data)) return data;
   const assets: SgdbAsset[] = [];
   for (const item of data as { id?: unknown; url?: unknown }[]) {
     if (typeof item?.id !== "number" || typeof item.url !== "string") continue;

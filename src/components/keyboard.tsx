@@ -3,6 +3,7 @@ import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
 import { getOps } from "@pocketjs/framework/host";
 import { fitTail } from "../catalog.ts";
+import type { KeyDef } from "../keyboard.ts";
 import type { LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
@@ -26,8 +27,15 @@ export function KeyboardOverlay(props: { state: LauncherState }) {
   };
   const shown = () =>
     fitTail(`${state.keyboardText()}_`, FIELD_TEXT_W - noteW(), fontSlot(state.font(), "bodyBold"));
-  const label = (key: { action: string; lower: string; upper: string }) =>
-    key.action === "symbols" ? (state.symbols() ? "Abc" : "Symbols") : state.shift() ? key.upper : key.lower;
+  const t = state.t;
+  const label = (key: KeyDef) => {
+    if (key.action === "char") return state.shift() ? key.upper : key.lower;
+    if (key.action === "symbols") return state.symbols() ? t().keyLetters : t().symbols;
+    if (key.action === "shift") return t().shift;
+    if (key.action === "space") return t().keySpace;
+    if (key.action === "delete") return t().keyDelete;
+    return t().done;
+  };
   return (
     <View class="absolute inset-0" style={{ bgColor: theme().scrim }}>
       <View
@@ -79,17 +87,21 @@ export function KeyboardOverlay(props: { state: LauncherState }) {
           )}
         </For>
         <View class="h-[2] shrink-0" />
-        <Prompt
-          state={state}
-          parts={hints(
-            [state.confirmButton(), "Key"],
-            ["square", "Delete"],
-            ["l", "Shift"],
-            ["r", "Symbols"],
-            ["start", "Done"],
-            [state.cancelButton(), "Cancel"],
-          )}
-        />
+        {/* The screen's width less a margin, so a long line of hints wraps inside it. */}
+        <View class="flex-col w-[456]">
+          <Prompt
+            state={state}
+            center
+            parts={hints(
+              [state.confirmButton(), t().key],
+              ["square", t().keyDelete],
+              ["l", t().shift],
+              ["r", t().symbols],
+              ["start", t().done],
+              [state.cancelButton(), t().cancel],
+            )}
+          />
+        </View>
       </View>
     </View>
   );

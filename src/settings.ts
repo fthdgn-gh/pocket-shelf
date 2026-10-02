@@ -1,10 +1,12 @@
 import { readFileSync, writeFileSync } from "@pocketjs/framework/fs";
+import { LANGUAGES, type Language } from "./i18n.ts";
 import { FONTS, type FontId } from "./text.ts";
 import { THEMES, type ThemeId } from "./themes.ts";
 import { DETAIL_LEVELS, VIEW_MODES } from "./navigation.ts";
 import type { ConfirmMode, DetailLevel, ViewMode } from "./types.ts";
 
 export interface Settings {
+  language: Language;
   theme: ThemeId;
   font: FontId;
   view: ViewMode;
@@ -31,6 +33,7 @@ export function loadSettings(): Partial<Settings> | null {
   try {
     const raw = JSON.parse(readFileSync(SETTINGS_FILE, "utf8")) as Partial<Settings>;
     const result: Partial<Settings> = {};
+    if (LANGUAGES.some((item) => item.id === raw.language)) result.language = raw.language;
     if (THEMES.some((theme) => theme.id === raw.theme)) result.theme = raw.theme;
     if (FONTS.some((item) => item.id === raw.font)) result.font = raw.font;
     if (VIEW_MODES.includes(raw.view as ViewMode)) result.view = raw.view;

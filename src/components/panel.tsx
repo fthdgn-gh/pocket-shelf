@@ -1,7 +1,10 @@
-import { onMount, Show, type JSX } from "solid-js";
+import { For, onMount, Show, type JSX } from "solid-js";
 import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
+import { wrapText } from "../catalog.ts";
+import { upper } from "../i18n.ts";
 import type { LauncherState } from "../state.ts";
+import { fontSlot } from "../text.ts";
 import { alpha } from "../themes.ts";
 import { Icon, type IconName } from "./icons.tsx";
 
@@ -36,7 +39,7 @@ export function Drawer(props: {
       >
         <View class="absolute top-0 left-0 bottom-0 w-[2]" style={{ bgColor: props.state.theme().accent }} />
         <Text class={props.state.text().label} style={{ textColor: props.state.theme().accent }}>
-          {props.title.toUpperCase()}
+          {upper(props.title, props.state.language())}
         </Text>
         <View class="h-[4] shrink-0" />
         {props.children}
@@ -95,11 +98,22 @@ export function Spacer() {
   return <View class="grow" />;
 }
 
-/** A line of dim text at the bottom of a panel. */
-export function Note(props: { state: LauncherState; children: JSX.Element }) {
+// Text room in a wide drawer: its width less the padding on both sides.
+const NOTE_W = DRAWER.wide.width - 28;
+
+/**
+ * Dim text at the bottom of a wide drawer. Text does not wrap by itself, so
+ * a note wider than the drawer is broken into lines here.
+ */
+export function Note(props: { state: LauncherState; children: string }) {
+  const lines = () => wrapText(props.children, NOTE_W, fontSlot(props.state.font(), "small"));
   return (
-    <Text class={props.state.text().small} style={{ textColor: props.state.theme().dim }}>
-      {props.children}
-    </Text>
+    <For each={lines()}>
+      {(line) => (
+        <Text class={props.state.text().small} style={{ textColor: props.state.theme().dim }}>
+          {line}
+        </Text>
+      )}
+    </For>
   );
 }

@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { cleanTitle, isListed } from "../catalog.ts";
 import { categoryOf, cycleCategory, makeCategoryId } from "../categories.ts";
+import { LANGUAGES, MESSAGES, fill, upper } from "../i18n.ts";
 import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
@@ -79,19 +80,19 @@ describe("paging and icon loading", () => {
 describe("categories", () => {
   test("categoryOf reads the title id prefix", () => {
     expect(categoryOf("PCSA00069")).toBe("games");
-    expect(categoryOf("NPXS10001")).toBe("apps");
+    expect(categoryOf("NPXS10001")).toBe("system");
     expect(categoryOf("PBCF7609D")).toBe("homebrew");
   });
 
   test("cycleCategory wraps in both directions", () => {
-    const list = ["games", "apps", "homebrew"];
-    expect(cycleCategory(list, "games", 1)).toBe("apps");
+    const list = ["games", "system", "homebrew"];
+    expect(cycleCategory(list, "games", 1)).toBe("system");
     expect(cycleCategory(list, "homebrew", 1)).toBe("games");
     expect(cycleCategory(list, "games", -1)).toBe("homebrew");
   });
 
   test("cycleCategory tolerates an unknown current id and an empty list", () => {
-    expect(cycleCategory(["games", "apps"], "gone", 1)).toBe("apps");
+    expect(cycleCategory(["games", "system"], "gone", 1)).toBe("system");
     expect(cycleCategory([], "games", 1)).toBe("games");
   });
 
@@ -159,6 +160,45 @@ describe("search", () => {
   });
 });
 
+describe("languages", () => {
+  // The `{name}` places of every text, by key, nested texts included.
+  const places = (messages: object, prefix = ""): Record<string, string[]> => {
+    const found: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(messages)) {
+      if (typeof value === "string") found[prefix + key] = (value.match(/\{\w+\}/g) ?? []).sort();
+      else if (Array.isArray(value)) found[prefix + key] = [];
+      else Object.assign(found, places(value, `${prefix}${key}.`));
+    }
+    return found;
+  };
+
+  test("every language has the same texts with the same places as English", () => {
+    for (const { id } of LANGUAGES) {
+      expect(places(MESSAGES[id])).toEqual(places(MESSAGES.en));
+    }
+  });
+
+  test("no text is left empty", () => {
+    const texts = (value: unknown): string[] =>
+      typeof value === "string" ? [value] : Object.values(value as object).flatMap(texts);
+    for (const { id } of LANGUAGES) {
+      for (const text of texts(MESSAGES[id])) expect(text.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  test("fill replaces the places it has a value for", () => {
+    expect(fill("Launching {title}...", { title: "Gravity Daze" })).toBe("Launching Gravity Daze...");
+    expect(fill("{count} found", { count: 3 })).toBe("3 found");
+    expect(fill("Press {button} again", {})).toBe("Press {button} again");
+  });
+
+  test("upper keeps the Turkish dotted and dotless i apart", () => {
+    expect(upper("Kategoriler", "tr")).toBe("KATEGORİLER");
+    expect(upper("Yazı tipi", "tr")).toBe("YAZI TİPİ");
+    expect(upper("Kategorien", "de")).toBe("KATEGORIEN");
+  });
+});
+
 describe("keyboard", () => {
   test("every character key has a shifted twin", () => {
     for (const rows of [LETTER_ROWS, SYMBOL_ROWS]) {
@@ -209,6 +249,7 @@ describe("titles", () => {
   test("cleanTitle drops trademark glyphs and collapses spaces", () => {
     expect(cleanTitle("Uncharted™:  Golden Abyss®")).toBe("Uncharted: Golden Abyss");
     expect(cleanTitle("  Plain  ")).toBe("Plain");
+    expect(cleanTitle("PlayStation®Store")).toBe("PlayStation Store");
   });
 
   test("Adrenaline's game bubbles are not listed; Adrenaline and other titles are", () => {
@@ -217,6 +258,13 @@ describe("titles", () => {
     expect(isListed("PSPEMUCFW")).toBe(true);
     expect(isListed("PCSA00069")).toBe(true);
     expect(isListed("VITASHELL")).toBe(true);
+  });
+
+  test("system applications with a home screen bubble are listed; services are not", () => {
+    expect(isListed("NPXS10015")).toBe(true); // Settings
+    expect(isListed("NPXS10003")).toBe(true); // Internet Browser
+    expect(isListed("NPXS10016")).toBe(false); // the Settings dialog
+    expect(isListed("NPXS10079")).toBe(false); // Daily Checker BG
   });
 });
 

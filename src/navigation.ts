@@ -5,18 +5,6 @@ import type { DetailLevel, ViewMode } from "./types.ts";
 export const VIEW_MODES: readonly ViewMode[] = ["carousel", "grid", "list"];
 export const DETAIL_LEVELS: readonly DetailLevel[] = ["basic", "normal", "detailed"];
 
-export const DETAIL_LABELS: Record<DetailLevel, string> = {
-  basic: "Basic",
-  normal: "Normal",
-  detailed: "Detailed",
-};
-
-export const VIEW_LABELS: Record<ViewMode, string> = {
-  carousel: "Carousel",
-  grid: "Grid",
-  list: "List",
-};
-
 /** Items the L and R triggers jump over in each view. */
 export function pageSize(view: ViewMode): number {
   if (view === "grid") return GRID_COLUMNS * GRID_ROWS;

@@ -19,10 +19,11 @@ import { CategoryManagerOverlay } from "./components/category-manager.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
 import { Footer } from "./components/footer.tsx";
 import { Header } from "./components/header.tsx";
-import { hints, Prompt } from "./components/icons.tsx";
+import { hints, Prompt, withButton } from "./components/icons.tsx";
 import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
 import { OnlineOverlay } from "./components/online.tsx";
+import { fill } from "./i18n.ts";
 import { installInput } from "./input.ts";
 import { createLauncherState } from "./state.ts";
 import { fontSlot } from "./text.ts";
@@ -60,20 +61,22 @@ export default function App() {
               fallback={
                 <>
                   <Text class={state.text().title} style={{ textColor: state.theme().text }}>
-                    {state.hasTitles() ? "Nothing in this category yet" : "No installed apps found"}
+                    {state.hasTitles() ? state.t().emptyCategory : state.t().noTitles}
                   </Text>
                   <Show when={state.hasTitles()}>
-                    <Prompt state={state} parts={["Press", { icon: "triangle" }, "on a title to move it here"]} />
+                    <Prompt state={state} parts={withButton(state.t().moveHere, "triangle")} />
                   </Show>
                 </>
               }
             >
               <Text class={state.text().title} style={{ textColor: state.theme().text }}>
-                {`No title matches "${fitTitle(state.searchTerm(), 180, fontSlot(state.font(), "title"))}"`}
+                {fill(state.t().noMatch, {
+                  term: fitTitle(state.searchTerm(), 180, fontSlot(state.font(), "title")),
+                })}
               </Text>
               <Prompt
                 state={state}
-                parts={hints(["square", "Search again"], [state.cancelButton(), "Close"])}
+                parts={hints(["square", state.t().searchAgain], [state.cancelButton(), state.t().close])}
               />
             </Show>
           </View>

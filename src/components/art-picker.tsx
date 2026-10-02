@@ -13,7 +13,8 @@ import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
 export function ArtPickerOverlay(props: { state: LauncherState }) {
   const { state } = props;
   const backdrop = () => state.pickerKind() === "backdrop";
-  const entries = () => ["Default", backdrop() ? "None" : "Game icon", ...state.artFiles()];
+  const t = state.t;
+  const entries = () => [t().standard, backdrop() ? t().none : t().gameIcon, ...state.artFiles()];
   // Scroll so the highlighted row stays in view.
   const first = () => {
     const last = entries().length - PICKER_ROWS;
@@ -21,7 +22,7 @@ export function ArtPickerOverlay(props: { state: LauncherState }) {
   };
   const visible = () => entries().slice(first(), first() + PICKER_ROWS);
   return (
-    <Drawer state={state} title={backdrop() ? "Backdrop" : "Box art"} size="wide">
+    <Drawer state={state} title={backdrop() ? t().backdrop : t().boxArt} size="wide">
       <For each={visible()}>
         {(name, index) => (
           <OptionRow
@@ -36,10 +37,10 @@ export function ArtPickerOverlay(props: { state: LauncherState }) {
         <Note state={state}>{state.artNote()}</Note>
       </Show>
       <Show when={!state.artNote() && state.artFiles().length === 0}>
-        <Note state={state}>No PNG files yet. Copy images to</Note>
+        <Note state={state}>{t().noPng}</Note>
         <Note state={state}>{backdrop() ? backdropFolder() : artFolder()}</Note>
       </Show>
-      <Prompt state={state} parts={hints([state.confirmButton(), "Use"], [state.cancelButton(), "Back"])} />
+      <Prompt state={state} parts={hints([state.confirmButton(), t().use], [state.cancelButton(), t().back])} />
     </Drawer>
   );
 }

@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import { fitTitle } from "../catalog.ts";
+import { fill } from "../i18n.ts";
 import { NO_BACKDROP } from "../overrides.ts";
 import type { LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
@@ -12,33 +13,34 @@ const VALUE_W = 160;
 /** Per-title editor: favorite, category, title, box art, backdrop, SteamGridDB and reset. */
 export function EditorOverlay(props: { state: LauncherState }) {
   const { state } = props;
+  const t = state.t;
   const fit = (value: string) => fitTitle(value, VALUE_W, fontSlot(state.font(), "bodyBold"));
   const art = () => {
     const game = state.editorGame();
-    if (game?.artIcon) return "Game icon";
-    if (!game?.art) return "Default";
-    return game.artAuto ? `${game.art} (auto)` : game.art;
+    if (game?.artIcon) return t().gameIcon;
+    if (!game?.art) return t().standard;
+    return game.artAuto ? fill(t().autoArt, { file: game.art }) : game.art;
   };
   const backdrop = () => {
     const file = state.editorGame()?.backdrop;
-    if (file === NO_BACKDROP) return "None";
-    return file ?? "Default";
+    if (file === NO_BACKDROP) return t().none;
+    return file ?? t().standard;
   };
   const rows = () => {
     const game = state.editorGame();
     const category = state.categoryLabel(game?.category ?? "");
     return [
-      { label: "Favorite", value: game?.favorite ? "On" : "Off", step: "both" as const },
-      { label: "Category", value: category, step: "both" as const },
-      { label: "Title", value: fit(game?.title ?? ""), step: "right" as const },
-      { label: "Box art", value: fit(art()), step: "right" as const },
-      { label: "Backdrop", value: fit(backdrop()), step: "right" as const },
-      { label: "SteamGridDB", value: "Search", step: "right" as const },
-      { label: "Reset to defaults", value: "", step: undefined },
+      { label: t().favorite, value: game?.favorite ? t().on : t().off, step: "both" as const },
+      { label: t().category, value: category, step: "both" as const },
+      { label: t().title, value: fit(game?.title ?? ""), step: "right" as const },
+      { label: t().boxArt, value: fit(art()), step: "right" as const },
+      { label: t().backdrop, value: fit(backdrop()), step: "right" as const },
+      { label: "SteamGridDB", value: t().search, step: "right" as const },
+      { label: t().reset, value: "", step: undefined },
     ];
   };
   return (
-    <Drawer state={state} title="Edit title" size="wide">
+    <Drawer state={state} title={t().editorTitle} size="wide">
       <For each={rows()}>
         {(row, index) => (
           <OptionRow
@@ -53,7 +55,7 @@ export function EditorOverlay(props: { state: LauncherState }) {
       <Spacer />
       <Show
         when={state.editorNote()}
-        fallback={<Prompt state={state} parts={hints([state.confirmButton(), "Change"], [state.cancelButton(), "Back"])} />}
+        fallback={<Prompt state={state} parts={hints([state.confirmButton(), t().change], [state.cancelButton(), t().back])} />}
       >
         <Note state={state}>{state.editorNote()}</Note>
       </Show>
