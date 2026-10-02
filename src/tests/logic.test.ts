@@ -9,6 +9,7 @@ import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
 import { RECENT_MAX, pushRecent } from "../recent.ts";
+import { searchTitles } from "../search.ts";
 
 describe("moveSelection", () => {
   test("carousel moves on the horizontal axis only", () => {
@@ -119,6 +120,42 @@ describe("last played", () => {
     expect(next.length).toBe(RECENT_MAX);
     expect(next[0]).toBe("PCSB00000");
     expect(next).not.toContain(full[RECENT_MAX - 1]);
+  });
+});
+
+describe("search", () => {
+  const games = [
+    { id: "PCSE00317", title: "Castle Siege Tactics" },
+    { id: "PCSE00444", title: "Iron Fist Arena" },
+    { id: "PCSB00800", title: "Pokémon Stadium" },
+    { id: "PCSF00042", title: "Star Harbor" },
+    { id: "VITASHELL", title: "VitaShell" },
+  ];
+  const ids = (term: string) => searchTitles(games, term).map((game) => game.id);
+
+  test("an empty term finds nothing", () => {
+    expect(ids("")).toEqual([]);
+    expect(ids("   ")).toEqual([]);
+  });
+
+  test("titles that start with the term come first, then word starts, then the rest", () => {
+    // "Star Harbor" starts with it, "Pokémon Stadium" has a word that does,
+    // and the other two have it inside a word.
+    expect(ids("st")).toEqual(["PCSF00042", "PCSB00800", "PCSE00317", "PCSE00444"]);
+  });
+
+  test("case and the marks on letters are ignored", () => {
+    expect(ids("POKEMON")).toEqual(["PCSB00800"]);
+    expect(ids("pokémon")).toEqual(["PCSB00800"]);
+  });
+
+  test("every word has to match, in any order", () => {
+    expect(ids("tactics castle")).toEqual(["PCSE00317"]);
+    expect(ids("castle arena")).toEqual([]);
+  });
+
+  test("a title id matches too", () => {
+    expect(ids("pcsf")).toEqual(["PCSF00042"]);
   });
 });
 

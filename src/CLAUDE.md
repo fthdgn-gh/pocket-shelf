@@ -89,6 +89,12 @@ cannot be driven. Evidence comes from its log and from files under
   node on CIRCLE regardless of the confirm setting, which caused a double
   launch. The launcher owns selection and reads buttons itself (`input.ts`).
   Touch is not handled.
+- **One `onButtonPress` handler per button when a press changes the panel.**
+  Handlers run in the order they were bound, and each checks its `active`
+  option when its turn comes. A press that opens or closes a panel then also
+  reaches a later handler bound to the new panel: square opened the search
+  keyboard and deleted a character with the same press. Square and START
+  dispatch on `state.modal()` in one handler each (`input.ts`).
 - **Mount only what is on screen.** Each view windows its list
   (`views/window.ts`) and places items by index. With every title mounted, a
   125-title category was 500 to 850 nodes; windowed it is about 100.
@@ -162,6 +168,17 @@ the smart ones. They show no tab while empty, sit before the other tabs until
 the user reorders them, and can be hidden or moved in the category manager.
 `launchSelected` writes `recent.json` after the host accepts the launch.
 "Reset to defaults" keeps the favorite mark.
+
+## Search
+
+Square opens the keyboard (`openSearch` in `state.ts`); the field shows how
+many titles the text finds. Done puts the results in a "Search" tab
+(`smart-search`) in front of the others, in the current view. The tab exists
+only while a term is set: the back button on it, or an empty term, closes it
+and returns to the title selected before. On that tab the footer shows the
+term before the position, in place of the "Menu" hint. Matching and order are in
+`search.ts`. `persist` saves a selected result under its own category, since
+the tab does not exist after a restart.
 
 ## Open items
 

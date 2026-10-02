@@ -20,6 +20,14 @@ export const FAVORITES_ID = "smart-favorites";
  * and the titles marked as favorite in the editor. They sit before the other
  * tabs until the user reorders them, and are left out while they are empty.
  */
+/**
+ * The tab of search results. It is not part of `SMART_CATEGORIES`: it exists
+ * only while a search is open, always first, and the category manager does
+ * not list it.
+ */
+export const SEARCH_ID = "smart-search";
+export const SEARCH_CATEGORY: Category = { id: SEARCH_ID, label: "Search", smart: true };
+
 export const SMART_CATEGORIES: readonly Category[] = [
   { id: RECENT_ID, label: "Last Played", smart: true },
   { id: FAVORITES_ID, label: "Favorites", smart: true },
@@ -96,7 +104,7 @@ export function loadCategoryConfig(): CategoryConfig {
       order?: unknown;
       hidden?: unknown;
     };
-    const seen = new Set([...SMART_CATEGORIES, ...BUILTIN_CATEGORIES].map((item) => item.id));
+    const seen = new Set([SEARCH_CATEGORY, ...SMART_CATEGORIES, ...BUILTIN_CATEGORIES].map((item) => item.id));
     for (const value of Array.isArray(object.custom) ? object.custom : []) {
       const id = value?.id;
       const label = typeof value?.label === "string" ? value.label.trim().slice(0, CATEGORY_LABEL_MAX) : "";

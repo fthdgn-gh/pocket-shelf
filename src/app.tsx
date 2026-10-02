@@ -11,7 +11,7 @@
 
 import { onMount, Show } from "solid-js";
 import { Text, View } from "@pocketjs/framework/components";
-import { loadCatalog } from "./catalog.ts";
+import { fitTitle, loadCatalog } from "./catalog.ts";
 import { TINT_AMBIENT } from "./components/art.tsx";
 import { ArtPickerOverlay } from "./components/art-picker.tsx";
 import { Backdrop } from "./components/backdrop.tsx";
@@ -19,12 +19,13 @@ import { CategoryManagerOverlay } from "./components/category-manager.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
 import { Footer } from "./components/footer.tsx";
 import { Header } from "./components/header.tsx";
-import { Prompt } from "./components/icons.tsx";
+import { hints, Prompt } from "./components/icons.tsx";
 import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
 import { OnlineOverlay } from "./components/online.tsx";
 import { installInput } from "./input.ts";
 import { createLauncherState } from "./state.ts";
+import { fontSlot } from "./text.ts";
 import { CarouselView } from "./views/carousel.tsx";
 import { GridView } from "./views/grid.tsx";
 import { ListView } from "./views/list.tsx";
@@ -54,11 +55,26 @@ export default function App() {
         when={state.games().length > 0}
         fallback={
           <View class="flex-col w-full grow items-center justify-center gap-1">
-            <Text class={state.text().title} style={{ textColor: state.theme().text }}>
-              {state.hasTitles() ? "Nothing in this category yet" : "No installed apps found"}
-            </Text>
-            <Show when={state.hasTitles()}>
-              <Prompt state={state} parts={["Press", { icon: "triangle" }, "on a title to move it here"]} />
+            <Show
+              when={state.searching()}
+              fallback={
+                <>
+                  <Text class={state.text().title} style={{ textColor: state.theme().text }}>
+                    {state.hasTitles() ? "Nothing in this category yet" : "No installed apps found"}
+                  </Text>
+                  <Show when={state.hasTitles()}>
+                    <Prompt state={state} parts={["Press", { icon: "triangle" }, "on a title to move it here"]} />
+                  </Show>
+                </>
+              }
+            >
+              <Text class={state.text().title} style={{ textColor: state.theme().text }}>
+                {`No title matches "${fitTitle(state.searchTerm(), 180, fontSlot(state.font(), "title"))}"`}
+              </Text>
+              <Prompt
+                state={state}
+                parts={hints(["square", "Search again"], [state.cancelButton(), "Close"])}
+              />
             </Show>
           </View>
         }
