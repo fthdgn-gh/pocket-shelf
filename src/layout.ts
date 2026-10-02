@@ -42,7 +42,11 @@ export function carouselLayout(screenW: number, detail: DetailLevel): CarouselLa
 }
 
 // Category header: a badge on each side (24 wide, 12 from the edge, 6 gap)
-// around a clipped strip of fixed-width tabs.
-export const TAB_W = 92;
+// around a clipped strip of fixed-width tabs. A tab holds the category's name
+// and, after `TAB_COUNT_GAP`, its number of titles in a badge with
+// `TAB_COUNT_PAD` on each side of the digits.
+export const TAB_W = 112;
+export const TAB_COUNT_GAP = 4;
+export const TAB_COUNT_PAD = 4;
 export const TAB_GAP = 4;
 export const HEADER_SIDE = 42;
