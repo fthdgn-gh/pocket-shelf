@@ -8,6 +8,9 @@ import type { LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
 
+// Name of the accents page on its key, the same in every language.
+const ACCENTS_LABEL = "Áçñ";
+
 // Space inside the text field: the key rows are 416 wide, less the field's padding.
 const FIELD_TEXT_W = 396;
 
@@ -28,9 +31,14 @@ export function KeyboardOverlay(props: { state: LauncherState }) {
   const shown = () =>
     fitTail(`${state.keyboardText()}_`, FIELD_TEXT_W - noteW(), fontSlot(state.font(), "bodyBold"));
   const t = state.t;
+  // The page key and the R hint name the page the next press leads to.
+  const nextPage = () => {
+    const page = state.keyPage();
+    return page === "letters" ? t().symbols : page === "symbols" ? ACCENTS_LABEL : t().keyLetters;
+  };
   const label = (key: KeyDef) => {
     if (key.action === "char") return state.shift() ? key.upper : key.lower;
-    if (key.action === "symbols") return state.symbols() ? t().keyLetters : t().symbols;
+    if (key.action === "symbols") return nextPage();
     if (key.action === "shift") return t().shift;
     if (key.action === "space") return t().keySpace;
     if (key.action === "delete") return t().keyDelete;
@@ -96,7 +104,7 @@ export function KeyboardOverlay(props: { state: LauncherState }) {
               [state.confirmButton(), t().key],
               ["square", t().keyDelete],
               ["l", t().shift],
-              ["r", t().symbols],
+              ["r", nextPage()],
               ["start", t().done],
               [state.cancelButton(), t().cancel],
             )}

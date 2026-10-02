@@ -21,7 +21,7 @@ const DIRECTIONS: readonly [mask: number, direction: FocusDirection, dx: number,
  *  - D-pad: moves the selection in the current view, or drives the panel that
  *    is open (SELECT menu, title editor, keyboard, art picker). Holding a
  *    direction repeats it.
- *  - L / R: previous / next category (shift / symbols on the keyboard).
+ *  - L / R: previous / next category (shift / next page on the keyboard).
  *  - Confirm button (circle or cross): launch, or act in the open panel.
  *  - The other face button: back out of the open panel.
  *  - Triangle: edit the selected title. Square: search. SELECT: menu.
@@ -73,7 +73,7 @@ export function installInput(state: LauncherState): void {
   onButtonPress(BTN.LTRIGGER, () => state.changeCategory(-1), { active: closed });
   onButtonPress(BTN.RTRIGGER, () => state.changeCategory(1), { active: closed });
   onButtonPress(BTN.LTRIGGER, state.toggleShift, { active: typing });
-  onButtonPress(BTN.RTRIGGER, state.toggleSymbols, { active: typing });
+  onButtonPress(BTN.RTRIGGER, state.nextKeyPage, { active: typing });
 
   const confirm = () => {
     if (state.modal()) state.modalConfirm();

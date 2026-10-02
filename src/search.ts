@@ -1,10 +1,16 @@
 // Title search (square button): which titles a typed term finds, and in what order.
 
-/** Lowercase and without the marks on letters, so "pokemon" finds "Pokémon". */
+// Letters that are not a base letter plus a mark, with what they match.
+const PLAIN: Record<string, string> = { ı: "i", ß: "ss", æ: "ae", œ: "oe" };
+
+/**
+ * Lowercase and without the marks on letters, so "pokemon" finds "Pokémon"
+ * and "isik" finds "Işık".
+ */
 export function searchKey(text: string): string {
   // `normalize` is missing from a JS engine built without Unicode tables.
   const plain = typeof text.normalize === "function" ? text.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : text;
-  return plain.toLowerCase();
+  return plain.toLowerCase().replace(/[ıßæœ]/g, (letter) => PLAIN[letter]);
 }
 
 /**

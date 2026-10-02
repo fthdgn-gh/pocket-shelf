@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { cleanTitle, isListed } from "../catalog.ts";
 import { categoryOf, cycleCategory, makeCategoryId } from "../categories.ts";
 import { LANGUAGES, MESSAGES, fill, upper } from "../i18n.ts";
-import { LETTER_ROWS, SYMBOL_ROWS, mapColumn } from "../keyboard.ts";
+import { ACCENTS_FIRST, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
 import { RECENT_MAX, pushRecent } from "../recent.ts";
@@ -150,6 +150,20 @@ describe("search", () => {
     expect(ids("pokémon")).toEqual(["PCSB00800"]);
   });
 
+  test("letters without a base letter match their plain spelling", () => {
+    const titles = [
+      { id: "PCSB00001", title: "Işık Kılıcı" },
+      { id: "PCSB00002", title: "Straße" },
+      { id: "PCSB00003", title: "Œuvre" },
+      { id: "PCSB00004", title: "İstanbul" },
+    ];
+    const find = (term: string) => searchTitles(titles, term).map((game) => game.id);
+    expect(find("isik kilici")).toEqual(["PCSB00001"]);
+    expect(find("strasse")).toEqual(["PCSB00002"]);
+    expect(find("oeuvre")).toEqual(["PCSB00003"]);
+    expect(find("istanbul")).toEqual(["PCSB00004"]);
+  });
+
   test("every word has to match, in any order", () => {
     expect(ids("tactics castle")).toEqual(["PCSE00317"]);
     expect(ids("castle arena")).toEqual([]);
@@ -200,8 +214,10 @@ describe("languages", () => {
 });
 
 describe("keyboard", () => {
+  const PAGES = [LETTER_ROWS, SYMBOL_ROWS, ...LANGUAGES.map(({ id }) => accentRows(id))];
+
   test("every character key has a shifted twin", () => {
-    for (const rows of [LETTER_ROWS, SYMBOL_ROWS]) {
+    for (const rows of PAGES) {
       for (const row of rows) {
         for (const key of row) {
           expect(key.lower.length).toBeGreaterThan(0);
@@ -211,9 +227,11 @@ describe("keyboard", () => {
     }
   });
 
-  test("both layouts have the same number of rows and share the bottom row", () => {
-    expect(SYMBOL_ROWS.length).toBe(LETTER_ROWS.length);
-    expect(SYMBOL_ROWS.at(-1)).toBe(LETTER_ROWS.at(-1));
+  test("every page has the same number of rows and shares the bottom row", () => {
+    for (const rows of PAGES) {
+      expect(rows.length).toBe(LETTER_ROWS.length);
+      expect(rows.at(-1)).toBe(LETTER_ROWS.at(-1));
+    }
     expect(LETTER_ROWS.at(-1)?.map((key) => key.action)).toEqual([
       "shift",
       "symbols",
@@ -230,8 +248,30 @@ describe("keyboard", () => {
     expect(mapColumn(10, 2, 9)).toBe(1);
   });
 
+  test("the accents page has the same thirty letters in every language, its own first", () => {
+    const letters = (language: string) =>
+      accentRows(language)
+        .slice(1, 4)
+        .flat()
+        .map((key) => key.lower);
+    const all = [...letters("en")].sort();
+    expect(all.length).toBe(30);
+    expect(new Set(all).size).toBe(30);
+    for (const { id } of LANGUAGES) {
+      expect([...letters(id)].sort()).toEqual(all);
+      const first = [...(ACCENTS_FIRST[id] ?? "")];
+      expect(letters(id).slice(0, first.length)).toEqual(first);
+    }
+  });
+
+  test("the Turkish page pairs each i with its own capital", () => {
+    const keys = accentRows("tr").flat();
+    expect(keys.find((key) => key.lower === "ı")?.upper).toBe("I");
+    expect(keys.find((key) => key.lower === "i")?.upper).toBe("İ");
+  });
+
   test("mapColumn always lands on an existing key", () => {
-    for (const rows of [LETTER_ROWS, SYMBOL_ROWS]) {
+    for (const rows of PAGES) {
       for (const from of rows) {
         for (const to of rows) {
           for (let col = 0; col < from.length; col++) {
