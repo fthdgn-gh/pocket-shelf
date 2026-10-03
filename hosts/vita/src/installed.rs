@@ -52,8 +52,27 @@ const ICON_MAX: usize = 2 * 1024 * 1024;
 const SFO_MAX: usize = 256 * 1024;
 /// Flags value used by every launcher that calls sceAppMgrLaunchAppByUri.
 const LAUNCH_FLAGS: i32 = 0xFFFFF;
-/// Flags value for a system application, as vita-launcher passes it.
-const SYSTEM_LAUNCH_FLAGS: i32 = 0x40000;
+/// Flags for a system application with no URI in `SYSTEM_URIS`: it opens the
+/// application's LiveArea, where the user presses Start.
+const SYSTEM_LIVEAREA_FLAGS: i32 = 0x40000;
+/// The URI that starts a system application. A `psgm:play` request with flags
+/// `0x20000` started one and the system then showed error C2-12570-5 on
+/// hardware; RetroFlow, which hit the same error, starts them through these
+/// URIs with `LAUNCH_FLAGS` and opens the LiveArea of the others.
+const SYSTEM_URIS: &[(&str, &str)] = &[
+    ("NPXS10000", "near:"),
+    ("NPXS10001", "pspy:"),
+    ("NPXS10002", "psns:browse?category=STORE-MSF73008-VITAGAMES:"),
+    ("NPXS10003", "wbapp0:"),
+    ("NPXS10004", "photo:"),
+    ("NPXS10008", "pstc:"),
+    ("NPXS10009", "music:"),
+    ("NPXS10014", "psnmsg:"),
+    ("NPXS10015", "settings_dlg:"),
+    ("NPXS10072", "email:"),
+    ("NPXS10078", "scecomboplay:"),
+    ("NPXS10091", "scecalendar:"),
+];
 
 /// Read the UTF-8 string entry `key` from an SFO image.
 ///
@@ -347,45 +366,67 @@ pub unsafe fn table_json() -> String {
     output
 }
 
-/// URI and flags of an accepted launch, held until `finish_launch` ends this process.
-static mut LAUNCHED: Option<(CString, i32)> = None;
+/// An accepted launch, held until `finish_launch` sends it.
+struct Launch {
+    uri: CString,
+    flags: i32,
+    /// Send the request a second time, 10 ms after the first.
+    repeat: bool,
+}
 
-/// spec op 40 (native flavour): start the title with this id. Only ids found by
-/// the scan are accepted, so the URI is never built from guest-controlled text.
-/// Returns whether the app manager accepted the request.
+static mut LAUNCHED: Option<Launch> = None;
+
+/// spec op 40 (native flavour): start the title with this id after the current
+/// frame. Only ids found by the scan are accepted, so the URI is never built
+/// from guest-controlled text. Returns whether the id was accepted; the system
+/// gets the request in `finish_launch`.
 pub unsafe fn launch(title_id: &str) -> bool {
     if !valid_title_id(title_id) || !titles().iter().any(|item| item.title_id == title_id) {
         return false;
     }
-    let Ok(uri) = CString::new(format!("psgm:play?titleid={title_id}")) else {
+    let (uri, flags, repeat) = if is_system(title_id) {
+        match SYSTEM_URIS.iter().find(|(id, _)| *id == title_id) {
+            Some((_, uri)) => (String::from(*uri), LAUNCH_FLAGS, false),
+            None => (format!("psgm:play?titleid={title_id}"), SYSTEM_LIVEAREA_FLAGS, false),
+        }
+    } else {
+        (format!("psgm:play?titleid={title_id}"), LAUNCH_FLAGS, true)
+    };
+    let Ok(uri) = CString::new(uri) else {
         return false;
     };
-    let flags = if is_system(title_id) { SYSTEM_LAUNCH_FLAGS } else { LAUNCH_FLAGS };
-    let code = vitasdk_sys::sceAppMgrLaunchAppByUri(flags, uri.as_ptr());
-    if code < 0 {
-        crate::vita_log(format_args!(
-            "[PocketJS installed] launch {title_id} failed: {:#x}",
-            code as u32
-        ));
-        return false;
-    }
-    LAUNCHED = Some((uri, flags));
+    LAUNCHED = Some(Launch { uri, flags, repeat });
     true
 }
 
-/// End this process after an accepted launch. Called by main once the frame
-/// that made the request has presented.
+/// Send an accepted launch and end this process. Called by main once the
+/// frame that made the request has presented.
 ///
-/// The system runs one game-category title at a time. While this process is
-/// alive the system asks the user whether to close it before the new title
-/// starts; a process that exits is not asked about. The request is sent a
-/// second time before the exit, 10 ms apart, as VitaShell's updater does.
+/// The system runs one game-category title at a time. A process still alive
+/// when the system takes the request gets the "close this application?"
+/// prompt; a process that exits is not asked about. Sending the request a
+/// frame before the exit gave the prompt on some launches, so the request is
+/// sent here, right before the exit; a title's request is sent twice, 10 ms
+/// apart, as VitaShell's updater does. A system application's request is sent
+/// once, as RetroFlow does. A request the system refuses leaves this process
+/// running.
 pub unsafe fn finish_launch() {
-    let Some((uri, flags)) = LAUNCHED.take() else {
+    let Some(launch) = LAUNCHED.take() else {
         return;
     };
-    vitasdk_sys::sceKernelDelayThread(10_000);
-    vitasdk_sys::sceAppMgrLaunchAppByUri(flags, uri.as_ptr());
+    let code = vitasdk_sys::sceAppMgrLaunchAppByUri(launch.flags, launch.uri.as_ptr());
+    if code < 0 {
+        crate::vita_log(format_args!(
+            "[PocketJS installed] launch {:?} failed: {:#x}",
+            launch.uri,
+            code as u32
+        ));
+        return;
+    }
+    if launch.repeat {
+        vitasdk_sys::sceKernelDelayThread(10_000);
+        vitasdk_sys::sceAppMgrLaunchAppByUri(launch.flags, launch.uri.as_ptr());
+    }
     vitasdk_sys::sceKernelExitProcess(0);
 }
 
