@@ -418,22 +418,25 @@ export function createLauncherState(catalog: Catalog) {
     const game = games()[selectedIndex()];
     if (!game) return;
     setLaunchingTitle(game.title);
+    // The files are written before the request: the host ends this process
+    // once this frame is on screen, and a process still alive when the system
+    // takes the request gets the "close this application?" prompt. Two writes
+    // after the request were enough for that on hardware.
+    const before = recent();
+    const list = pushRecent(before, game.id);
+    saveRecent(list);
+    persist();
     console.log(`Launch requested: ${game.id}`);
     if (native && !launchApp(game.id)) {
       console.log(`Launch rejected: ${game.id}`);
-      persist();
+      saveRecent(before);
       return;
     }
-    // The host ends this process once this frame is on screen, so the list
-    // and the selection are written now.
-    const list = pushRecent(recent(), game.id);
     batch(() => {
       setRecent(list);
       // In "Last Played" the started title moves to the front; follow it.
       if (categoryId() === RECENT_ID) setSelectedIndex(0);
     });
-    saveRecent(list);
-    persist();
   };
 
   const setView = (next: ViewMode) => {

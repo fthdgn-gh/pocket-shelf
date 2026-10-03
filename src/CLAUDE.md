@@ -128,10 +128,16 @@ cannot be driven. Evidence comes from its log and from files under
   `icon0.png` and `pic0.png` are plain files. The folder holds about 55
   entries, most of them services and dialogs; `SYSTEM_APPS` in `catalog.ts`
   names the 16 that are listed, and they fill the built-in `system` category.
-  A system application is launched with flags `0x40000` (as vita-launcher does), others with
-  `0xFFFFF`. Listing, titles and icons
-  are confirmed in Vita3K, whose firmware has the same folder; the launch is
-  not confirmed on hardware.
+  Listing, titles and icons are confirmed in Vita3K, whose firmware has the
+  same folder.
+- **Launching a system application.** `psgm:play?titleid=NPXS…` does not
+  work for them on hardware: flags `0x40000` (vita-launcher's value) open the
+  LiveArea, where Start has to be pressed; `0x20000` starts the application,
+  which then shows error C2-12570-5. `SYSTEM_URIS` in `installed.rs` gives
+  each one its own URI (`settings_dlg:`, `wbapp0:`, `music:`, ...), sent once
+  with `0xFFFFF`, taken from RetroFlow. Friends, Videos, Content Manager,
+  Parental Controls and PS4 Link have no known URI and open their LiveArea
+  (`0x40000`). Confirmed on hardware: the listed ones start, with no error.
 - **The title list is kept in `titles.tsv` in the data folder.** A scan reads
   one `param.sfo` per title, which the user measured at about ten seconds for
   a hundred titles on hardware. `installed.rs` scans on the first start,
@@ -145,13 +151,20 @@ cannot be driven. Evidence comes from its log and from files under
   `ur0:appmeta/<id>/` (exists only after the home screen opened that game's
   LiveArea), then `sceAppMgrGameDataMount` on `ux0:app/<id>`. All three are
   confirmed on hardware. `param.sfo` is readable without a mount.
-- **A launch ends this process.** `installed::launch` sends
-  `psgm:play?titleid=<id>`; `main.rs` presents that frame, then
-  `installed::finish_launch` sends the request again after 10 ms and calls
+- **A launch ends this process.** `installed::launch` checks the id and
+  keeps it; `main.rs` presents that frame, then `installed::finish_launch`
+  sends `psgm:play?titleid=<id>`, sends it again after 10 ms and calls
   `sceKernelExitProcess(0)` (the sequence in VitaShell's updater). A process
-  that stays alive gets the system's "close this application?" prompt, since
-  one game-category title runs at a time. Confirmed on hardware: no prompt,
-  and the "Launching" line shows before the switch.
+  still alive when the system takes the request gets the "close this
+  application?" prompt, since one game-category title runs at a time.
+- **Nothing may run between the launch request and the exit.** Sending the
+  first request from `appLaunch`, a frame before the exit, gave the prompt on
+  some launches on hardware; with two file writes after it, on every launch.
+  The app writes `settings.json` and `recent.json` before `appLaunch`, and
+  the host sends both requests in `finish_launch`. A request the system
+  refuses there leaves the app running with the "Launching" line, which goes
+  away when the selection moves.
+  Confirmed on hardware over many titles: no prompt.
 - **Staying open next to a game ("system mode") was looked at and not done.**
   ElevenMPV-A does it with `CATEGORY=gdc` in `param.sfo` (ours is the default
   `gd`) and `libvita2d_sys`: `sceGxmInitializeInternal`, drawing into the
@@ -224,7 +237,7 @@ by the launcher (`SMART_CATEGORIES` in `categories.ts`, `titlesOf` in
 `state.ts`). A title keeps its own category; the editor's Category row skips
 the smart ones. They show no tab while empty, sit before the other tabs until
 the user reorders them, and can be hidden or moved in the category manager.
-`launchSelected` writes `recent.json` after the host accepts the launch.
+`launchSelected` writes `recent.json` before the launch request and restores it if the host rejects the launch.
 "Reset to defaults" keeps the favorite mark.
 
 ## Languages
