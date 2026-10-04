@@ -1,6 +1,6 @@
 import { getOps } from "@pocketjs/framework/host";
 import { appTable } from "@pocketjs/framework/launcher";
-import { categoryOf } from "./categories.ts";
+import { categoryOf, type Platform } from "./categories.ts";
 import type { Game } from "./types.ts";
 
 /** How many tints titles cycle through (see TINT_ART and TINT_AMBIENT in components/art.tsx). */
@@ -117,6 +117,13 @@ export function rescanTitles(): void {
   (getOps() as unknown as { __appRescan?(): number }).__appRescan?.();
 }
 
+const GENRES: Record<Platform, string> = { vita: "PS Vita", psm: "PS Mobile", psp: "PSP", ps1: "PS1" };
+
+/** The platform an entry names; Vita for an entry with none or an unknown one. */
+function platformOf(value: unknown): Platform {
+  return value === "psm" || value === "psp" || value === "ps1" ? value : "vita";
+}
+
 /**
  * The host's installed-title table (kind "native"), less the titles
  * `isListed` leaves out. Hosts without app navigation report no table, which
@@ -126,12 +133,16 @@ export function loadCatalog(): Catalog {
   const table = appTable();
   if (table?.kind !== "native") return { native: false, games: [] };
   const apps = table.apps.filter((app) => isListed(app.id));
-  const games: Game[] = apps.map((app, index) => ({
-    title: cleanTitle(app.title),
-    id: app.id,
-    genre: "PS Vita",
-    category: categoryOf(app.id),
-    tint: index % TINT_COUNT,
-  }));
+  const games: Game[] = apps.map((app, index) => {
+    // The Vita host adds the platform to each entry (hosts/vita/src/installed.rs).
+    const platform = platformOf((app as { platform?: unknown }).platform);
+    return {
+      title: cleanTitle(app.title),
+      id: app.id,
+      genre: GENRES[platform],
+      category: categoryOf(app.id, platform),
+      tint: index % TINT_COUNT,
+    };
+  });
   return { native: true, games };
 }

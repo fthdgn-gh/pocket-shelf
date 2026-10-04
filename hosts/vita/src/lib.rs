@@ -27,6 +27,8 @@ pub mod http;
 #[cfg(feature = "installed-apps")]
 pub mod accent;
 #[cfg(feature = "installed-apps")]
+pub mod appdb;
+#[cfg(feature = "installed-apps")]
 pub mod backdrop;
 #[cfg(feature = "installed-apps")]
 pub mod dds;
@@ -36,6 +38,8 @@ pub mod installed;
 pub mod jobs;
 #[cfg(feature = "installed-apps")]
 pub mod psm;
+#[cfg(feature = "installed-apps")]
+pub mod pspemu;
 pub mod input;
 pub mod net;
 pub mod pak;

@@ -6,7 +6,9 @@
 //! `appLaunch(titleId)` starts one through the system app manager. The table carries `kind: "native"`, so the framework treats the
 //! call as a process switch, not as a guest swap inside this process.
 //!
-//! PSM titles in `ux0:/psm` are added by `psm.rs`.
+//! PSM titles in `ux0:/psm` are added by `psm.rs`, PSP and PS1 Classics in
+//! `ux0:/pspemu` by `pspemu.rs`; both take their names from the home screen's
+//! database (`appdb.rs`).
 //!
 //! Titles are read from each `sce_sys/param.sfo`. One file read per title is
 //! slow on the memory card (about ten seconds for a hundred titles), so the
@@ -20,10 +22,17 @@ use std::fs;
 use std::string::String;
 use std::vec::Vec;
 
-/// One installed title, as read from its `param.sfo`.
+/// One installed title.
 struct Title {
     title_id: String,
     title: String,
+    /// `vita` (ux0:/app and vs0:/app), `psm`, `psp` or `ps1`.
+    platform: &'static str,
+}
+
+/// A platform name from the list file, as the `'static` the table uses.
+fn platform_named(name: &str) -> Option<&'static str> {
+    ["vita", "psm", "psp", "ps1"].into_iter().find(|known| *known == name)
 }
 
 static mut CACHE: Option<Vec<Title>> = None;
@@ -114,7 +123,7 @@ pub(crate) fn sfo_string(sfo: &[u8], key: &str) -> Option<String> {
 }
 
 /// A title id is exactly nine ASCII letters or digits (e.g. `PCSE00000`).
-fn valid_title_id(id: &str) -> bool {
+pub(crate) fn valid_title_id(id: &str) -> bool {
     id.len() == 9 && id.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
@@ -122,10 +131,20 @@ fn scan() -> Vec<Title> {
     let mut titles = Vec::new();
     scan_root(APP_ROOT, &mut titles);
     scan_root(SYSTEM_ROOT, &mut titles);
-    for (title_id, title) in unsafe { crate::psm::scan() } {
+    // PSM, PSP and PS1 titles take their names from the home screen's
+    // database, read once per scan.
+    let rows = unsafe { crate::appdb::bubbles() };
+    if let Some(rows) = &rows {
+        crate::appdb::keep_icon_paths(rows);
+    }
+    for (title_id, title) in unsafe { crate::psm::scan(rows.as_deref()) } {
         if title_id != SELF_TITLE_ID && !titles.iter().any(|item| item.title_id == title_id) {
-            titles.push(Title { title_id, title });
+            titles.push(Title { title_id, title, platform: "psm" });
         }
+    }
+    let known: Vec<String> = titles.iter().map(|item| item.title_id.clone()).collect();
+    for item in unsafe { crate::pspemu::scan(rows.as_deref(), &known) } {
+        titles.push(Title { title_id: item.title_id, title: item.title, platform: item.platform });
     }
     titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
     titles
@@ -168,6 +187,7 @@ fn scan_root(root: &str, titles: &mut Vec<Title>) {
         titles.push(Title {
             title_id: name,
             title,
+            platform: "vita",
         });
     }
 }
@@ -178,17 +198,18 @@ fn is_system(title_id: &str) -> bool {
 }
 
 /// First line of the list file. A file that starts otherwise is scanned over.
-/// Version 2 added PSM titles; a version 1 list does not have them.
+/// Version 2 added PSM titles, version 3 PSP and PS1 titles and the platform
+/// column; an older list is scanned over.
 #[cfg(feature = "data-fs")]
-const LIST_HEADER: &str = "pocket-shelf titles 2";
+const LIST_HEADER: &str = "pocket-shelf titles 3";
 
 #[cfg(feature = "data-fs")]
 fn list_path() -> String {
     format!("{}/titles.tsv", crate::datafs::data_dir())
 }
 
-/// The saved list: the header, then one `<title id><TAB><title>` line per
-/// title in scan order. None when there is no usable file.
+/// The saved list: the header, then one `<title id><TAB><platform><TAB><title>`
+/// line per title in scan order. None when there is no usable file.
 #[cfg(feature = "data-fs")]
 fn load_list() -> Option<Vec<Title>> {
     let text = fs::read_to_string(list_path()).ok()?;
@@ -198,13 +219,15 @@ fn load_list() -> Option<Vec<Title>> {
     }
     let mut titles = Vec::new();
     for line in lines {
-        let (id, title) = line.split_once('\t')?;
+        let mut fields = line.splitn(3, '\t');
+        let (id, platform, title) = (fields.next()?, platform_named(fields.next()?)?, fields.next()?);
         if !valid_title_id(id) || title.is_empty() {
             return None;
         }
         titles.push(Title {
             title_id: String::from(id),
             title: String::from(title),
+            platform,
         });
     }
     // An empty list is what a failed scan leaves; scan again.
@@ -218,6 +241,8 @@ fn save_list(titles: &[Title]) {
     for item in titles {
         // A title is one line: `scan` collapsed its whitespace to single spaces.
         text.push_str(&item.title_id);
+        text.push('\t');
+        text.push_str(item.platform);
         text.push('\t');
         text.push_str(&item.title);
         text.push('\n');
@@ -366,6 +391,8 @@ pub unsafe fn table_json() -> String {
         push_json_str(&mut output, &item.title_id);
         output.push_str(",\"title\":");
         push_json_str(&mut output, &item.title);
+        output.push_str(",\"platform\":");
+        push_json_str(&mut output, item.platform);
         output.push_str(",\"installed\":true}");
     }
     output.push_str("],\"current\":");
@@ -451,7 +478,7 @@ unsafe fn decode_icon(title_id: &str) -> Option<(u32, u32, Vec<u8>)> {
     // A retail game the home screen has not opened yet has no plain copy;
     // its own file is read through a decrypting mount.
     from(&metadata_dirs(title_id))
-        .or_else(|| crate::psm::icon_path(title_id).and_then(|path| decode_icon_file(&path)))
+        .or_else(|| crate::appdb::icon_path(title_id).and_then(|path| decode_icon_file(&path)))
         .or_else(|| with_decrypted(title_id, from))
 }
 

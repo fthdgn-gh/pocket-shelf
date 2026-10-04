@@ -907,8 +907,9 @@ unsafe extern "C" fn js_startup_marks(
     new_js_string(ctx, &crate::startup_marks())
 }
 
-/// ui.__scanReport() -> what the last title scan found among PSM titles
-/// (psm.rs `report`). Host extra, for the diagnostics screen.
+/// ui.__scanReport() -> what the last title scan found among PSM, PSP and PS1
+/// titles (`report` in psm.rs and pspemu.rs): `Label=value` pairs separated
+/// by commas. Host extra, for the diagnostics screen.
 #[cfg(feature = "installed-apps")]
 unsafe extern "C" fn js_scan_report(
     ctx: *mut JSContext,
@@ -916,7 +917,9 @@ unsafe extern "C" fn js_scan_report(
     _argc: i32,
     _argv: *mut JSValue,
 ) -> JSValue {
-    new_js_string(ctx, &crate::psm::report())
+    let parts = [crate::psm::report(), crate::pspemu::report()];
+    let joined: Vec<&str> = parts.iter().map(String::as_str).filter(|part| !part.is_empty()).collect();
+    new_js_string(ctx, &joined.join(","))
 }
 
 /// ui.__processMs() -> milliseconds since the process started. Host extra:

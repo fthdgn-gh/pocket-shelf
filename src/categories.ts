@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "@pocketjs/framework/fs";
 import type { CategoryId } from "./types.ts";
 
 /** A category whose label comes from the language's `categories` texts. */
-export type CategoryName = "recent" | "favorites" | "search" | "games" | "system" | "homebrew" | "psm";
+export type CategoryName = "recent" | "favorites" | "search" | "games" | "system" | "homebrew" | "psm" | "psp" | "ps1";
 
 export interface Category {
   id: CategoryId;
@@ -46,12 +46,20 @@ export const SYSTEM_ID = "system";
  * prefix no label the user typed turns into.
  */
 export const PSM_ID = "builtin-psm";
+/** PSP and PS1 Classics, with the same kind of id as `PSM_ID`. */
+export const PSP_ID = "builtin-psp";
+export const PS1_ID = "builtin-ps1";
+
+/** Where a title lives, as the host reports it: the Vita's own titles, PSM, PSP or PS1. */
+export type Platform = "vita" | "psm" | "psp" | "ps1";
 
 export const BUILTIN_CATEGORIES: readonly Category[] = [
   { id: "games", label: "Games", name: "games" },
   { id: SYSTEM_ID, label: "System", name: "system" },
   { id: "homebrew", label: "Homebrew", name: "homebrew" },
   { id: PSM_ID, label: "PS Mobile", name: "psm" },
+  { id: PSP_ID, label: "PSP", name: "psp" },
+  { id: PS1_ID, label: "PS1", name: "ps1" },
 ];
 
 /**
@@ -64,11 +72,14 @@ export const CATEGORY_LABEL_MAX = 16;
 export const CATEGORY_ID_PATTERN = /^[a-z0-9-]{1,32}$/;
 
 /**
- * Category of an installed title, from its title id. Retail games use PCS ids,
- * system applications use NPXS ids, PlayStation Mobile titles NPNA, NPOA,
- * NPPA or NPQA and five digits, and everything else is homebrew.
+ * Category of an installed title. PSP and PS1 Classics are known by the
+ * platform the host reports; the rest by title id: retail games use PCS ids,
+ * system applications NPXS ids, PlayStation Mobile titles NPNA, NPOA, NPPA
+ * or NPQA and five digits, and everything else is homebrew.
  */
-export function categoryOf(titleId: string): CategoryId {
+export function categoryOf(titleId: string, platform?: Platform): CategoryId {
+  if (platform === "psp") return PSP_ID;
+  if (platform === "ps1") return PS1_ID;
   if (titleId.startsWith("PCS")) return "games";
   if (titleId.startsWith("NPXS")) return SYSTEM_ID;
   if (isPsmId(titleId)) return PSM_ID;

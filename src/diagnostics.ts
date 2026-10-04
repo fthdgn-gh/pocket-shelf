@@ -67,15 +67,16 @@ export function startupEntries(): DiagnosticEntry[] {
 }
 
 /**
- * What the last title scan found among PlayStation Mobile titles
- * (`psm.rs` in the Vita host): `folders=3,source=app.db,bubbles=2,icons=2`.
- * Nothing when this start read the saved list instead of scanning.
+ * What the last title scan found among PSM, PSP and PS1 titles (`psm.rs` and
+ * `pspemu.rs` in the Vita host), as `Label=value` pairs:
+ * `PSM folders=3,PSM source=app.db,PSP bubbles=2`. Nothing when this start
+ * read the saved list instead of scanning.
  */
 function scanEntries(): DiagnosticEntry[] {
   const report = host().__scanReport?.() ?? "";
   if (!report) return [];
   return report.split(",").flatMap((pair) => {
     const [key, value] = pair.split("=");
-    return key && value ? [{ label: `PSM ${key}`, value }] : [];
+    return key && value ? [{ label: key, value }] : [];
   });
 }
