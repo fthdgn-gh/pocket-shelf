@@ -106,6 +106,15 @@ export const tr: Messages = {
   keyDelete: "Sil",
   keyLetters: "Abc",
 
+  // The heading above the keyboard, for what is being typed.
+  keyboardFor: {
+    title: "Başlık",
+    newCategory: "Yeni kategori",
+    category: "Kategori adı",
+    library: "Kütüphanede ara",
+    search: "SteamGridDB'de ara",
+    apiKey: "SteamGridDB API anahtarı",
+  },
   enterKey: "API anahtarını gir",
   keyHelp:
     "SteamGridDB kendi API anahtarınızı ister. steamgriddb.com'da Preferences, API altında oluşturun. Buraya yazın ya da tek satır olarak şu dosyaya kaydedin:",
