@@ -7,7 +7,7 @@ import { cleanTitle, isListed } from "../catalog.ts";
 import { categoryOf, cycleCategory, makeCategoryId } from "../categories.ts";
 import { LANGUAGES, MESSAGES, fill, upper } from "../i18n.ts";
 import { ACCENTS_FIRST, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn } from "../keyboard.ts";
-import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, SHELF, carouselLayout } from "../layout.ts";
+import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, LIST_ROWS_UNDER_STATUS, SHELF, carouselLayout } from "../layout.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
 import { filesInUse, withoutFiles } from "../overrides.ts";
 import { RECENT_MAX, pushRecent } from "../recent.ts";
@@ -101,6 +101,7 @@ describe("paging and icon loading", () => {
     expect(pageSize("carousel")).toBe(1);
     expect(pageSize("grid")).toBe(GRID_COLUMNS * GRID_ROWS);
     expect(pageSize("list")).toBe(LIST_ROWS);
+    expect(pageSize("list", true)).toBe(LIST_ROWS_UNDER_STATUS);
   });
 
   test("icons load for at least the visible items around the selection", () => {

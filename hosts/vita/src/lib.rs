@@ -36,6 +36,8 @@ pub mod input;
 pub mod net;
 pub mod pak;
 pub mod stats;
+#[cfg(feature = "status")]
+pub mod status;
 pub mod svc;
 pub mod switch;
 pub mod vid;

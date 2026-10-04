@@ -919,6 +919,18 @@ unsafe extern "C" fn js_process_ms(
     JS_NewInt32(ctx, (vitasdk_sys::sceKernelGetProcessTimeWide() / 1000) as i32)
 }
 
+/// ui.__status() -> "hour minute clock24 battery charging wifi bluetooth"
+/// (status.rs). Host extra.
+#[cfg(feature = "status")]
+unsafe extern "C" fn js_status(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    new_js_string(ctx, &crate::status::read())
+}
+
 /// ui.appIcon(titleId) -> texture handle | -1 | -2 (spec op 57).
 #[cfg(feature = "installed-apps")]
 unsafe extern "C" fn js_installed_icon(
@@ -1204,6 +1216,9 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"__startupMarks\0", js_startup_marks, 0);
         add_fn(ctx, ui_obj, b"__processMs\0", js_process_ms, 0);
     }
+
+    #[cfg(feature = "status")]
+    add_fn(ctx, ui_obj, b"__status\0", js_status, 0);
 
     #[cfg(feature = "http")]
     {

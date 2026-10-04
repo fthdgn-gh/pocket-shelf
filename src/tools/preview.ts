@@ -187,6 +187,9 @@ function uploadImage(ops: Record<string, unknown>, pixels: Uint8Array, width: nu
 }
 
 /** The in-memory data folder of the shot being captured. */
+// What `__status` answers; a shot can set its own.
+const DEFAULT_STATUS = "21 47 1 72 0 80 1";
+let statusLine = DEFAULT_STATUS;
 let dataFolder: { write(path: string, data: string, mode: number): number } | undefined;
 
 /** The API key the preview "saved": the fake SteamGridDB accepts this one only. */
@@ -292,6 +295,8 @@ function installHost(ops: Record<string, unknown>): void {
       current: "PBCF7609D",
       resume: null,
     });
+  // A fixed reading, so shots do not change with the time they are taken.
+  ops.__status = (): string => statusLine;
   ops.__processMs = (): number => Math.round(performance.now()) + 420;
   ops.__startupMarks = (): string => "main=3,graphics=120,dev=125,pak=400,quickjs=420,eval=900,frame=930";
   // A scan finds a title that was installed after the list was last read.
@@ -349,6 +354,8 @@ interface Shot {
   language?: string;
   /** Files placed in the data folder before the app starts. */
   files?: string[];
+  /** The host's `__status` line, in place of the usual one. */
+  status?: string;
 }
 
 
@@ -364,8 +371,8 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("menu", [BTN.SELECT, ...tap(BTN.UP, 2)]),
     shot("editor", [BTN.RIGHT, BTN.TRIANGLE]),
     shot("reset", [BTN.RIGHT, BTN.TRIANGLE, BTN.UP, BTN.CIRCLE]),
-    shot("categories", [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.SQUARE]),
-    shot("hidden", [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.START]),
+    shot("categories", [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.SQUARE]),
+    shot("hidden", [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.START]),
     shot("keyboard", [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE]),
     // R twice: the accents page. Its first key, typed plain and shifted.
     shot("accents", [BTN.SQUARE, ...tap(BTN.RTRIGGER, 2), BTN.CIRCLE, BTN.LTRIGGER, BTN.CIRCLE]),
@@ -374,9 +381,9 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("launching", [BTN.RIGHT, BTN.CIRCLE]),
     shot("picker", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, BTN.DOWN]),
     shot("online-key", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE]),
-    shot("scrape", [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE]),
-    shot("clean", [BTN.SELECT, ...tap(BTN.DOWN, 8), BTN.CIRCLE, BTN.RIGHT]),
-    shot("rescan", [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.CIRCLE, [0, 20]]),
+    shot("scrape", [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE]),
+    shot("clean", [BTN.SELECT, ...tap(BTN.DOWN, 11), BTN.CIRCLE, BTN.RIGHT]),
+    shot("rescan", [BTN.SELECT, ...tap(BTN.DOWN, 12), BTN.CIRCLE, BTN.CIRCLE, [0, 20]]),
   ];
 });
 
@@ -391,10 +398,10 @@ const SHOTS: Shot[] = [
   { name: "07-editor", steps: [BTN.RIGHT, BTN.TRIANGLE] },
   { name: "08-keyboard", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, BTN.RIGHT, BTN.DOWN] },
   { name: "09-art-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE] },
-  { name: "10-categories", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, BTN.DOWN] },
+  { name: "10-categories", steps: [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.DOWN] },
   // Icon box off: SELECT, down to "Icon box", right once.
   { name: "29-icon-box-off", steps: [BTN.SELECT, ...tap(BTN.DOWN, 5), BTN.RIGHT, BTN.SELECT, BTN.RIGHT] },
-  { name: "30-menu-scrolled", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6)] },
+  { name: "30-menu-scrolled", steps: [BTN.SELECT, ...tap(BTN.DOWN, 9)] },
   // Backdrop off: SELECT, down to "Backdrop", right once.
   { name: "20-no-backdrop", steps: [BTN.SELECT, ...tap(BTN.DOWN, 4), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2)] },
   { name: "11-launching", steps: [...tap(BTN.RIGHT, 2), BTN.CIRCLE] },
@@ -499,42 +506,42 @@ const SHOTS: Shot[] = [
   {
     name: "48-accent-category",
     steps: [
-      BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, BTN.TRIANGLE,
+      BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.TRIANGLE,
       ...tap(BTN.RTRIGGER, 2), BTN.LTRIGGER, BTN.CIRCLE, BTN.DOWN, BTN.CIRCLE, BTN.DOWN, BTN.CIRCLE, BTN.START,
-      "restart", BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.CIRCLE, BTN.UP,
+      "restart", BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.UP,
     ],
   },
   // SELECT, down to "Fetch artwork": the titles to fetch for, the run, its end.
-  { name: "49-scrape-setup", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE] },
-  { name: "50-scrape-all", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, BTN.LEFT, BTN.DOWN] },
+  { name: "49-scrape-setup", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE] },
+  { name: "50-scrape-all", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, BTN.LEFT, BTN.DOWN] },
   {
     name: "51-scrape-running",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90]],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90]],
   },
   {
     name: "52-scrape-done",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900]],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900]],
   },
   {
     name: "53-scrape-stopped",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90], BTN.CROSS],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90], BTN.CROSS],
   },
   // "All" after a run: every title is fetched for once more.
   {
     name: "56-scrape-replace",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, BTN.DOWN, BTN.RIGHT],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, BTN.DOWN, BTN.RIGHT],
   },
   // After a run every title of the category has a file: nothing is left to fetch.
   {
     name: "54-scrape-again",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE],
   },
-  { name: "55-scrape-shelf", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]] },
+  { name: "55-scrape-shelf", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]] },
   // A press past an end of the list continues at the other end, in each view.
   { name: "57-wrap-shelf", steps: [BTN.LEFT, [0, 30]] },
   { name: "58-wrap-shelf-back", steps: [BTN.LEFT, [0, 30], BTN.RIGHT, [0, 30]] },
@@ -547,21 +554,31 @@ const SHOTS: Shot[] = [
   {
     name: "63-picker-title",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]],
   },
   // Triangle: every file of the folder.
   {
     name: "64-picker-all",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), [0, 40]],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), [0, 40]],
   },
   {
     name: "65-picker-backdrop",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 40]],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 40]],
   },
   // The fixed rows preview too: "Default" is the title's own icon.
   { name: "66-picker-default", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]] },
+  // The status bar row in the SELECT menu, and the shelf and list with the bar off.
+  { name: "80-status-row", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6)] },
+  { name: "81-status-off", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.RIGHT, BTN.SELECT] },
+  // 12-hour clock and no battery number; a low battery while charging.
+  { name: "84-status-12h", steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.LEFT, BTN.DOWN, BTN.RIGHT, BTN.SELECT] },
+  { name: "85-status-weak", status: "9 5 1 12 1 20 0", steps: [[0, 2]] },
+  { name: "87-status-full", status: "9 5 1 100 0 100 1", steps: [[0, 2]] },
+  { name: "86-status-low", status: "9 5 1 9 0 0 1", steps: [BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.SELECT] },
+  { name: "83-status-daylight", steps: [BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.SELECT] },
+  { name: "82-status-off-list", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.RIGHT, ...tap(BTN.UP, 4), BTN.RIGHT, BTN.RIGHT, BTN.SELECT] },
   // A file the host cannot decode: its row shows a note and confirm keeps the
   // drawer open, whether pressed after the check or before it.
   {
@@ -584,28 +601,28 @@ const SHOTS: Shot[] = [
   {
     name: "67-clean-unused",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE],
   },
   // "All", then "Delete" once: the question before the files go.
   {
     name: "68-clean-ask",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, BTN.CIRCLE],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, BTN.CIRCLE],
   },
   {
     name: "69-clean-done",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2)],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2)],
   },
   // The titles are back on their own icons.
   {
     name: "70-clean-shelf",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2), ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]],
+    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2), ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]],
   },
   // Rescan titles: before, and after a scan that finds one more title.
-  { name: "71-rescan", steps: [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE] },
-  { name: "72-rescan-done", steps: [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.CIRCLE, [0, 20]] },
+  { name: "71-rescan", steps: [BTN.SELECT, ...tap(BTN.DOWN, 12), BTN.CIRCLE] },
+  { name: "72-rescan-done", steps: [BTN.SELECT, ...tap(BTN.DOWN, 12), BTN.CIRCLE, BTN.CIRCLE, [0, 20]] },
   // Mark a favorite, start again: the changes come back from the one-file cache.
   { name: "73-changes-kept", steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.CIRCLE, BTN.CROSS, "restart", [0, 20]] },
   // Diagnostics: the startup timing, first lines and scrolled.
@@ -641,6 +658,7 @@ async function capture(shot: Shot): Promise<void> {
       0,
     );
   }
+  statusLine = shot.status ?? DEFAULT_STATUS;
   for (const path of shot.files ?? []) {
     (files.ns as { write(path: string, data: string, mode: number): number }).write(path, JSON.stringify("PNG"), 0);
   }

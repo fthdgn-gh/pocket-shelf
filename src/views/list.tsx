@@ -3,7 +3,7 @@ import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
 import { fitTitle } from "../catalog.ts";
 import { TitleArt } from "../components/art.tsx";
-import { LIST_GAP, LIST_ROWS, LIST_ROW_H } from "../layout.ts";
+import { LIST_GAP, LIST_ROW_H, listRows } from "../layout.ts";
 import type { LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
 import { alpha } from "../themes.ts";
@@ -52,23 +52,32 @@ export function ListView(props: { state: LauncherState }) {
   const { state } = props;
   let stripRef: NodeMirror | undefined;
 
+  // Rows on screen: one less while the status bar takes the top of the screen.
+  const rows = () => listRows(state.statusBarOn());
   // First visible row. Starts so the selection is on screen when the view mounts.
-  const [topRow, setTopRow] = createSignal(Math.max(0, untrack(state.selectedIndex) - LIST_ROWS + 1));
+  const [topRow, setTopRow] = createSignal(Math.max(0, untrack(state.selectedIndex) - untrack(rows) + 1));
   // The visible rows and two more above and below, which a scroll slides through.
-  const list = createWindow(state, () => [topRow() - 2, topRow() + LIST_ROWS + 2]);
+  const list = createWindow(state, () => [topRow() - 2, topRow() + rows() + 2]);
 
   createEffect(() => {
     state.games(); // re-run when the category changes the list
     const index = state.selectedIndex();
     const top = untrack(topRow);
     if (index < top) setTopRow(index);
-    else if (index >= top + LIST_ROWS) setTopRow(index - LIST_ROWS + 1);
+    else if (index >= top + rows()) setTopRow(index - rows() + 1);
     if (stripRef) animate(stripRef, "translateY", -untrack(topRow) * ROW_PITCH, { dur: 150, easing: "out" });
   });
 
   return (
     <View class="flex-row w-full grow px-4">
-      <View class="flex-col grow h-[200] mt-[4] overflow-hidden justify-start">
+      {/* Six rows of 30 with gaps of 4 are 200 high; five are 166. */}
+      <View
+        class={
+          state.statusBarOn()
+            ? "flex-col grow h-[166] mt-[4] overflow-hidden justify-start"
+            : "flex-col grow h-[200] mt-[4] overflow-hidden justify-start"
+        }
+      >
         <View
           ref={(el) => {
             stripRef = el;

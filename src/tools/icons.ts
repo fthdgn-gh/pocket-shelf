@@ -153,6 +153,76 @@ function shoulder(letter: "L" | "R"): string {
 const pill = (text: string, width: number) =>
   svg(64, 16, [...roundRect(0, 2, width, 12, 6, FACE), label(text, 7, 0.5, [4, 2, width - 8, 12])]);
 
+/** A bar `thick` wide from `a` to `b`, as a four-sided polygon. */
+function segment(a: [number, number], b: [number, number], thick: number, fill: string): string {
+  const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const nx = (-(b[1] - a[1]) / length) * (thick / 2);
+  const ny = ((b[0] - a[0]) / length) * (thick / 2);
+  return polygon(
+    [
+      [a[0] + nx, a[1] + ny],
+      [b[0] + nx, b[1] + ny],
+      [b[0] - nx, b[1] - ny],
+      [a[0] - nx, a[1] - ny],
+    ],
+    fill,
+  );
+}
+
+// Status bar symbols are drawn in the top left 12x12 of a 16x16 texture; the
+// UI clips the rest (components/icons.tsx). They come in two inks: light for the dark themes, dark for
+// Daylight ("-day" files). Unlit parts of the Wi-Fi symbol use the faint ink.
+const STATUS_INK = { night: { lit: "#dfe4ec", unlit: "#4a5266" }, day: { lit: "#334155", unlit: "#b4c0d0" } };
+type Ink = keyof typeof STATUS_INK;
+
+/**
+ * The Vita's Wi-Fi symbol: a dot in the lower left corner and three quarter
+ * rings around it, lit from the inside out. `level` is the rings lit (0 to 3).
+ * The status bar shows it only while connected.
+ */
+function wifi(level: number, ink: Ink): string {
+  const { lit, unlit } = STATUS_INK[ink];
+  const [cx, cy] = [2, 10];
+  // A quarter ring from straight up to straight right, as a polygon.
+  const ring = (inner: number, outer: number, fill: string) => {
+    const steps = 12;
+    const at = (r: number, i: number): [number, number] => {
+      const angle = -Math.PI / 2 + (i / steps) * (Math.PI / 2);
+      return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
+    };
+    const points: [number, number][] = [];
+    for (let i = 0; i <= steps; i++) points.push(at(outer, i));
+    for (let i = steps; i >= 0; i--) points.push(at(inner, i));
+    return polygon(points, fill);
+  };
+  const rings = [
+    [3.4, 4.8],
+    [5.9, 7.3],
+    [8.4, 9.8],
+  ].map(([inner, outer], index) => ring(inner!, outer!, index < level ? lit : unlit));
+  return svg(16, 16, [circle(cx, cy, 1.7, lit), ...rings]);
+}
+
+/** The Bluetooth rune: a spine and two arrowheads, with round joints. */
+function bluetooth(ink: Ink): string {
+  const SOFT = STATUS_INK[ink].lit;
+  const thick = 1.2;
+  const top: [number, number] = [6, 1];
+  const bottom: [number, number] = [6, 11];
+  const upper: [number, number] = [8.7, 3.6];
+  const lower: [number, number] = [8.7, 8.4];
+  const left = (y: number): [number, number] => [3.3, y];
+  const joints = [top, bottom, upper, lower].map(([x, y]) => circle(x, y, thick / 2, SOFT));
+  return svg(16, 16, [
+    segment(top, bottom, thick, SOFT),
+    segment(top, upper, thick, SOFT),
+    segment(upper, left(8.4), thick, SOFT),
+    segment(bottom, lower, thick, SOFT),
+    segment(lower, left(3.6), thick, SOFT),
+    ...joints,
+  ]);
+}
+
 const FILES: Record<string, string> = {
   "btn-circle.svg": face([circle(8, 8, 4.1, CIRCLE), circle(8, 8, 2.9, FACE)]),
   "btn-cross.svg": face([diagonal(1), diagonal(-1)]),
@@ -167,6 +237,16 @@ const FILES: Record<string, string> = {
   "arrow-left.svg": svg(8, 16, [polygon([[6.5, 4], [1.5, 8], [6.5, 12]], SOFT)]),
   "arrow-right.svg": svg(8, 16, [polygon([[1.5, 4], [6.5, 8], [1.5, 12]], SOFT)]),
   "plus.svg": svg(16, 16, [rect(7, 3.5, 2, 9, SOFT), rect(3.5, 7, 9, 2, SOFT)]),
+  "bluetooth.svg": bluetooth("night"),
+  "bluetooth-day.svg": bluetooth("day"),
+  ...Object.fromEntries(
+    (["night", "day"] as const).flatMap((ink) =>
+      [0, 1, 2, 3].map((level) => [
+        `wifi-${level}${ink === "day" ? "-day" : ""}.svg`,
+        wifi(level, ink),
+      ]),
+    ),
+  ),
 };
 
 mkdirSync(OUT, { recursive: true });

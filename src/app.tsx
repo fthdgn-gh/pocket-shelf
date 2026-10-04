@@ -21,6 +21,7 @@ import { DiagnosticsOverlay } from "./components/diagnostics.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
 import { Footer } from "./components/footer.tsx";
 import { Header } from "./components/header.tsx";
+import { StatusBar } from "./components/status-bar.tsx";
 import { hints, Prompt, withButton } from "./components/icons.tsx";
 import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
@@ -59,6 +60,9 @@ export default function App() {
         <Backdrop state={state} />
       ))}
 
+      <Show when={state.statusBarOn()}>
+        <StatusBar state={state} />
+      </Show>
       {timed("header", () => (
         <Header state={state} />
       ))}

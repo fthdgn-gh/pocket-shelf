@@ -34,6 +34,9 @@ usb-debug = ["vitasdk-sys/ScePower_stub", "vitasdk-sys/SceSysmem_stub"]
 installed-apps = ["vitasdk-sys/SceAppMgr_stub", "dep:png"]
 # globalThis.fs over ux0:/data/pocketjs/<title id>.
 data-fs = ["dep:pocket-fs"]
+# ui.__status() for a status bar (src/status.rs): local time and clock
+# format, battery, Wi-Fi and Bluetooth.
+status = ["vitasdk-sys/SceAppUtil_stub", "vitasdk-sys/ScePower_stub", "vitasdk-sys/SceRegistryMgr_stub", "vitasdk-sys/SceRtc_stub"]
 # HTTPS GET for apps (src/http.rs): text replies and PNG downloads into the
 # data folder.
 http = ["data-fs", "dep:rustls", "dep:rustls-rustcrypto", "dep:webpki-roots"]
