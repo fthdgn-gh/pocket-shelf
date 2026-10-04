@@ -458,6 +458,13 @@ cannot be driven. Evidence comes from its log and from files under
   a row not yet checked loads it at once and applies it if it decodes. In the
   preview, a file named `broken...` stands for one that does not decode.
 
+- **Without an API key**, both SteamGridDB drawers (the editor's and Fetch
+  artwork's `key` step) first explain the key and where its file goes, and
+  open the keyboard on confirm. Fetch artwork used to open the keyboard at
+  once, and the user could not tell what it was for.
+- **The keyboard names what it types** in a heading above the field
+  (`keyboardFor` in the locales, by `KeyboardTarget` kind: title, new
+  category, category name, library search, SteamGridDB search, API key).
 - **Fetch artwork (SELECT menu)** runs the same lookups for many titles
   (`scrape.ts`): all titles or one category, one request at a time, the first
   game's first icon and first hero. "Missing only" asks for the pictures a

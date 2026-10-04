@@ -1,4 +1,6 @@
 import { Match, Show, Switch } from "solid-js";
+import { View } from "@pocketjs/framework/components";
+import { dataFolder } from "../art-files.ts";
 import { fitTitle } from "../catalog.ts";
 import { fill } from "../i18n.ts";
 import type { LauncherState } from "../state.ts";
@@ -57,7 +59,19 @@ export function ScrapeOverlay(props: { state: LauncherState }) {
           />
         </Match>
 
-        <Match when={scrape.step() !== "setup"}>
+        <Match when={scrape.step() === "key"}>
+          <OptionRow state={state} active label={t().enterKey} step="right" />
+          <View class="h-[4] shrink-0" />
+          <Note state={state}>{t().keyHelp}</Note>
+          <Note state={state}>{`${dataFolder()}/steamgriddb.txt`}</Note>
+          <Spacer />
+          <Show when={scrape.status()}>
+            <Note state={state}>{scrape.status()}</Note>
+          </Show>
+          <Prompt state={state} parts={hints([state.confirmButton(), t().type], [state.cancelButton(), t().back])} />
+        </Match>
+
+        <Match when={scrape.step() === "running" || scrape.step() === "done"}>
           {/* The title being fetched for; once the run ends, the titles it covered. */}
           <Show
             when={scrape.current()}

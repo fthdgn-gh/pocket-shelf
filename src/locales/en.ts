@@ -118,6 +118,15 @@ export const en = {
   keyLetters: "Abc",
 
   // SteamGridDB
+  // The heading above the keyboard, for what is being typed.
+  keyboardFor: {
+    title: "Title",
+    newCategory: "New category",
+    category: "Category name",
+    library: "Search your library",
+    search: "Search SteamGridDB",
+    apiKey: "SteamGridDB API key",
+  },
   enterKey: "Enter API key",
   /** Shown above the path of the key file. */
   keyHelp:

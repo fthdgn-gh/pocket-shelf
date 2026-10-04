@@ -3,6 +3,7 @@ import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
 import { getOps } from "@pocketjs/framework/host";
 import { fitTail } from "../catalog.ts";
+import { upper } from "../i18n.ts";
 import type { KeyDef } from "../keyboard.ts";
 import type { LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
@@ -54,6 +55,11 @@ export function KeyboardOverlay(props: { state: LauncherState }) {
         style={{ bgColor: theme().panel, translateY: 80 }}
       >
         <View class="absolute top-0 left-0 right-0 h-[2]" style={{ bgColor: theme().accent }} />
+        <View class="flex-row w-[416] px-[2]">
+          <Text class={state.text().label} style={{ textColor: theme().accent }}>
+            {upper(state.keyboardHeading(), state.language())}
+          </Text>
+        </View>
         <View
           class="flex-row items-center justify-between w-[416] h-[26] px-[10] rounded-md"
           style={{ bgColor: theme().tile }}

@@ -106,6 +106,15 @@ export const de: Messages = {
   keyDelete: "Löschen",
   keyLetters: "Abc",
 
+  // The heading above the keyboard, for what is being typed.
+  keyboardFor: {
+    title: "Titel",
+    newCategory: "Neue Kategorie",
+    category: "Kategoriename",
+    library: "Bibliothek durchsuchen",
+    search: "SteamGridDB durchsuchen",
+    apiKey: "SteamGridDB-API-Schlüssel",
+  },
   enterKey: "API-Schlüssel eingeben",
   keyHelp:
     "SteamGridDB braucht deinen API-Schlüssel. Erstelle ihn auf steamgriddb.com unter Preferences, API. Gib ihn hier ein oder speichere ihn als eine Zeile in der Datei",

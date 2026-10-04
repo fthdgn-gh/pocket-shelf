@@ -23,7 +23,11 @@ import type { Game } from "./types.ts";
  *  - "running": going through them one at a time;
  *  - "done": finished, stopped, or halted by a problem.
  */
-export type ScrapeStep = "setup" | "running" | "done";
+/**
+ * The drawer's pages: choosing what to fetch, asking for the API key when
+ * there is none (as the editor's SteamGridDB page does), the run, its result.
+ */
+export type ScrapeStep = "setup" | "key" | "running" | "done";
 
 /** A set of titles the user can fetch artwork for: all of them, or one category. */
 export interface ScrapeScope {
@@ -244,7 +248,10 @@ export function createScrapeFlow(deps: Deps) {
       return;
     }
     if (!loadKey()) {
-      deps.askKey();
+      batch(() => {
+        setStep("key");
+        setStatus("");
+      });
       return;
     }
     turn++;
@@ -295,12 +302,14 @@ export function createScrapeFlow(deps: Deps) {
     if (step() === "setup") {
       if (row() === START_ROW) run();
       else move(1, 0);
-    } else if (step() === "done") setOpen(false);
+    } else if (step() === "key") deps.askKey();
+    else if (step() === "done") setOpen(false);
   };
 
-  /** Stop a run; from the other steps, close. What was fetched stays. */
+  /** Stop a run; from the key page, back to the setup; else close. What was fetched stays. */
   const cancelStep = () => {
     if (step() === "running") halt(t().scrapeStopped);
+    else if (step() === "key") setStep("setup");
     else setOpen(false);
   };
 

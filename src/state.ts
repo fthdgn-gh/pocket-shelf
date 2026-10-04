@@ -801,6 +801,8 @@ export function createLauncherState(catalog: Catalog) {
     if (kind === "apiKey") return KEY_MAX;
     return kind === "title" || kind === "search" || kind === "library" ? TITLE_MAX : CATEGORY_LABEL_MAX;
   };
+  /** The heading above the keyboard: what is being typed. */
+  const keyboardHeading = () => t().keyboardFor[keyboardTarget().kind];
   /** A line beside the typed text: how many titles the search term finds so far. */
   const keyboardNote = () => {
     if (keyboardTarget().kind !== "library" || !keyboardText().trim()) return "";
@@ -1519,6 +1521,7 @@ export function createLauncherState(catalog: Catalog) {
     openSearch,
     closeSearch,
     keyboardNote,
+    keyboardHeading,
     menuOpen,
     menuRow,
     menuPage,

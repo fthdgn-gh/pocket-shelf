@@ -635,6 +635,10 @@ const SHOTS: Shot[] = [
   // SELECT, down to "Fetch artwork": the titles to fetch for, the run, its end.
   { name: "49-scrape-setup", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE] },
   { name: "50-scrape-all", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE, BTN.LEFT, BTN.DOWN] },
+  // Start with no API key: the drawer asks for one, and the keyboard says
+  // what it is typing.
+  { name: "50b-scrape-no-key", steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE] },
+  { name: "50c-scrape-key-keyboard", steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, BTN.CIRCLE] },
   {
     name: "51-scrape-running",
     key: true,
