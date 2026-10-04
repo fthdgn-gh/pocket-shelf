@@ -201,6 +201,12 @@ function uploadImage(ops: Record<string, unknown>, pixels: Uint8Array, width: nu
 // What `__status` answers; a shot can set its own.
 const DEFAULT_STATUS = "21 47 1 72 0 80 1";
 let statusLine = DEFAULT_STATUS;
+// The fake title scan: whether a list exists, and where a running scan stands.
+const SCAN_TOTAL = 164;
+const SCAN_STEP = 1;
+let titlesListed = true;
+let scanning = false;
+let scanDone = 0;
 // Adrenaline's boot plugin as `__adrPlugin` reports it; a shot can set it.
 let pluginLine = "missing";
 // Whether turning the plugin on fails, as with lists that cannot be written.
@@ -340,9 +346,26 @@ function installHost(ops: Record<string, unknown>): void {
   ops.__processMs = (): number => Math.round(performance.now()) + 420;
   ops.__startupMarks = (): string => "main=3,graphics=120,dev=125,pak=400,quickjs=420,eval=900,frame=930";
   // A scan finds a title that was installed after the list was last read.
-  ops.__appRescan = (): number => {
+  // A scan moves SCAN_STEP items each time the app asks how it stands (once
+  // per frame; the preview runs 60 frames before a shot's steps) and then
+  // finds a title installed after the list was read.
+  ops.__titlesReady = (): number => (titlesListed ? 1 : 0);
+  ops.__scanStart = (): number => {
+    scanDone = 0;
+    scanning = true;
+    return 1;
+  };
+  ops.__scanState = (): string => {
+    if (!scanning) return titlesListed ? `done ${TITLES.length} 2840` : "idle";
+    scanDone = Math.min(SCAN_TOTAL, scanDone + SCAN_STEP);
+    if (scanDone < SCAN_TOTAL) {
+      const phase = scanDone < 140 ? "apps" : scanDone < 156 ? "system" : scanDone < 160 ? "psp" : "images";
+      return `running ${scanDone} ${SCAN_TOTAL} ${phase}`;
+    }
+    scanning = false;
+    titlesListed = true;
     if (!TITLES.some(([id]) => id === "PCSH00999")) TITLES.splice(13, 0, ["PCSH00999", "Fresh Install"]);
-    return TITLES.length;
+    return `done ${TITLES.length} 2840`;
   };
   ops.appLaunch = (id: string): number => (TITLES.some(([known]) => known === id) ? 1 : 0);
   ops.appIcon = (id: string): number => {
@@ -400,6 +423,8 @@ interface Shot {
   plugin?: string;
   /** Turning the plugin on fails. */
   pluginLocked?: boolean;
+  /** Start with no title list, as on the first start: the scan page shows. */
+  firstStart?: boolean;
 }
 
 
@@ -453,7 +478,8 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("online-key", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE]),
     shot("scrape", [...menuTo("fetchArt"), BTN.CIRCLE]),
     shot("clean", [...menuTo("cleanArt"), BTN.CIRCLE, BTN.RIGHT]),
-    shot("rescan", [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 20]]),
+    shot("rescan", [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 180]]),
+    { ...shot("first-start", []), firstStart: true },
     shot("adrenaline", [...tabTo(PSP_ID), [0, 20], BTN.RIGHT, BTN.CIRCLE]),
   ];
 });
@@ -721,7 +747,13 @@ const SHOTS: Shot[] = [
   },
   // Rescan titles: before, and after a scan that finds one more title.
   { name: "71-rescan", steps: [...menuTo("rescan"), BTN.CIRCLE] },
-  { name: "72-rescan-done", steps: [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 20]] },
+  // The scan runs on the host's worker thread: the drawer shows its progress.
+  { name: "71b-rescan-running", steps: [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 60]] },
+  { name: "72-rescan-done", steps: [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 180]] },
+  // The first start: no title list yet, so the scan page shows its progress,
+  // then the shelf.
+  { name: "72b-first-start", firstStart: true, steps: [] },
+  { name: "72c-first-start-done", firstStart: true, steps: [[0, 130]] },
   // Mark a favorite, start again: the changes come back from the one-file cache.
   { name: "73-changes-kept", steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.CIRCLE, BTN.CROSS, "restart", [0, 20]] },
   // Diagnostics: the startup timing, first lines and scrolled.
@@ -760,6 +792,9 @@ async function capture(shot: Shot): Promise<void> {
   statusLine = shot.status ?? DEFAULT_STATUS;
   pluginLine = shot.plugin ?? "missing";
   pluginLocked = shot.pluginLocked ?? false;
+  titlesListed = !shot.firstStart;
+  scanning = false;
+  scanDone = 0;
   for (const path of shot.files ?? []) {
     (files.ns as { write(path: string, data: string, mode: number): number }).write(path, JSON.stringify("PNG"), 0);
   }

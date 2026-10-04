@@ -2,6 +2,8 @@
 // the LiveArea layout:
 //
 //   icon0.png                         128x128  the bubble on the home screen
+//   pic0.png                          960x544  the splash the system shows
+//                                               while the app loads
 //   livearea/contents/bg.png          840x500  the LiveArea background
 //   livearea/contents/startup.png     280x158  the gate image
 //   livearea/contents/template.xml             the layout: the app's name and
@@ -150,6 +152,30 @@ function liveAreaBackground(): Uint8ClampedArray {
   ctx.fillStyle = "#02040c66";
   ctx.fillRect(0, 0, 840, 500);
   return ctx.getImageData(0, 0, 840, 500).data;
+}
+
+/**
+ * The splash. It leads into the app's first screen: the Midnight theme's
+ * background (the default), the name where the scan page of a first start
+ * puts it, and the shelf row low and dim as on the LiveArea.
+ */
+function splash(): Uint8ClampedArray {
+  const canvas = createCanvas(960, 544);
+  const ctx = canvas.getContext("2d");
+  const fill = ctx.createLinearGradient(0, 0, 0, 544);
+  fill.addColorStop(0, "#101a36");
+  fill.addColorStop(1, "#02040c");
+  ctx.fillStyle = fill;
+  ctx.fillRect(0, 0, 960, 544);
+  const floor = 470;
+  shelf(ctx, 960, floor + 12, 4, 84);
+  row(ctx, 480, floor, 96, 132, 4, 5, 0.3);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = '48px "Shelf Bold"';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(MANIFEST.title, 480, 206);
+  return ctx.getImageData(0, 0, 960, 544).data;
 }
 
 function startup(): Uint8ClampedArray {
@@ -351,6 +377,7 @@ function indexedPng(rgba: Uint8ClampedArray, width: number, height: number): Buf
 
 const FILES: [path: string, width: number, height: number, draw: () => Uint8ClampedArray][] = [
   ["icon0.png", 128, 128, icon],
+  ["pic0.png", 960, 544, splash],
   ["livearea/contents/bg.png", 840, 500, liveAreaBackground],
   ["livearea/contents/startup.png", 280, 158, startup],
 ];

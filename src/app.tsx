@@ -9,9 +9,9 @@
 //   views/          shelf (carousel), grid and list
 //   components/     title art, header, footer, drawers, keyboard
 
-import { onMount, Show } from "solid-js";
+import { createSignal, onMount, Show } from "solid-js";
 import { Text, View } from "@pocketjs/framework/components";
-import { fitTitle, loadCatalog } from "./catalog.ts";
+import { fitTitle, loadCatalog, titlesReady } from "./catalog.ts";
 import { TINT_AMBIENT } from "./components/art.tsx";
 import { AdrenalineOverlay } from "./components/adrenaline.tsx";
 import { ArtPickerOverlay } from "./components/art-picker.tsx";
@@ -28,6 +28,7 @@ import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
 import { OnlineOverlay } from "./components/online.tsx";
 import { RescanOverlay } from "./components/rescan.tsx";
+import { ScanPage } from "./components/scan-page.tsx";
 import { ScrapeOverlay } from "./components/scrape.tsx";
 import { setupDone, timed } from "./diagnostics.ts";
 import { fill } from "./i18n.ts";
@@ -38,7 +39,20 @@ import { CarouselView } from "./views/carousel.tsx";
 import { GridView } from "./views/grid.tsx";
 import { ListView } from "./views/list.tsx";
 
-export default function App() {
+/**
+ * The shelf, after the scan page on a start with no title list yet (the
+ * first one, or after the list file was deleted).
+ */
+export default function Root() {
+  const [ready, setReady] = createSignal(titlesReady());
+  return (
+    <Show when={ready()} fallback={<ScanPage onDone={() => setReady(true)} />}>
+      <Shelf />
+    </Show>
+  );
+}
+
+function Shelf() {
   setupDone();
   const catalog = timed("catalog", loadCatalog);
   const state = timed("state", () => createLauncherState(catalog));

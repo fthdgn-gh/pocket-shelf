@@ -167,7 +167,16 @@ export const de: Messages = {
   rescan: "Titel neu einlesen",
   scan: "Einlesen",
   scanHelp: "Liest die installierten Titel neu ein. Nach dem Installieren oder Entfernen eines Titels verwenden.",
-  scanning: "Wird eingelesen...",
+  scanTitle: "Deine Spiele und Apps werden gesucht",
+  scanStep: "{phase}: {done} von {total}",
+  scanFailed: "Die Suche konnte nicht starten.",
+  scanPhases: {
+    apps: "Apps und Spiele",
+    system: "Systemanwendungen",
+    psm: "PlayStation Mobile",
+    psp: "PSP- und PSX-Spiele",
+    images: "Disc-Images",
+  },
   scanDone: "{count} Titel in {seconds} s gefunden.",
 
   // Startplugin für Adrenaline
