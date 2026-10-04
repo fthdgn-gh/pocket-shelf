@@ -10,9 +10,12 @@
  * XMB's other modules were still starting, hung the PSP side on the third
  * launch on hardware; booting from the start-module handler, which runs
  * inside the module manager, started nothing at all. So the handler only
- * notes `vsh_module`, the XMB's last module, and a thread of the plugin
- * boots `XMB_SETTLE_US` after it, when the XMB is up as when the user picks
- * a game from it:
+ * notes modules, and a thread of the plugin boots. It boots `AFTER_XMB_US`
+ * after the first module that starts after `vsh_module` (the XMB's own code
+ * is then running and loading its menu, which is not drawn yet), or
+ * `XMB_SETTLE_US` after `vsh_module` when no such module comes (the XMB is
+ * then up, as when the user picks a game from it; it shows for a moment).
+ * The boot itself is done the way the XMB does it:
  *   - a PSP EBOOT: apitype 0x141, key "game";
  *   - a PS1 EBOOT: apitype 0x144, key "pops";
  *   - a disc image (ISO, CSO): the image set as the UMD file, the ISO
@@ -60,8 +63,10 @@ StartModuleHandler sctrlHENSetStartModuleHandler(StartModuleHandler handler);
 #define ISO_PREFIX "ms0:/ISO/"
 #define DISC_SYSDIR "disc0:/PSP_GAME/SYSDIR/"
 
-/* How long after `vsh_module` starts the plugin waits before booting, and how
- * long it waits for `vsh_module` at all. */
+/* How long after the first module after `vsh_module` the plugin boots; how
+ * long after `vsh_module` it boots when no module follows; and how long it
+ * waits for `vsh_module` at all. */
+#define AFTER_XMB_US (200 * 1000)
 #define XMB_SETTLE_US (2 * 1000 * 1000)
 #define VSH_WAIT_US (20 * 1000 * 1000)
 #define POLL_US (50 * 1000)
@@ -98,6 +103,9 @@ StartModuleHandler sctrlHENSetStartModuleHandler(StartModuleHandler handler);
 /* The handler that was registered before this one; every module goes on to it. */
 static StartModuleHandler previous_handler;
 static volatile int vsh_seen;
+/* The first module that started after `vsh_module`, once one has. */
+static volatile int after_vsh_seen;
+static char after_vsh_name[28];
 
 static unsigned char se_config[256];
 static char request[768];
@@ -424,8 +432,15 @@ static void handle_request(void) {
  * on: putting the previous one back could drop a handler another plugin
  * registered after this one. */
 static int on_module_start(void *module) {
-	if (!vsh_seen && strcmp((const char *)module + 8, "vsh_module") == 0) {
-		vsh_seen = 1;
+	const char *name = (const char *)module + 8;
+	if (!vsh_seen) {
+		if (strcmp(name, "vsh_module") == 0) {
+			vsh_seen = 1;
+		}
+	} else if (!after_vsh_seen) {
+		after_vsh_name[0] = 0;
+		append(after_vsh_name, sizeof(after_vsh_name), name);
+		after_vsh_seen = 1;
 	}
 	return previous_handler ? previous_handler(module) : 0;
 }
@@ -442,7 +457,20 @@ static int boot_thread(SceSize args, void *argp) {
 		log_line("vsh_module not seen; request left");
 		return sceKernelExitDeleteThread(0);
 	}
-	sceKernelDelayThread(XMB_SETTLE_US);
+	unsigned int waited = 0;
+	for (; !after_vsh_seen && waited < XMB_SETTLE_US; waited += POLL_US) {
+		sceKernelDelayThread(POLL_US);
+	}
+	char line[64];
+	line[0] = 0;
+	if (after_vsh_seen) {
+		sceKernelDelayThread(AFTER_XMB_US);
+		append(line, sizeof(line), "trigger=after ");
+		append(line, sizeof(line), after_vsh_name);
+	} else {
+		append(line, sizeof(line), "trigger=fallback");
+	}
+	log_line(line);
 	handle_request();
 	return sceKernelExitDeleteThread(0);
 }

@@ -278,6 +278,26 @@ cannot be driven. Evidence comes from its log and from files under
     **Confirmed on hardware (2026-10-04, TheOfficialFloW's Adrenaline):**
     the user reported ISO and CSO games launching from Pocket Shelf "working
     great" with this version.
+    That version showed the XMB for a moment before the game. Now
+    (confirmed on hardware 2026-10-04: games boot, the XMB's menu no longer
+    shows, only its gray background with the white line for a moment): the
+    handler also notes the first module that starts
+    after `vsh_module` (the XMB's own code is running and loading its menu,
+    not drawn yet) and the thread boots `AFTER_XMB_US` (0.2 s) after it,
+    falling back to `XMB_SETTLE_US` (2 s) after `vsh_module` when none comes.
+    The log says which: `trigger=after <module>` or `trigger=fallback`,
+    shown as `Boot trigger`. If this hangs as the first version did, set the
+    thread back to the 2 s wait. Adrenaline's own splash is skipped by its
+    "Skip Adrenaline Boot Logo" setting (and "Skip Sony logo" in recovery);
+    Pocket Shelf does not change Adrenaline's settings.
+  - **Booting straight into a game (no XMB at all) was looked at and not
+    done.** RetroFlow does it with Adrenaline Bubble Manager's parts: it
+    replaces Adrenaline's own modules in `ux0:app/PSPEMUCFW/sce_module` with
+    patched copies (plus `adrbubblebooter.suprx`, `bootconv.suprx`), checks
+    them against CRC tables of known Adrenaline builds, asks for a reboot,
+    and boots through its own bubble (`RETROLNCR`, `data/boot.bin` with the
+    path at `0x40`). The user chose not to modify Adrenaline's files or ship
+    patched ones to save the splash and the moment of XMB background.
   - **The plugin is a kernel module** (`0x1000`). It imports two
     `SystemCtrlForKernel` functions by name-hash NID, which both Adrenalines
     export: `sctrlHENFindFunction` (`0x159AF5CC`) and

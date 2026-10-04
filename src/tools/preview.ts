@@ -325,6 +325,7 @@ function installHost(ops: Record<string, unknown>): void {
   ops.__bootLog = (): string =>
     [
       "age=4s path=ms0:/PSP/GAME/SCUS94163/EBOOT.PBP boot ps1",
+      "trigger=after sceVshCommonGui_Module",
       "age=6s path=ms0:/ISO/Racing/Compressed Racer.cso boot iso",
       "driver=1 EBOOT.BIN",
       "age=41s path=ms0:/ISO/Disc Image Game.iso stale",
