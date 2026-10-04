@@ -169,4 +169,13 @@ export const es: Messages = {
   scanHelp: "Vuelve a leer los títulos instalados. Úsalo después de instalar o quitar un título.",
   scanning: "Escaneando...",
   scanDone: "{count} títulos encontrados en {seconds} s.",
+
+  // Plugin de arranque de Adrenaline
+  adrTitle: "Plugin de Adrenaline",
+  adrAdd: "Añadir plugin",
+  adrTurnOn: "Activar",
+  adrMissing: "{title} se inicia con Adrenaline. Pocket Shelf añade su propio plugin a las listas de plugins de Adrenaline (ux0:pspemu/seplugins), que inicia el juego al abrirse Adrenaline. ¿Añadirlo e iniciar el juego?",
+  adrOff: "El plugin de Pocket Shelf está desactivado en las listas de plugins de Adrenaline. Sin él, Adrenaline abre su menú en lugar de {title}. ¿Activarlo e iniciar el juego?",
+  adrNone: "{title} se inicia con Adrenaline, y Adrenaline no está instalado.",
+  adrFailed: "No se pudieron cambiar las listas de plugins de Adrenaline.",
 };

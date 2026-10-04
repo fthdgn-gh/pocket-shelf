@@ -169,4 +169,13 @@ export const tr: Messages = {
   scanHelp: "Yüklü başlıkları yeniden okur. Bir başlık yükledikten ya da kaldırdıktan sonra kullanın.",
   scanning: "Taranıyor...",
   scanDone: "{seconds} sn içinde {count} başlık bulundu.",
+
+  // Adrenaline başlatma eklentisi
+  adrTitle: "Adrenaline eklentisi",
+  adrAdd: "Eklentiyi ekle",
+  adrTurnOn: "Aç",
+  adrMissing: "{title}, Adrenaline ile başlar. Pocket Shelf, Adrenaline'in eklenti listelerine (ux0:pspemu/seplugins) kendi eklentisini ekler; bu eklenti, Adrenaline açıldığında oyunu başlatır. Eklensin ve oyun başlasın mı?",
+  adrOff: "Pocket Shelf'in eklentisi Adrenaline'in eklenti listelerinde kapalı. Eklenti olmadan Adrenaline, {title} yerine kendi menüsünü açar. Açılsın ve oyun başlasın mı?",
+  adrNone: "{title}, Adrenaline ile başlar, ancak Adrenaline yüklü değil.",
+  adrFailed: "Adrenaline'in eklenti listeleri değiştirilemedi.",
 };

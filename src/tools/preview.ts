@@ -200,6 +200,12 @@ function uploadImage(ops: Record<string, unknown>, pixels: Uint8Array, width: nu
 // What `__status` answers; a shot can set its own.
 const DEFAULT_STATUS = "21 47 1 72 0 80 1";
 let statusLine = DEFAULT_STATUS;
+// Adrenaline's boot plugin as `__adrPlugin` reports it; a shot can set it.
+let pluginLine = "missing";
+// Whether turning the plugin on fails, as with lists that cannot be written.
+let pluginLocked = false;
+// PSP and PS1 titles with no bubble, which start through Adrenaline.
+const NO_BUBBLE = new Set(["ULUS10041", "SCUS94163"]);
 let dataFolder: { write(path: string, data: string, mode: number): number } | undefined;
 
 /** The API key the preview "saved": the fake SteamGridDB accepts this one only. */
@@ -301,14 +307,34 @@ function installHost(ops: Record<string, unknown>): void {
   ops.appTable = () =>
     JSON.stringify({
       kind: "native",
-      apps: TITLES.map(([id, title, platform]) => ({ output: id, id, title, installed: true, platform })),
+      apps: TITLES.map(([id, title, platform]) => ({
+        output: id,
+        id,
+        title,
+        installed: true,
+        platform,
+        ...(NO_BUBBLE.has(id) ? { adrenaline: true } : {}),
+      })),
       current: "PBCF7609D",
       resume: null,
     });
   // A fixed reading, so shots do not change with the time they are taken.
   ops.__status = (): string => statusLine;
   ops.__scanReport = (): string =>
-    "PSM folders=4,PSM source=app.db,PSM bubbles=3,PSM appmetaIcons=3,PSP folders=6,PSP bubbles=4,PSP ps1=2,PSP psp=2";
+    "PSM folders=4,PSM source=app.db,PSM bubbles=3,PSM appmetaIcons=3,PSP stick=ux0:/pspemu,PSP folders=5,PSP titles=4,PSP ps1=2,PSP psp=2,PSP noBubble=2,PSP firstNoBubble=SCUS94163,ISO files=2,ISO titles=2,ISO skipped=1,ISO skip=ISO/Other.zso format zso";
+  ops.__bootLog = (): string =>
+    [
+      "age=4s path=ms0:/PSP/GAME/SCUS94163/EBOOT.PBP boot ps1",
+      "age=6s path=ms0:/ISO/Racing/Compressed Racer.cso boot iso",
+      "driver=1 EBOOT.BIN",
+      "age=41s path=ms0:/ISO/Disc Image Game.iso stale",
+    ].join("\n");
+  ops.__adrPlugin = (): string => pluginLine;
+  ops.__adrPluginEnable = (): number => {
+    if (pluginLine === "noAdrenaline" || pluginLocked) return 0;
+    pluginLine = "on";
+    return 1;
+  };
   ops.__processMs = (): number => Math.round(performance.now()) + 420;
   ops.__startupMarks = (): string => "main=3,graphics=120,dev=125,pak=400,quickjs=420,eval=900,frame=930";
   // A scan finds a title that was installed after the list was last read.
@@ -368,6 +394,10 @@ interface Shot {
   files?: string[];
   /** The host's `__status` line, in place of the usual one. */
   status?: string;
+  /** What `__adrPlugin` reports, in place of "missing". */
+  plugin?: string;
+  /** Turning the plugin on fails. */
+  pluginLocked?: boolean;
 }
 
 
@@ -411,6 +441,7 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("scrape", [...menuTo("fetchArt"), BTN.CIRCLE]),
     shot("clean", [...menuTo("cleanArt"), BTN.CIRCLE, BTN.RIGHT]),
     shot("rescan", [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 20]]),
+    shot("adrenaline", [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE]),
   ];
 });
 
@@ -433,7 +464,22 @@ const SHOTS: Shot[] = [
   { name: "91-psm-tab", steps: [...tap(BTN.RTRIGGER, 3), [0, 20]] },
   { name: "93-psp-tab", steps: [...tap(BTN.RTRIGGER, 4), [0, 20]] },
   { name: "94-ps1-tab", steps: [...tap(BTN.RTRIGGER, 5), [0, 20]] },
+  // Starting a PSP title without a bubble while Adrenaline would not load the
+  // boot plugin: not in its lists, turned off, no Adrenaline, then after
+  // adding it, and when the lists cannot be changed.
+  { name: "95-adr-missing", steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
+  { name: "96-adr-off", plugin: "off", steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
+  { name: "97-adr-none", plugin: "noAdrenaline", steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
+  { name: "98-adr-added", steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE, BTN.CIRCLE] },
+  {
+    name: "99-adr-failed",
+    plugin: "off",
+    pluginLocked: true,
+    steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE, BTN.CIRCLE],
+  },
   { name: "92-psm-diagnostics", steps: [...menuTo("diagnostics"), BTN.CIRCLE, ...tap(BTN.DOWN, 24)] },
+  // The end of the screen: the image scan and the boot plugin's log.
+  { name: "92b-boot-log", steps: [...menuTo("diagnostics"), BTN.CIRCLE, ...tap(BTN.DOWN, 40)] },
   // The main page; back from Status bar to Appearance, then to the main page.
   { name: "88-menu-main", steps: [BTN.SELECT] },
   { name: "89-menu-back", steps: [...menuTo("clock"), BTN.CROSS] },
@@ -699,6 +745,8 @@ async function capture(shot: Shot): Promise<void> {
     );
   }
   statusLine = shot.status ?? DEFAULT_STATUS;
+  pluginLine = shot.plugin ?? "missing";
+  pluginLocked = shot.pluginLocked ?? false;
   for (const path of shot.files ?? []) {
     (files.ns as { write(path: string, data: string, mode: number): number }).write(path, JSON.stringify("PNG"), 0);
   }

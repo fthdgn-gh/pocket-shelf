@@ -13,6 +13,7 @@ import { onMount, Show } from "solid-js";
 import { Text, View } from "@pocketjs/framework/components";
 import { fitTitle, loadCatalog } from "./catalog.ts";
 import { TINT_AMBIENT } from "./components/art.tsx";
+import { AdrenalineOverlay } from "./components/adrenaline.tsx";
 import { ArtPickerOverlay } from "./components/art-picker.tsx";
 import { Backdrop } from "./components/backdrop.tsx";
 import { CategoryManagerOverlay } from "./components/category-manager.tsx";
@@ -146,6 +147,9 @@ export default function App() {
       </Show>
       <Show when={state.modal() === "keyboard"}>
         <KeyboardOverlay state={state} />
+      </Show>
+      <Show when={state.modal() === "adrenaline"}>
+        <AdrenalineOverlay state={state} />
       </Show>
     </View>
   ));

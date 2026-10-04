@@ -41,9 +41,10 @@ PocketJS framework and builds from the root `pocket.json`.
 | `bun run shelf:test` | Unit tests under `src/tests/` |
 | `bun run shelf:preview [words]` | Render the app headless to PNG (see below) |
 | `bun run shelf:icons` / `shelf:art` | Regenerate `src/icons/*.svg` / LiveArea PNGs |
+| `bun run shelf:plugin` | Build the Adrenaline boot plugin into `src/vita/psp/pocketshelf.prx` |
 
-The Rust tests in `hosts/vita/src/accent.rs` run natively:
-`rustc --edition 2021 --test hosts/vita/src/accent.rs -o /tmp/t && /tmp/t`.
+The Rust tests in `hosts/vita/src/accent.rs`, `dds.rs` and `seplugins.rs` run
+natively: `rustc --edition 2021 --test hosts/vita/src/accent.rs -o /tmp/t && /tmp/t`.
 
 ## Seeing the app
 
@@ -154,21 +155,161 @@ cannot be driven. Evidence comes from its log and from files under
   bubble. Read once per scan with the system's SQLite module and shared by
   the PSM and PSP/PS1 scans; the icon decoder also asks it for `iconPath`.
 - **PSP and PS1 Classics** (`pspemu.rs`): folders in
-  `ux0:/pspemu/PSP/GAME/<id>/` with an `EBOOT.PBP`. Only those with a bubble
-  row of the same id are listed (an official package installed for the
-  Vita's own emulator); `psgm:play?titleid=<id>` starts them without
-  Adrenaline. The PBP header gives the offset of its plain `PARAM.SFO`;
-  `CATEGORY` `ME` is PS1, anything else PSP. The host sends a `platform`
-  (`vita`, `psm`, `psp`, `ps1`) with each title in the table and stores it in
-  `titles.tsv` (header version 3); `categoryOf` puts PSP and PS1 titles in the
-  `builtin-psp` and `builtin-ps1` categories, which follow PS Mobile. Folders
-  without a bubble (homebrew, games installed for Adrenaline) and ISO/CSO
-  files are not listed yet; launching those needs Adrenaline (RetroFlow ships
-  a helper bubble whose `data/boot.bin` it rewrites per launch). Diagnostics
-  shows `PSP folders`, `bubbles`, `ps1`, `psp`, and when ids do not meet,
-  `firstNoBubble` and `firstOther`. In Vita3K with made-up PBPs: a PSP and a
-  PS1 title listed by bubble name, a folder without a bubble left out, the PSP
-  icon decoded from `icon0.dds`. Not yet seen on hardware.
+  `ux0:/pspemu/PSP/GAME/<id>/` with an `EBOOT.PBP` whose `PARAM.SFO` reads.
+  The PBP header gives the offsets of its sections (`PARAM.SFO`,
+  `ICON0.PNG`, ..., `PIC1.PNG`); `CATEGORY` `ME` is PS1, anything else PSP.
+  The host sends a `platform` (`vita`, `psm`, `psp`, `ps1`) with each title;
+  `categoryOf` puts PSP and PS1 titles in `builtin-psp` and `builtin-ps1`.
+  - **With a bubble** (a row of the same id in `app.db`, an official package
+    for the Vita's own emulator): named by the bubble, started with
+    `psgm:play?titleid=<id>`, no Adrenaline. Not yet seen on hardware.
+  - **Without a bubble** (games installed for Adrenaline; the user's PSP and
+    PS1 games are all this kind): named from the PBP's `TITLE`, icon from its
+    `ICON0.PNG` fitted whole into a 128 px square with clear bars, backdrop
+    from its `PIC1.PNG`, started through Adrenaline (below). `titles.tsv`
+    (header version 4) stores `uri` or `adrenaline` per title.
+  - **Disc images** (`iso.rs`): `.iso` and `.cso` in `ux0:/pspemu/ISO` and
+    one level of subfolders. Read: ISO 9660 to `PSP_GAME/PARAM.SFO`,
+    `ICON0.PNG`, `PIC1.PNG` and `SYSDIR/EBOOT.OLD`; CSO v1 and v2 with raw
+    deflate blocks (`miniz_oxide`, already a dependency of `png`). Not read:
+    CSO v2 LZ4 blocks, ZSO, DAX, JSO (reported as `format <ext>`). The id is
+    the image's `DISC_ID`; an image whose id is already listed is left out
+    (`duplicate <id>`). `titles.tsv` (header version 5) keeps the image's
+    path under the memory stick (`ISO/Racing/Game.cso`). Tests:
+    `src/tools/iso-test.sh` (a throwaway crate that includes `iso.rs`). The
+    user's PSP games are all ISO and CSO; the folders in `PSP/GAME` are PS1
+    games and update or DLC folders (no `EBOOT.PBP`, `skip=<id> noEboot`).
+    Updates (`PSP/GAME/<DISC_ID>/PBOOT.PBP`) are not booted with an image.
+  - **Both Adrenalines must work.** The app is meant for other people too:
+    TheOfficialFloW's original and isage's fork (8.x). The user runs
+    TheOfficialFloW's; isage's is supported from its source only.
+  - **The user's setup:** TheOfficialFloW's original Adrenaline (6.61
+    firmware on the PSP side), with the `*KERNEL` line for
+    `adrenaline_kernel.skprx`, so Adrenaline starts on the first launch. Between games they hold the PS button, go
+    back to the LiveArea, close Adrenaline, and open Pocket Shelf, so every
+    launch starts Adrenaline from scratch.
+  - Not listed: folders whose name is not a nine-character id (most
+    homebrew).
+  - **Memory stick location** (`adrenaline_config.rs`, native tests): read
+    once per process from `ux0:data/PSPEMUCFW/adrenaline.bin`, else
+    `ux0:app/PSPEMUCFW/adrenaline.bin` (isage's reads them in that order;
+    TheOfficialFloW's has only the second). Second magic `0x334F4E33`: `int`
+    fields, location at byte 24 (TheOfficialFloW's, isage's before 8);
+    `0x8451860B`: byte fields, location at byte 11 (isage's). Locations 0 to 4
+    are `ux0:`, `ur0:`, `imc0:`, `xmc0:`, `uma0:` + `/pspemu`; 5 (isage's
+    only) is the root of `uma0:`. Default `ux0:/pspemu`. Every path (scan,
+    plugin, lists, request, log) is under it; Diagnostics shows `PSP stick`.
+    In Vita3K a settings file naming `ur0:` found the images copied there.
+    isage's `ef0:` (PSP Go internal storage) location is not read.
+  - Diagnostics shows `PSP folders`, `titles`, `ps1`, `psp`, `noBubble`,
+    `firstNoBubble`, and `firstOther` (a bubble that is none of the titles).
+    Folders left out: `otherNames`/`firstOtherName` (not a title id),
+    `skipped` and up to six `skip=<id> <reason>` (`noEboot`, `short`,
+    `notPbp <first bytes>`, `sfoSpan <start>-<end>`, `sfoRead`, `notSfo`,
+    `listedElsewhere`), then up to ten `file=<name> <size>` of the first one.
+    Images: `ISO files`, `ISO titles`, `ISO skipped` and up to six
+    `ISO skip=<path> <reason>` (`open`, `notCso`, `csoLz4`, `notIso9660`,
+    `noParamSfo`, `noDiscId`, `duplicate <id>`, `format <ext>`, ...).
+- **Starting a title through Adrenaline (`src/psp-boot/`).** Pocket Shelf's
+  own VSH plugin, `pocketshelf.prx`, shipped in the VPK as `psp/`.
+  - **Plugin lists** (`seplugins.rs`, parsed as each Adrenaline does):
+    TheOfficialFloW's reads the first 1024 bytes of `vsh.txt` (`<path> 1` is
+    on, any other ending off); isage's reads `EPIplugins.txt` when it exists,
+    else `plugins.txt` (`<runlevel>, <path>, on|1|true|enabled`, runlevel
+    with `vsh`/`xmb` or `all`/`always`, `#` `;` `//` comments, the last line
+    for a module decides). Which Adrenaline is installed is not known, so
+    `pspemu::plugin_state` reads both: `noAdrenaline`, `missing`, `off` (a
+    list has it off) or `on` (both on). `__adrPlugin` reports it.
+  - **Consent.** The table marks such titles `adrenaline: true`. Before a
+    launch the app reads the state; when it is not `on`, a drawer
+    (`components/adrenaline.tsx`) explains and offers "Add plugin" or
+    "Turn on" (or only says Adrenaline is missing). Confirm calls
+    `__adrPluginEnable` (copies the plugin, adds missing lines, changes a
+    line that turns it off; a `vsh.txt` line goes first when it would fall
+    past 1024 bytes; other lines and line ends are kept), then launches. The
+    host refuses a launch while the state is not `on`. The plugin file is
+    copied again at each launch when it differs from the VPK's.
+  - **Launch.** Writes `ux0:/pspemu/PocketShelf/boot.txt` (UTC tick in µs;
+    `psp`, `ps1` or `iso`; `ms0:/PSP/GAME/<id>/EBOOT.PBP` or
+    `ms0:/ISO/...`; for `iso` a fourth line, `EBOOT.OLD` when the image has
+    one, else `EBOOT.BIN`) and sends `psgm:play?titleid=PSPEMUCFW`. The
+    plugin runs at each XMB start: no file, nothing happens; a file is
+    deleted first, then dropped when older than 30 s or its path is not one
+    folder under `ms0:/PSP/GAME/` (or a `.iso`/`.cso` under `ms0:/ISO/`), else
+    booted with `sctrlKernelLoadExecVSHWithApitype`: `0x141` key `game`, PS1
+    `0x144` key `pops` (the call isage's own autorun makes); an image the way
+    both Adrenalines' vshctrl boots one from the XMB's virtual
+    `/MMMMMISO<n>` entries: `SetUmdFile(path)`, boot config 3 (NP9660, the
+    same number in both; Inferno is 1 in TheOfficialFloW's and 4 in isage's,
+    where 4 is recovery in the other), `disc0:/PSP_GAME/SYSDIR/<boot file>`
+    with key `umdemu`, apitype `0x120` in TheOfficialFloW's, and in isage's
+    `sctrlSESetDiscType(0x10)` then `0x123`.
+  - **ISO driver and BOOT.BIN** follow the user's PSP-side Adrenaline
+    settings, read with `sctrlSEGetConfig` (`0x16C3B7EE`, both). TheOfficialFloW's
+    (magic `0x31483943`/`0x334F4E33`): `umdmode` `int` at byte 20, Inferno 0,
+    March33 1, NP9660 2, booted as config 1, 2, 3; `executebootbin` at byte
+    80. isage's `SEConfigEPI` (`0x192EFC3C`/`0x17BEB6AA`): `umd_mode` byte 11,
+    Inferno 0, March33 1, ME 2, NP9660 3, booted as 4, 2, 5, 3;
+    `execute_boot_bin` byte 26. Unreadable settings: NP9660 (3 in both).
+    `EBOOT.OLD` wins over `BOOT.BIN`, as in both vshctrls. The request's
+    fifth line says whether the image has a `BOOT.BIN`. The plugin logs
+    `driver=<n> [(default)] <file>`; Diagnostics shows it as `Boot driver`.
+  - **isage's XMB does more for an ISO** than the plugin: game updates and
+    DLC (`PSP/GAME/<DISC_ID>/PBOOT.PBP`, apitype `0x124`), `opnssmp_ver` for
+    images with an `OPNSSMP.BIN`, and holding R for `BOOT.BIN`. Not done.
+  - **When the plugin boots.** First version: a thread started from
+    `module_start` booted at once. On hardware the first one or two launches
+    worked, then one stuck on a black screen after Adrenaline opened, and no
+    title started again until the Vita was restarted. The plugin is loaded
+    while the XMB's modules are still starting; booting from a thread then
+    races them.
+    Second version: booting from the start-module handler at `vsh_module`.
+    On hardware no title started at all. Both Adrenalines call that handler
+    from `PrologueModulePatched`, inside the module manager, where a boot
+    (which unloads every module) cannot proceed. isage's own autorun boots
+    from its `sceKernelStartModule` hook, which a plugin cannot reach.
+    Now: with a request present, `module_start` registers a start-module
+    handler (`sctrlHENSetStartModuleHandler`, `0x1C90BECB`) that only notes
+    `vsh_module` and passes every module on (it stays registered, so a later
+    plugin's handler is not dropped), and starts a thread that waits for that
+    note (at most 20 s, else it logs `vsh_module not seen; request left`),
+    waits 2 s more (`XMB_SETTLE_US`) and boots, with the XMB up as when the
+    user picks a game. Without a request nothing is registered.
+    **Confirmed on hardware (2026-10-04, TheOfficialFloW's Adrenaline):**
+    the user reported ISO and CSO games launching from Pocket Shelf "working
+    great" with this version.
+  - **The plugin is a kernel module** (`0x1000`). It imports two
+    `SystemCtrlForKernel` functions by name-hash NID, which both Adrenalines
+    export: `sctrlHENFindFunction` (`0x159AF5CC`) and
+    `sctrlKernelLoadExecVSHWithApitype` (`0x2D10FB28`). `SetUmdFile`
+    (`0xB64186D0`), `sctrlSESetBootConfFileIndex` (`0x5CB025F0`),
+    `sctrlSESetDiscType` (`0x31C6160D`, isage's only, which tells them apart)
+    and `sceRtcGetCurrentTick` (module `sceRTC_Service`, library `sceRtc`,
+    `0x3F7AD767`) are looked up at run time; without the clock the age is not
+    checked (`age=?` in the log). Other imports: `IoFileMgrForKernel`,
+    `ThreadManForKernel`, `SysclibForKernel`. Links `libgcc` for 64-bit
+    division. Pocket Shelf deletes the request when the
+    system refuses the launch and when it starts. Each request leaves a line
+    in `ux0:/pspemu/PocketShelf/boot.log` (age, path, result); its last six
+    lines end the Diagnostics screen (`__bootLog`), as `Boot <outcome>` with
+    the age and the file name (an EBOOT by its folder). Preview shot `92b`.
+  - **Gaps.** Adrenaline failing before its XMB, then opened from its bubble
+    within 30 s, boots the game. TheOfficialFloW's first start after a
+    reboot (without the `*KERNEL` line) does not reach the XMB. Adrenaline's
+    "XMB plugins" setting is not read.
+  - **Verified.** Images: in Vita3K a `hdiutil` ISO and a CSO made from one
+    (in a subfolder) are listed by `DISC_ID` with icon and picture, a ZSO is
+    reported, a CSO launch writes an `iso` request. Vita3K (no Adrenaline): plugin copied, request written and
+    deleted at the next start; `off` read, turned on, `on` read, with the
+    other `vsh.txt` line and CRLF kept and `plugins.txt` created. Preview
+    shots 95 to 99 and `60-<lang>-adrenaline` show the drawer. On hardware,
+    with TheOfficialFloW's Adrenaline: disc image games boot from Pocket
+    Shelf (so the request's age passed the 30 s check). isage's Adrenaline,
+    a moved memory stick, and the driver setting on hardware are not seen.
+  - **Toolchain:** pspdev in `~/pspdev` (release v20261001, macOS arm64). Its
+    compiler needs Homebrew `gmp`, `mpfr`, `libmpc` and `zstd`. The built
+    `src/vita/psp/pocketshelf.prx` is committed so a VPK build needs no PSP
+    toolchain; run `shelf:plugin` after changing `src/psp-boot/`.
 - **PlayStation Mobile titles** (`psm.rs`) are folders in `ux0:/psm` named
   `NPNA`, `NPOA`, `NPPA` or `NPQA` and five digits. They have no
   `param.sfo`. The name comes from the home screen's database
@@ -428,7 +569,7 @@ the bubble is about seven seconds, so about three are the system's own launch.
 - A full title scan is 2.8 to 3.5 s, which the title list file avoids.
 ## Open items
 
-- **Next planned work:** PSP and PS1 games that run under Adrenaline
-  (folders without a bubble, then ISO and CSO files). Adrenaline's game bubbles
-  (`PSPEMU` + digits) are hidden from the list for this reason; Adrenaline
+- **Next:** see an image boot on hardware; then possibly the user's own ISO
+  driver setting, game updates (`PBOOT.PBP`) for images, ZSO. Adrenaline's
+  game bubbles (`PSPEMU` + digits) are hidden from the list; Adrenaline
   itself (`PSPEMUCFW`) is kept. The filter is in `catalog.ts`, not the host.
