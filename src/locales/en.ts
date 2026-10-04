@@ -88,6 +88,7 @@ export const en = {
   allFiles: "All files",
   thisTitle: "This title",
   noPng: "No PNG files yet. Copy images to",
+  cantRead: "Cannot read this file: it is not a PNG, is damaged, or is too large.",
 
   // Category manager
   newCategory: "New category",

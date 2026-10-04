@@ -777,6 +777,13 @@ export function createLauncherState(catalog: Catalog) {
   const [pickerEvery, setPickerEvery] = createSignal(false);
   const [artRow, setArtRow] = createSignal(0);
   const [artNote, setArtNote] = createSignal("");
+  // Whether the host could decode a listed file, by `<kind>:<file>`, learned
+  // from loading its preview. The host answers -1 for a file that is not a
+  // PNG, is damaged, or is too large.
+  const decodes = new Map<string, boolean>();
+  const decodeKey = (file: string) => `${pickerKind()}:${file}`;
+  // A press of confirm on a file not yet checked: it is used once the check passes.
+  let confirmWaiting = false;
 
   /** The file the edited title uses now, when the user chose one. */
   const chosenFile = (): string | undefined => {
@@ -812,6 +819,8 @@ export function createLauncherState(catalog: Catalog) {
     const fixed = kind === "art" ? game?.artIcon : game?.backdrop === NO_BACKDROP;
     setArtRow(fixed ? 1 : current >= 0 ? current + 2 : 0);
     setArtNote("");
+    decodes.clear();
+    confirmWaiting = false;
     setArtOpen(true);
   };
   const closeArtPicker = () => setArtOpen(false);
@@ -835,12 +844,21 @@ export function createLauncherState(catalog: Catalog) {
     setPickerPreview(undefined);
   };
   createEffect(() => {
-    artRow();
-    artFiles();
+    const file = artFiles()[artRow() - 2];
     pickerKind();
     clearPickerPreview();
+    confirmWaiting = false;
+    setArtNote(file !== undefined && decodes.get(decodeKey(file)) === false ? t().cantRead : "");
     previewWait = artOpen() ? PREVIEW_DELAY : 0;
   });
+  /** Record whether `file` decodes, and finish a confirm that waited for it. */
+  const checkedFile = (file: string, ok: boolean) => {
+    decodes.set(decodeKey(file), ok);
+    if (!ok) setArtNote(t().cantRead);
+    const waiting = confirmWaiting;
+    confirmWaiting = false;
+    if (waiting && ok) artConfirm();
+  };
   const loadPickerPreview = () => {
     const game = editorGame();
     if (!game || !artOpen()) return;
@@ -854,11 +872,14 @@ export function createLauncherState(catalog: Catalog) {
         previewWait = PREVIEW_RETRY;
         return;
       }
-      if (handle < 0) return;
-      const key = `backdrop.${game.id}.${file ?? ""}.${handle}`;
-      registerTexture(key, handle);
-      previewBackdrop = handle;
-      setPickerPreview(key);
+      if (handle >= 0) {
+        const key = `backdrop.${game.id}.${file ?? ""}.${handle}`;
+        registerTexture(key, handle);
+        previewBackdrop = handle;
+        setPickerPreview(key);
+      }
+      // Last: a confirm that waited for this file closes the drawer.
+      if (file !== undefined) checkedFile(file, handle >= 0);
       return;
     }
     // Row 0 is a file matched by name, or the title's own icon; row 1 is that icon.
@@ -869,12 +890,14 @@ export function createLauncherState(catalog: Catalog) {
       previewWait = PREVIEW_RETRY;
       return;
     }
-    if (handle < 0) return;
-    if (!registeredKeys.has(key)) {
-      registeredKeys.add(key);
-      registerTexture(key, handle);
+    if (handle >= 0) {
+      if (!registeredKeys.has(key)) {
+        registeredKeys.add(key);
+        registerTexture(key, handle);
+      }
+      setPickerPreview(key);
     }
-    setPickerPreview(key);
+    if (file !== undefined) checkedFile(file, handle >= 0);
   };
   const artMove = (dy: number) => {
     const count = artFiles().length + 2;
@@ -884,11 +907,24 @@ export function createLauncherState(catalog: Catalog) {
     const game = editorGame();
     if (!game) return;
     const row = artRow();
+    // A file is used only once the host has decoded it: one it cannot read
+    // keeps the drawer open with a note, one not checked yet is checked first.
+    const file = artFiles()[row - 2];
+    if (file !== undefined && native) {
+      const ok = decodes.get(decodeKey(file));
+      if (ok === false) {
+        setArtNote(t().cantRead);
+        return;
+      }
+      if (ok === undefined) {
+        confirmWaiting = true;
+        previewWait = 1;
+        return;
+      }
+    }
     if (pickerKind() === "backdrop") {
       // Row 0 goes back to the title's own picture, row 1 draws none.
       const name = row === 0 ? undefined : row === 1 ? NO_BACKDROP : artFiles()[row - 2];
-      // The host decodes the file in the background. One it cannot read
-      // leaves the title without a backdrop.
       patchOverride(game.id, { backdrop: name });
       setArtOpen(false);
       return;
@@ -896,8 +932,6 @@ export function createLauncherState(catalog: Catalog) {
     // Row 0 goes back to a file matched by name (or the title's own icon),
     // row 1 always shows the title's own icon.
     const name = row === 0 ? undefined : row === 1 ? USE_ICON : artFiles()[row - 2];
-    // The host decodes the file in the background. One it cannot read leaves
-    // the title with its own icon.
     patchOverride(game.id, { art: name });
     loadIconsAround();
     setArtOpen(false);

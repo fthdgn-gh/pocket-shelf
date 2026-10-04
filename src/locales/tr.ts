@@ -79,6 +79,7 @@ export const tr: Messages = {
   allFiles: "Tüm dosyalar",
   thisTitle: "Bu başlık",
   noPng: "PNG yok. Görselleri şuraya kopyalayın:",
+  cantRead: "Bu dosya okunamıyor: PNG değil, bozuk ya da çok büyük.",
 
   newCategory: "Yeni kategori",
   hidden: "Gizli",

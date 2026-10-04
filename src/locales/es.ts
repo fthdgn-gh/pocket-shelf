@@ -79,6 +79,7 @@ export const es: Messages = {
   allFiles: "Todos los archivos",
   thisTitle: "Este título",
   noPng: "No hay archivos PNG. Copia imágenes en",
+  cantRead: "No se puede leer: no es PNG, está dañado o es demasiado grande.",
 
   newCategory: "Nueva categoría",
   hidden: "Oculta",
