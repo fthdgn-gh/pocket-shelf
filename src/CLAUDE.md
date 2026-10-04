@@ -199,6 +199,13 @@ cannot be driven. Evidence comes from its log and from files under
   (`Drawer`'s `aside`) once the highlight has rested 8 frames. An icon
   preview stays in memory like every art texture (256 px at most); a backdrop
   preview is released when the highlight moves.
+- **A picked file is used only once the host has decoded it.** The pickers
+  list `.png` names only, but the host still answers -1 for a file that is
+  not a PNG, is damaged, or is over its size limits (8 MB, 1920x1080). The
+  preview's result is remembered per file (`decodes` in `state.ts`); such a
+  row shows the `cantRead` note and confirm keeps the drawer open. Confirm on
+  a row not yet checked loads it at once and applies it if it decodes. In the
+  preview, a file named `broken...` stands for one that does not decode.
 
 - **Fetch artwork (SELECT menu)** runs the same lookups for many titles
   (`scrape.ts`): all titles or one category, one request at a time, the first
@@ -332,5 +339,3 @@ the bubble is about seven seconds, so about three are the system's own launch.
   itself (`PSPEMUCFW`) is kept. The filter is in `catalog.ts`, not the host.
 - A clock in the header was skipped: the Vita's local time zone handling was
   not verified.
-- The art and backdrop pickers accept a file the host cannot read; the title
-  then keeps its own icon or shows no backdrop, with no message.

@@ -271,7 +271,9 @@ function installHost(ops: Record<string, unknown>): void {
   const accents = new Map<number, number>();
   ops.__artAccent = (handle: number): number => accents.get(handle) ?? -1;
   ops.__artDir = "ux0:/data/PocketShelf/art";
+  // A file named "broken..." stands for one the host cannot decode.
   ops.__appArt = (name: string): number => {
+    if (name.startsWith("broken")) return stillDecoding(`art:${name}`) ? -2 : -1;
     let handle = art.get(name);
     if (handle === undefined) {
       if (stillDecoding(`art:${name}`)) return -2;
@@ -321,6 +323,7 @@ function installHost(ops: Record<string, unknown>): void {
     const index = file ? Number(file.replace(/\D/g, "")) || 0 : title;
     if (title < 0 || (!file && index % 4 === 3)) return -1;
     const key = file || id;
+    if (file.startsWith("broken")) return stillDecoding(`backdrop:${key}`) ? -2 : -1;
     let handle = backdrops.get(key);
     if (handle === undefined) {
       if (stillDecoding(`backdrop:${key}`)) return -2;
@@ -344,6 +347,8 @@ interface Shot {
   key?: boolean;
   /** Language saved in the settings before the app starts. */
   language?: string;
+  /** Files placed in the data folder before the app starts. */
+  files?: string[];
 }
 
 
@@ -557,6 +562,24 @@ const SHOTS: Shot[] = [
   },
   // The fixed rows preview too: "Default" is the title's own icon.
   { name: "66-picker-default", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]] },
+  // A file the host cannot decode: its row shows a note and confirm keeps the
+  // drawer open, whether pressed after the check or before it.
+  {
+    name: "77-picker-unreadable",
+    files: ["art/broken.png", "art/good-7.png"],
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, ...tap(BTN.DOWN, 2), [0, 30], BTN.CIRCLE, [0, 10]],
+  },
+  {
+    name: "78-picker-unreadable-fast",
+    files: ["backdrops/broken.png"],
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 30]],
+  },
+  // Confirm on a readable file before its check: it is used once the check passes.
+  {
+    name: "79-picker-readable-fast",
+    files: ["art/broken.png", "art/good-7.png"],
+    steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 30]],
+  },
   // Clean up artwork after a fetch: every file is in use, so "Unused" finds none.
   {
     name: "67-clean-unused",
@@ -617,6 +640,9 @@ async function capture(shot: Shot): Promise<void> {
       JSON.stringify(PREVIEW_KEY),
       0,
     );
+  }
+  for (const path of shot.files ?? []) {
+    (files.ns as { write(path: string, data: string, mode: number): number }).write(path, JSON.stringify("PNG"), 0);
   }
   if (shot.language) {
     (files.ns as { write(path: string, data: string, mode: number): number }).write(
