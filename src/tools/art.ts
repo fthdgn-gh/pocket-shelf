@@ -1,8 +1,16 @@
-// Draws Pocket Shelf's LiveArea artwork into src/vita/sce_sys/:
+// Draws Pocket Shelf's LiveArea artwork into src/vita/sce_sys/, and writes
+// the LiveArea layout:
 //
-//   icon0.png                       128x128  the bubble on the home screen
-//   livearea/contents/bg.png        840x500  the LiveArea background
-//   livearea/contents/startup.png   280x158  the gate image
+//   icon0.png                         128x128  the bubble on the home screen
+//   livearea/contents/bg.png          840x500  the LiveArea background
+//   livearea/contents/startup.png     280x158  the gate image
+//   livearea/contents/template.xml             the layout: the app's name and
+//                                               version as LiveArea text
+//
+// The pictures hold no text. The system draws its "Start" label over the
+// bottom of the gate image, which hid a name drawn there; the name and the
+// version are LiveArea text instead (the `psmobile` style's frame2 and
+// frame3, as Adrenaline's LiveArea uses them), read from pocket.json.
 //
 //   bun run shelf:art
 //
@@ -20,6 +28,7 @@ import { deflateSync } from "node:zlib";
 
 const SRC = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const OUT = join(SRC, "vita/sce_sys");
+const MANIFEST = (await Bun.file(join(SRC, "../pocket.json")).json()) as { title: string; version: string };
 
 GlobalFonts.registerFromPath(join(SRC, "fonts/SpaceGrotesk-Bold.ttf"), "Shelf Bold");
 
@@ -147,15 +156,49 @@ function startup(): Uint8ClampedArray {
   const canvas = createCanvas(280, 158);
   const ctx = canvas.getContext("2d");
   background(ctx, 280, 158);
-  const floor = 84;
-  shelf(ctx, 280, floor + 6, 2, 40);
-  row(ctx, 140, floor, 40, 56, 3, 3, 0.6);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = '26px "Shelf Bold"';
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText("Pocket Shelf", 140, 136);
+  // No text: the system's "Start" label covers the bottom of the gate. The
+  // row sits a little above the middle, clear of that label.
+  const floor = 100;
+  shelf(ctx, 280, floor + 7, 2, 44);
+  row(ctx, 140, floor, 46, 64, 2, 3, 0.6);
   return ctx.getImageData(0, 0, 280, 158).data;
+}
+
+/** "0.1.0" as "0.1": the patch number only when it is not zero. */
+function shortVersion(version: string): string {
+  return version.replace(/^(\d+\.\d+)\.0$/, "$1");
+}
+
+function escapeXml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** The LiveArea layout: the name large in frame2, the version under it in frame3. */
+function template(): string {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<livearea style="psmobile" format-ver="01.00" content-rev="1">
+  <livearea-background>
+    <image>bg.png</image>
+  </livearea-background>
+  <gate>
+    <startup-image>startup.png</startup-image>
+  </gate>
+  <frame id="frame2">
+    <liveitem>
+      <text valign="bottom" align="left" text-align="left" text-valign="bottom" line-space="3" ellipsis="on">
+        <str color="#ffffff" size="50" bold="on" shadow="on">${escapeXml(MANIFEST.title)}</str>
+      </text>
+    </liveitem>
+  </frame>
+  <frame id="frame3">
+    <liveitem>
+      <text valign="top" align="left" text-align="left" text-valign="top" line-space="2" ellipsis="on">
+        <str color="#ffffff" size="22" shadow="on">Version ${escapeXml(shortVersion(MANIFEST.version))}</str>
+      </text>
+    </liveitem>
+  </frame>
+</livearea>
+`;
 }
 
 // --- Indexed PNG ------------------------------------------------------------
@@ -319,3 +362,5 @@ for (const [path, width, height, draw] of FILES) {
   await Bun.write(file, png);
   console.log(`${path}  ${width}x${height}  ${png.length} bytes`);
 }
+await Bun.write(join(OUT, "livearea/contents/template.xml"), template());
+console.log(`livearea/contents/template.xml  ${MANIFEST.title}, version ${shortVersion(MANIFEST.version)}`);

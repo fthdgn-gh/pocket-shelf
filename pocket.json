@@ -4,7 +4,7 @@
   "id": "dev.fthdgn.pocket-shelf",
   "name": "pocket-shelf",
   "title": "Pocket Shelf",
-  "version": "0.13.0",
+  "version": "0.1.0",
   "engine": {
     "capabilities": {
       "requires": [

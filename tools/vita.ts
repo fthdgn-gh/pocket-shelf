@@ -326,7 +326,12 @@ if (usbDebug) {
   await $`${vitasdk}/bin/vita-make-fself -c ${targetDirectory}/pocketjs-vita.velf ${eboot}`;
 }
 
-await $`${vitasdk}/bin/vita-mksfoex -d ATTRIBUTE2=12 -s TITLE_ID=${titleId} ${packageTitle} ${sfo}`;
+// APP_VER is the version the system shows for the app, `MM.mm`: the
+// manifest's major and minor version ("0.1.0" is "00.01"). Without one the
+// tool writes its own default.
+const appVersion = buildPlan?.app.version.match(/^(\d{1,2})\.(\d{1,2})(?:\.|$)/);
+const appVer = appVersion ? ["-s", `APP_VER=${appVersion[1]!.padStart(2, "0")}.${appVersion[2]!.padStart(2, "0")}`] : [];
+await $`${vitasdk}/bin/vita-mksfoex -d ATTRIBUTE2=12 -s TITLE_ID=${titleId} ${appVer} ${packageTitle} ${sfo}`;
 // An app's `vita/` directory (VPK-relative paths, e.g. sce_sys/icon0.png)
 // overlays the framework's LiveArea defaults.
 const entryFile = stockDemo
