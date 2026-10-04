@@ -62,7 +62,7 @@ static mut REPORT: String = String::new();
 pub struct Classic {
     pub title_id: String,
     pub title: String,
-    /// `"ps1"` or `"psp"`.
+    /// `"psx"` (a PS1 game) or `"psp"`.
     pub platform: &'static str,
     /// Whether the title has a bubble on the home screen. One without is
     /// started through Adrenaline.
@@ -256,16 +256,16 @@ pub unsafe fn scan(rows: Option<&[appdb::Bubble]>, known: &[String]) -> Vec<Clas
             .filter(|title| !title.is_empty())
             .unwrap_or_else(|| id.clone());
         let category = crate::installed::sfo_string(&sfo, "CATEGORY");
-        let platform = if category.as_deref() == Some("ME") { "ps1" } else { "psp" };
+        let platform = if category.as_deref() == Some("ME") { "psx" } else { "psp" };
         found.push(Classic { title_id: id.clone(), title, platform, bubble: row.is_some(), image: None });
     }
-    let ps1 = found.iter().filter(|item| item.platform == "ps1").count();
+    let psx = found.iter().filter(|item| item.platform == "psx").count();
     REPORT = format!(
-        "PSP stick={},PSP folders={},PSP titles={},PSP ps1={ps1},PSP psp={},PSP noBubble={}",
+        "PSP stick={},PSP folders={},PSP titles={},PSP psx={psx},PSP psp={},PSP noBubble={}",
         report_value(ms0()),
         ids.len(),
         found.len(),
-        found.len() - ps1,
+        found.len() - psx,
         without_bubble.len()
     );
     if rows.is_none() {
@@ -498,7 +498,7 @@ pub fn enable_plugin() -> bool {
 }
 
 /// Write the request for this title, once the plugin is on (`plugin_state`).
-/// `platform` is `psp` or `ps1`; `image` is a disc image's path under the
+/// `platform` is `psp` or `psx`; `image` is a disc image's path under the
 /// memory stick, for a game in one. Called once the launch is accepted, before the frame that
 /// shows it; the request goes to Adrenaline in `installed::finish_launch`.
 pub unsafe fn request_boot(title_id: &str, platform: &str, image: Option<&str>) -> bool {

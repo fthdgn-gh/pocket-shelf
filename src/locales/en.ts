@@ -53,7 +53,7 @@ export const en = {
     homebrew: "Homebrew",
     psm: "PS Mobile",
     psp: "PSP",
-    ps1: "PS1",
+    psx: "PSX",
   },
 
   // SELECT menu

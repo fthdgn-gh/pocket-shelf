@@ -26,7 +26,7 @@ use std::vec::Vec;
 struct Title {
     title_id: String,
     title: String,
-    /// `vita` (ux0:/app and vs0:/app), `psm`, `psp` or `ps1`.
+    /// `vita` (ux0:/app and vs0:/app), `psm`, `psp` or `psx`.
     platform: &'static str,
     /// A PSP or PS1 title with no bubble on the home screen: it is started
     /// through Adrenaline, its icon and picture come from its `EBOOT.PBP` or
@@ -39,7 +39,7 @@ struct Title {
 
 /// A platform name from the list file, as the `'static` the table uses.
 fn platform_named(name: &str) -> Option<&'static str> {
-    ["vita", "psm", "psp", "ps1"].into_iter().find(|known| *known == name)
+    ["vita", "psm", "psp", "psx"].into_iter().find(|known| *known == name)
 }
 
 static mut CACHE: Option<Vec<Title>> = None;

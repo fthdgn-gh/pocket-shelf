@@ -157,9 +157,13 @@ cannot be driven. Evidence comes from its log and from files under
 - **PSP and PS1 Classics** (`pspemu.rs`): folders in
   `ux0:/pspemu/PSP/GAME/<id>/` with an `EBOOT.PBP` whose `PARAM.SFO` reads.
   The PBP header gives the offsets of its sections (`PARAM.SFO`,
-  `ICON0.PNG`, ..., `PIC1.PNG`); `CATEGORY` `ME` is PS1, anything else PSP.
-  The host sends a `platform` (`vita`, `psm`, `psp`, `ps1`) with each title;
-  `categoryOf` puts PSP and PS1 titles in `builtin-psp` and `builtin-ps1`.
+  `ICON0.PNG`, ..., `PIC1.PNG`); `CATEGORY` `ME` is a PS1 game (platform
+  `psx`), anything else PSP. The host sends a `platform` (`vita`, `psm`,
+  `psp`, `psx`) with each title; `categoryOf` puts PSP and PSX titles in
+  `builtin-psp` and `builtin-psx`. The app calls PS1 games PSX everywhere:
+  tab, id, platform, `titles.tsv`, the plugin's request (`psx`) and log.
+  Confirmed on hardware after the rename (2026-10-04): launches work as
+  before.
   - **With a bubble** (a row of the same id in `app.db`, an official package
     for the Vita's own emulator): named by the bubble, started with
     `psgm:play?titleid=<id>`, no Adrenaline. Not yet seen on hardware.
@@ -201,7 +205,7 @@ cannot be driven. Evidence comes from its log and from files under
     plugin, lists, request, log) is under it; Diagnostics shows `PSP stick`.
     In Vita3K a settings file naming `ur0:` found the images copied there.
     isage's `ef0:` (PSP Go internal storage) location is not read.
-  - Diagnostics shows `PSP folders`, `titles`, `ps1`, `psp`, `noBubble`,
+  - Diagnostics shows `PSP folders`, `titles`, `psx`, `psp`, `noBubble`,
     `firstNoBubble`, and `firstOther` (a bubble that is none of the titles).
     Folders left out: `otherNames`/`firstOtherName` (not a title id),
     `skipped` and up to six `skip=<id> <reason>` (`noEboot`, `short`,
@@ -230,7 +234,7 @@ cannot be driven. Evidence comes from its log and from files under
     host refuses a launch while the state is not `on`. The plugin file is
     copied again at each launch when it differs from the VPK's.
   - **Launch.** Writes `ux0:/pspemu/PocketShelf/boot.txt` (UTC tick in µs;
-    `psp`, `ps1` or `iso`; `ms0:/PSP/GAME/<id>/EBOOT.PBP` or
+    `psp`, `psx` or `iso`; `ms0:/PSP/GAME/<id>/EBOOT.PBP` or
     `ms0:/ISO/...`; for `iso` a fourth line, `EBOOT.OLD` when the image has
     one, else `EBOOT.BIN`) and sends `psgm:play?titleid=PSPEMUCFW`. The
     plugin runs at each XMB start: no file, nothing happens; a file is
@@ -443,6 +447,12 @@ cannot be driven. Evidence comes from its log and from files under
 last first, at most 15), `titles/<title id>.json` (per-title overrides:
 category, title, art, backdrop, favorite), `art/`, `backdrops/`,
 `steamgriddb.txt`.
+
+## Category order
+
+The default tab order is `BUILTIN_CATEGORIES` in `categories.ts`: Games,
+Homebrew, PS Mobile, PSP, PSX, System. Preview shots reach a tab with
+`tabTo(id)`, read from that order.
 
 ## Smart categories
 
