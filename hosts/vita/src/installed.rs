@@ -18,6 +18,7 @@
 //! scan is not noticed until then.
 
 use std::ffi::CString;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::fs;
 use std::string::String;
 use std::vec::Vec;
@@ -134,12 +135,47 @@ pub(crate) fn valid_title_id(id: &str) -> bool {
     id.len() == 9 && id.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
+// Progress of the running scan, read by the guest each frame while it shows
+// the scan (`scan_state`). The total is counted before the scan from the
+// folder listings, which read no files: one step per folder in ux0:/app and
+// vs0:/app, one for the database and the PSM titles together, one per PSP
+// folder and per disc image file.
+static SCAN_DONE: AtomicU32 = AtomicU32::new(0);
+static SCAN_TOTAL: AtomicU32 = AtomicU32::new(0);
+static SCAN_PHASE: AtomicU32 = AtomicU32::new(0);
+/// What the scan is reading, as `scan_state` names it.
+const SCAN_PHASES: [&str; 5] = ["apps", "system", "psm", "psp", "images"];
+
+/// One item of the scan is read.
+pub(crate) fn scan_step() {
+    SCAN_DONE.fetch_add(1, Ordering::Relaxed);
+}
+
+/// The scan moves on to one of `SCAN_PHASES`.
+pub(crate) fn scan_phase(name: &str) {
+    if let Some(index) = SCAN_PHASES.iter().position(|phase| *phase == name) {
+        SCAN_PHASE.store(index as u32, Ordering::Relaxed);
+    }
+}
+
+fn entry_count(root: &str) -> u32 {
+    fs::read_dir(root).map(|entries| entries.count() as u32).unwrap_or(0)
+}
+
 fn scan() -> Vec<Title> {
+    SCAN_DONE.store(0, Ordering::Relaxed);
+    SCAN_TOTAL.store(
+        entry_count(APP_ROOT) + entry_count(SYSTEM_ROOT) + 1 + crate::pspemu::item_count(),
+        Ordering::Relaxed,
+    );
     let mut titles = Vec::new();
+    scan_phase("apps");
     scan_root(APP_ROOT, &mut titles);
+    scan_phase("system");
     scan_root(SYSTEM_ROOT, &mut titles);
     // PSM, PSP and PS1 titles take their names from the home screen's
     // database, read once per scan.
+    scan_phase("psm");
     let rows = unsafe { crate::appdb::bubbles() };
     if let Some(rows) = &rows {
         crate::appdb::keep_icon_paths(rows);
@@ -149,6 +185,7 @@ fn scan() -> Vec<Title> {
             titles.push(Title { title_id, title, platform: "psm", adrenaline: false, image: None });
         }
     }
+    scan_step();
     let known: Vec<String> = titles.iter().map(|item| item.title_id.clone()).collect();
     for item in unsafe { crate::pspemu::scan(rows.as_deref(), &known) } {
         titles.push(Title {
@@ -168,6 +205,7 @@ fn scan_root(root: &str, titles: &mut Vec<Title>) {
         return;
     };
     for entry in entries.flatten() {
+        scan_step();
         let Some(name) = entry.file_name().to_str().map(String::from) else {
             continue;
         };
@@ -306,14 +344,96 @@ unsafe fn titles() -> &'static [Title] {
     CACHE.as_deref().unwrap_or(&[])
 }
 
-/// Read the installed titles again and save the list. Returns how many were
-/// found. Icon handles already handed out stay valid: they are kept per id.
-pub unsafe fn rescan() -> usize {
-    let found = scan();
-    save_list(&found);
-    let count = found.len();
-    CACHE = Some(found);
-    count
+/// Whether the title list is in memory, reading the list file when it is
+/// not. False when there is no usable list file: the guest then starts a
+/// scan (`scan_start`) and shows its progress before it asks for the table.
+pub unsafe fn titles_ready() -> bool {
+    if CACHE.is_none() {
+        // The first call of this process: a boot request still here never
+        // reached Adrenaline.
+        crate::pspemu::forget_request();
+        CACHE = load_list();
+    }
+    CACHE.is_some()
+}
+
+/// A scan on the worker thread, and its result until the main thread takes it.
+enum ScanJob {
+    Idle,
+    Running,
+    /// The titles found and the time the scan took, in milliseconds.
+    Finished(Vec<Title>, u32),
+    /// Taken into the list in memory: how many titles, and the time.
+    Taken(usize, u32),
+}
+
+static SCAN_JOB: std::sync::Mutex<ScanJob> = std::sync::Mutex::new(ScanJob::Idle);
+/// The scan reads one `param.sfo` and SQLite pages at a time; this is ample.
+const SCAN_STACK: usize = 256 * 1024;
+
+/// Scan the installed titles on a worker thread and save the list; the guest
+/// follows it with `scan_state`. Does nothing while a scan runs. Returns
+/// false when the thread could not be started.
+pub fn scan_start() -> bool {
+    let Ok(mut job) = SCAN_JOB.lock() else {
+        return false;
+    };
+    if matches!(*job, ScanJob::Running) {
+        return true;
+    }
+    *job = ScanJob::Running;
+    SCAN_DONE.store(0, Ordering::Relaxed);
+    SCAN_TOTAL.store(0, Ordering::Relaxed);
+    SCAN_PHASE.store(0, Ordering::Relaxed);
+    drop(job);
+    let spawned = std::thread::Builder::new()
+        .name(String::from("pocket-scan"))
+        .stack_size(SCAN_STACK)
+        .spawn(|| {
+            let started = unsafe { vitasdk_sys::sceKernelGetProcessTimeWide() };
+            let found = scan();
+            save_list(&found);
+            let ms = ((unsafe { vitasdk_sys::sceKernelGetProcessTimeWide() } - started) / 1000) as u32;
+            if let Ok(mut job) = SCAN_JOB.lock() {
+                *job = ScanJob::Finished(found, ms);
+            }
+        });
+    if spawned.is_err() {
+        if let Ok(mut job) = SCAN_JOB.lock() {
+            *job = ScanJob::Idle;
+        }
+        return false;
+    }
+    true
+}
+
+/// Where the scan stands: `running <done> <total> <phase>`, `done <titles>
+/// <ms>` once it finished (the list in memory is then the new one; icon
+/// handles already handed out stay valid, they are kept per id), or `idle`
+/// before any scan.
+pub unsafe fn scan_state() -> String {
+    let Ok(mut job) = SCAN_JOB.lock() else {
+        return String::from("idle");
+    };
+    if let ScanJob::Finished(..) = *job {
+        let ScanJob::Finished(found, ms) = core::mem::replace(&mut *job, ScanJob::Idle) else {
+            unreachable!();
+        };
+        let count = found.len();
+        CACHE = Some(found);
+        *job = ScanJob::Taken(count, ms);
+    }
+    match &*job {
+        ScanJob::Idle => String::from("idle"),
+        ScanJob::Running => {
+            let done = SCAN_DONE.load(Ordering::Relaxed);
+            let total = SCAN_TOTAL.load(Ordering::Relaxed).max(done);
+            let phase = SCAN_PHASES[SCAN_PHASE.load(Ordering::Relaxed) as usize % SCAN_PHASES.len()];
+            format!("running {done} {total} {phase}")
+        }
+        ScanJob::Taken(count, ms) => format!("done {count} {ms}"),
+        ScanJob::Finished(..) => unreachable!(),
+    }
 }
 
 /// Folders that hold a title's icon and pictures, in the order to try them:

@@ -108,13 +108,55 @@ export function isListed(titleId: string): boolean {
   return titleId === ADRENALINE_ID || !titleId.startsWith(ADRENALINE_BUBBLE_PREFIX);
 }
 
+interface ScanHost {
+  __titlesReady?(): number;
+  __scanStart?(): number;
+  __scanState?(): string;
+}
+
+const scanHost = (): ScanHost => getOps() as unknown as ScanHost;
+
+/** What a scan of the installed titles is reading (hosts/vita/src/installed.rs). */
+export type ScanPhase = "apps" | "system" | "psm" | "psp" | "images";
+
+export type ScanProgress =
+  | { state: "running"; done: number; total: number; phase: ScanPhase }
+  | { state: "done"; count: number; ms: number }
+  | { state: "idle" };
+
 /**
- * Ask the host to read the installed titles again. The Vita host keeps the
- * list in a file between starts (hosts/vita/src/installed.rs) and scans only
- * when asked; this takes seconds. Hosts without the extra do nothing.
+ * Whether the host has the installed-title list without a scan: it keeps the
+ * list in a file between starts and scans when there is none (the first
+ * start). Hosts without the extra have their table at once.
  */
-export function rescanTitles(): void {
-  (getOps() as unknown as { __appRescan?(): number }).__appRescan?.();
+export function titlesReady(): boolean {
+  return (scanHost().__titlesReady?.() ?? 1) === 1;
+}
+
+/**
+ * Start a scan of the installed titles on the host's worker thread; follow it
+ * with `scanProgress`. Returns false when the host has no scan or could not
+ * start one.
+ */
+export function startScan(): boolean {
+  return (scanHost().__scanStart?.() ?? 0) === 1;
+}
+
+const PHASES: readonly ScanPhase[] = ["apps", "system", "psm", "psp", "images"];
+
+/** Where the scan stands, read from the host's `running <done> <total> <phase>` or `done <count> <ms>`. */
+export function scanProgress(): ScanProgress {
+  const [state, a, b, phase] = (scanHost().__scanState?.() ?? "idle").split(" ");
+  if (state === "running") {
+    return {
+      state,
+      done: Number(a) || 0,
+      total: Number(b) || 0,
+      phase: PHASES.includes(phase as ScanPhase) ? (phase as ScanPhase) : "apps",
+    };
+  }
+  if (state === "done") return { state, count: Number(a) || 0, ms: Number(b) || 0 };
+  return { state: "idle" };
 }
 
 const GENRES: Record<Platform, string> = { vita: "PS Vita", psm: "PS Mobile", psp: "PSP", psx: "PSX" };

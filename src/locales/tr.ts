@@ -167,7 +167,16 @@ export const tr: Messages = {
   rescan: "Başlıkları yeniden tara",
   scan: "Tara",
   scanHelp: "Yüklü başlıkları yeniden okur. Bir başlık yükledikten ya da kaldırdıktan sonra kullanın.",
-  scanning: "Taranıyor...",
+  scanTitle: "Oyunların ve uygulamaların bulunuyor",
+  scanStep: "{phase}: {done} / {total}",
+  scanFailed: "Tarama başlatılamadı.",
+  scanPhases: {
+    apps: "Uygulamalar ve oyunlar",
+    system: "Sistem uygulamaları",
+    psm: "PlayStation Mobile",
+    psp: "PSP ve PSX oyunları",
+    images: "Disk görüntüleri",
+  },
   scanDone: "{seconds} sn içinde {count} başlık bulundu.",
 
   // Adrenaline başlatma eklentisi

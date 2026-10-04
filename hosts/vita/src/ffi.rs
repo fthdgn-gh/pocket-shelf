@@ -883,16 +883,40 @@ unsafe extern "C" fn js_installed_table(
     JS_NewStringLen(ctx, value.as_ptr(), value.len())
 }
 
-/// ui.__appRescan() -> number of titles. Host extra: scans the installed
-/// titles again and saves the list `appTable` reads at the next start.
+/// ui.__titlesReady() -> 1 when the title list is in memory or was read from
+/// its file, 0 when a scan is needed first. Host extra.
 #[cfg(feature = "installed-apps")]
-unsafe extern "C" fn js_installed_rescan(
+unsafe extern "C" fn js_titles_ready(
     ctx: *mut JSContext,
     _this: JSValue,
     _argc: i32,
     _argv: *mut JSValue,
 ) -> JSValue {
-    JS_NewInt32(ctx, crate::installed::rescan() as i32)
+    JS_NewInt32(ctx, crate::installed::titles_ready() as i32)
+}
+
+/// ui.__scanStart() -> 1 when a scan of the installed titles runs on a worker
+/// thread, 0 when it could not start. Host extra; follow it with __scanState.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_scan_start(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    JS_NewInt32(ctx, crate::installed::scan_start() as i32)
+}
+
+/// ui.__scanState() -> "running <done> <total> <phase>", "done <titles> <ms>"
+/// or "idle" (`installed::scan_state`). Host extra.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_scan_state(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    new_js_string(ctx, &crate::installed::scan_state())
 }
 
 /// ui.__startupMarks() -> "label=ms,...". Host extra: when each startup
@@ -1265,7 +1289,9 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"__appBackdrop\0", js_app_backdrop, 2);
         add_fn(ctx, ui_obj, b"__appBackdropFree\0", js_app_backdrop_free, 1);
         add_fn(ctx, ui_obj, b"__artAccent\0", js_art_accent, 1);
-        add_fn(ctx, ui_obj, b"__appRescan\0", js_installed_rescan, 0);
+        add_fn(ctx, ui_obj, b"__titlesReady\0", js_titles_ready, 0);
+        add_fn(ctx, ui_obj, b"__scanStart\0", js_scan_start, 0);
+        add_fn(ctx, ui_obj, b"__scanState\0", js_scan_state, 0);
         add_fn(ctx, ui_obj, b"__startupMarks\0", js_startup_marks, 0);
         add_fn(ctx, ui_obj, b"__processMs\0", js_process_ms, 0);
         add_fn(ctx, ui_obj, b"__scanReport\0", js_scan_report, 0);

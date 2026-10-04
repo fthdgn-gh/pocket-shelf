@@ -33,7 +33,7 @@ import { enablePlugin, pluginState, type PluginState } from "./adrenaline.ts";
 import { pumpNet } from "./net.ts";
 import { createOnlineFlow } from "./online.ts";
 import { KEY_MAX, fileBelongsTo } from "./steamgriddb.ts";
-import { TINT_COLORS, loadCatalog, rescanTitles, type Catalog } from "./catalog.ts";
+import { TINT_COLORS, loadCatalog, scanProgress, startScan, type Catalog, type ScanProgress } from "./catalog.ts";
 import { timed } from "./diagnostics.ts";
 import { DEFAULT_LANGUAGE, LANGUAGES, MESSAGES, fill, type Language } from "./i18n.ts";
 import { KEY_PAGES, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn, type KeyPage } from "./keyboard.ts";
@@ -70,9 +70,6 @@ const BACKDROP_DELAY = 15;
 
 /** Frames between two requests for a backdrop the host is still decoding. */
 const BACKDROP_RETRY = 2;
-
-/** Frames between the press that starts a scan and the scan, which blocks. */
-const RESCAN_DELAY = 3;
 
 /** Frames the picker's highlight rests on a row before its picture is loaded. */
 const PREVIEW_DELAY = 8;
@@ -631,7 +628,7 @@ export function createLauncherState(catalog: Catalog) {
       statusWait = 0;
       setStatus(readStatus());
     }
-    if (rescanWait > 0 && --rescanWait === 0) runRescan();
+    pumpRescan();
   };
 
   // --- Status bar ------------------------------------------------------------
@@ -1201,35 +1198,46 @@ export function createLauncherState(catalog: Catalog) {
 
   // --- Rescan titles (SELECT menu -> Rescan titles) -------------------------
   // The host reads the title list from a file; a scan of the installed
-  // titles runs on the first start and when the user asks for one here.
+  // titles runs on the first start (the scan page) and when the user asks for
+  // one here. It runs on the host's worker thread; `pumpRescan` follows it
+  // once per frame and the drawer shows its progress.
   const [rescanOpen, setRescanOpen] = createSignal(false);
   const [rescanNote, setRescanNote] = createSignal("");
-  // Frames until the scan runs. The scan blocks for seconds, so "Scanning..."
-  // gets on screen first.
-  let rescanWait = 0;
+  const [rescanProgress, setRescanProgress] = createSignal<ScanProgress | null>(null);
+  const rescanning = () => rescanProgress()?.state === "running";
   const openRescan = () => {
-    setRescanNote("");
-    setRescanOpen(true);
+    batch(() => {
+      setRescanNote("");
+      setRescanProgress(null);
+      setRescanOpen(true);
+    });
   };
   const closeRescan = () => {
-    if (rescanWait === 0) setRescanOpen(false);
+    if (!rescanning()) setRescanOpen(false);
   };
   const startRescan = () => {
-    if (rescanWait > 0) return;
-    setRescanNote(t().scanning);
-    rescanWait = RESCAN_DELAY;
+    if (rescanning()) return;
+    if (!startScan()) {
+      setRescanNote(t().scanFailed);
+      return;
+    }
+    batch(() => {
+      setRescanNote("");
+      setRescanProgress(scanProgress());
+    });
   };
-  const runRescan = () => {
-    const started = Date.now();
-    rescanTitles();
+  const pumpRescan = () => {
+    if (!rescanning()) return;
+    const now = scanProgress();
+    setRescanProgress(now);
+    if (now.state !== "done") return;
     const games = loadCatalog().games;
     // The files the user may have edited by hand are read again too.
     const changes = reloadOverrides();
-    const seconds = ((Date.now() - started) / 1000).toFixed(1);
     batch(() => {
       setCatalogGames(games);
       setOverrides(changes);
-      setRescanNote(fill(t().scanDone, { count: games.length, seconds }));
+      setRescanNote(fill(t().scanDone, { count: games.length, seconds: (now.ms / 1000).toFixed(1) }));
     });
     clampSelection();
   };
@@ -1554,6 +1562,7 @@ export function createLauncherState(catalog: Catalog) {
     cleanNote,
     cleanCount,
     rescanNote,
+    rescanProgress,
     diagnosticsRow,
     titleCount: () => catalogGames().length,
     allCategories,

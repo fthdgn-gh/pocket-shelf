@@ -167,7 +167,16 @@ export const fr: Messages = {
   rescan: "Relire les titres",
   scan: "Analyser",
   scanHelp: "Relit les titres installés. À utiliser après l'installation ou la suppression d'un titre.",
-  scanning: "Analyse...",
+  scanTitle: "Recherche de tes jeux et applications",
+  scanStep: "{phase} : {done} sur {total}",
+  scanFailed: "L'analyse n'a pas pu démarrer.",
+  scanPhases: {
+    apps: "Applications et jeux",
+    system: "Applications système",
+    psm: "PlayStation Mobile",
+    psp: "Jeux PSP et PSX",
+    images: "Images disque",
+  },
   scanDone: "{count} titres trouvés en {seconds} s.",
 
   // Plugin de démarrage d'Adrenaline

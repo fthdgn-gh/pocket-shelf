@@ -167,7 +167,16 @@ export const es: Messages = {
   rescan: "Volver a leer títulos",
   scan: "Escanear",
   scanHelp: "Vuelve a leer los títulos instalados. Úsalo después de instalar o quitar un título.",
-  scanning: "Escaneando...",
+  scanTitle: "Buscando tus juegos y aplicaciones",
+  scanStep: "{phase}: {done} de {total}",
+  scanFailed: "No se pudo iniciar el análisis.",
+  scanPhases: {
+    apps: "Aplicaciones y juegos",
+    system: "Aplicaciones del sistema",
+    psm: "PlayStation Mobile",
+    psp: "Juegos de PSP y PSX",
+    images: "Imágenes de disco",
+  },
   scanDone: "{count} títulos encontrados en {seconds} s.",
 
   // Plugin de arranque de Adrenaline

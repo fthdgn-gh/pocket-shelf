@@ -231,7 +231,9 @@ pub unsafe fn scan(rows: Option<&[appdb::Bubble]>, known: &[String]) -> Vec<Clas
     let mut without_bubble = Vec::new();
     // Folders left out, with the reason, for the report.
     let mut skipped: Vec<(String, String)> = Vec::new();
+    crate::installed::scan_phase("psp");
     for id in &ids {
+        crate::installed::scan_step();
         if known.contains(id) {
             skipped.push((id.clone(), String::from("listedElsewhere")));
             continue;
@@ -305,6 +307,21 @@ pub unsafe fn scan(rows: Option<&[appdb::Bubble]>, known: &[String]) -> Vec<Clas
     found
 }
 
+/// How many steps the PSP and PS1 part of a scan takes: one per title-id
+/// folder in `PSP/GAME` and one per file under `ISO`, as `scan` counts them.
+pub fn item_count() -> u32 {
+    let folders = fs::read_dir(on_stick("PSP/GAME"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.metadata().is_ok_and(|meta| meta.is_dir()))
+                .filter(|entry| entry.file_name().to_str().is_some_and(crate::installed::valid_title_id))
+                .count()
+        })
+        .unwrap_or(0);
+    (folders + image_files().len()) as u32
+}
+
 /// Folder of disc images under the memory stick; its subfolders are read too,
 /// one level deep, as Adrenaline's XMB does.
 const IMAGE_DIR: &str = "ISO";
@@ -353,7 +370,9 @@ unsafe fn scan_images(known: &[String], found: &mut Vec<Classic>) {
     let files = image_files();
     let mut skipped: Vec<(String, String)> = Vec::new();
     let mut images = 0;
+    crate::installed::scan_phase("images");
     for path in files {
+        crate::installed::scan_step();
         let ext = extension(&path);
         if OTHER_IMAGE_EXTENSIONS.contains(&ext.as_str()) {
             skipped.push((path, format!("format {ext}")));

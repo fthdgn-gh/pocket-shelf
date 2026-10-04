@@ -183,7 +183,16 @@ export const en = {
   rescan: "Rescan titles",
   scan: "Scan",
   scanHelp: "Reads the installed titles again. Use it after installing or removing a title.",
-  scanning: "Scanning...",
+  scanTitle: "Finding your games and apps",
+  scanStep: "{phase}: {done} of {total}",
+  scanFailed: "The scan could not start.",
+  scanPhases: {
+    apps: "Apps and games",
+    system: "System applications",
+    psm: "PlayStation Mobile",
+    psp: "PSP and PSX games",
+    images: "Disc images",
+  },
   scanDone: "{count} titles found in {seconds} s.",
 
   // Adrenaline's boot plugin

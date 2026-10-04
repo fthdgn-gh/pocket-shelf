@@ -116,9 +116,10 @@ cannot be driven. Evidence comes from its log and from files under
 
 - **Prefer host extras over new spec ops.** Extras are `ui.__name` functions
   outside the numbered contract (`__appArt`, `__appBackdrop`,
-  `__appBackdropFree`, `__artAccent`, `__appRescan`, `__startupMarks`,
-  `__processMs`, `__scanReport`, `__netGet`, `__netSave`, `__netState`,
-  `__netText`, `__netClose`, `__status`). The one spec op added, `appIcon`, collided with
+  `__appBackdropFree`, `__artAccent`, `__titlesReady`, `__scanStart`,
+  `__scanState`, `__startupMarks`, `__processMs`, `__scanReport`,
+  `__adrPlugin`, `__adrPluginEnable`, `__bootLog`, `__netGet`, `__netSave`,
+  `__netState`, `__netText`, `__netClose`, `__status`). The one spec op added, `appIcon`, collided with
   upstream at 52 and is now **57**.
 - **Pictures decode on worker threads** (`jobs.rs`). Icons, custom art and
   backdrops answer `-2` until ready and the app asks again every two frames.
@@ -146,10 +147,31 @@ cannot be driven. Evidence comes from its log and from files under
   one `param.sfo` per title, which the user measured at about ten seconds for
   a hundred titles on hardware. `installed.rs` scans on the first start,
   writes the list, and reads it on later starts. A title installed or removed
-  afterwards is not noticed until "Rescan titles" in the SELECT menu
-  (`__appRescan`), which also reports how long the scan took. The scan blocks
-  the main thread. In Vita3K a second start opens `titles.tsv` and neither
-  app folder; the time saved on hardware is not measured yet.
+  afterwards is not noticed until "Rescan titles" in the SELECT menu, which
+  also reports how long the scan took. In Vita3K a second start opens
+  `titles.tsv` and neither app folder; the time saved on hardware is not
+  measured yet.
+- **The scan runs on a worker thread** (`installed::scan_start`, thread
+  `pocket-scan`, 256 KiB stack) and saves the list there; `scan_state`
+  reports `running <done> <total> <phase>` and, once finished, moves the
+  result into the list in memory on the main thread and says `done <titles>
+  <ms>`. The total is counted first from the folder listings (no file reads):
+  one step per entry in ux0:/app and vs0:/app, one for the database and PSM
+  together, one per title-id folder in `PSP/GAME` and per file under `ISO`
+  (`pspemu::item_count`). Phases: `apps`, `system`, `psm`, `psp`, `images`.
+  The app asks `__titlesReady` first (reads the list file, no scan). With no
+  list (first start, or the file deleted), `app.tsx`'s `Root` shows
+  `components/scan-page.tsx` instead of the shelf: the name, a progress bar
+  and the phase with its count, in the saved language, theme and font; it
+  polls once per frame and mounts the shelf when the scan is done. "Rescan
+  titles" uses the same scan; its drawer shows the bar while it runs. In
+  Vita3K a first start scanned on the thread and wrote `titles.tsv`; the page
+  itself is seen in the preview only (shots `72b`, `72c`, `71b`,
+  `60-<lang>-first-start`). Not yet seen on hardware.
+- **Splash** (`sce_sys/pic0.png`, 960x544, indexed): the system shows it
+  while the app loads. Drawn by `src/tools/art.ts` in the Midnight theme's
+  colors, with the name where the scan page puts it, so a first start reads
+  as one screen.
 - **The home screen's database** (`appdb.rs`): `ur0:shell/db/app.db`,
   table `tbl_appinfo_icon` (`titleId`, `title`, `iconPath`), one row per
   bubble. Read once per scan with the system's SQLite module and shared by
