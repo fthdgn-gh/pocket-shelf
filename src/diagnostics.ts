@@ -96,6 +96,13 @@ function bootEntries(): DiagnosticEntry[] {
     // Before an image boots: the boot config index of the ISO driver and the
     // file it boots. Each Adrenaline numbers its drivers its own way; these
     // are the numbers the plugin uses.
+    // Before a boot: what the plugin waited for, the first module after the
+    // XMB's main one, or the fallback wait with the XMB up.
+    const trigger = /^trigger=(?:after )?(.+)$/.exec(line);
+    if (trigger) {
+      const name = trigger[1]!;
+      return { label: "Boot trigger", value: name.length > 16 ? `${name.slice(0, 13)}...` : name };
+    }
     const driver = /^driver=(\d+)( \(default\))? (\S+)$/.exec(line);
     if (driver) {
       const name = DRIVERS[Number(driver[1])] ?? driver[1]!;
