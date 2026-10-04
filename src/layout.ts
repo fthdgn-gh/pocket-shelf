@@ -17,10 +17,16 @@ export const SHELF: Record<DetailLevel, { tile: number; gap: number; row: number
 
 export const GRID_COLUMNS = 5;
 export const GRID_ROWS = 2;
-export const GRID_TILE = 72;
-export const GRID_GAP = 10;
-/** Width of a full grid row: columns plus the gaps between them. */
-export const GRID_W = GRID_COLUMNS * GRID_TILE + (GRID_COLUMNS - 1) * GRID_GAP;
+/**
+ * Grid geometry per detail level: `tile` is a tile's side and `gap` the space
+ * between tiles. "Detailed" adds a second line under the grid, so its tiles
+ * are smaller to keep the footer on screen under the status bar.
+ */
+export const GRID: Record<DetailLevel, { tile: number; gap: number }> = {
+  basic: { tile: 72, gap: 10 },
+  normal: { tile: 72, gap: 10 },
+  detailed: { tile: 64, gap: 10 },
+};
 
 export const LIST_ROW_H = 30;
 export const LIST_GAP = 4;

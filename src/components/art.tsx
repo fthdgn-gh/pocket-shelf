@@ -29,10 +29,16 @@ const SIZES = {
     image: "w-[104] h-[104]",
     text: "text-4xl text-white font-bold",
   },
-  // Grid tile.
+  // Grid tile, "Basic" and "Normal" (see GRID in layout.ts).
   md: {
     box: "relative w-[72] h-[72] items-center justify-center",
     image: "w-[72] h-[72]",
+    text: "text-xl text-white font-bold",
+  },
+  // Grid tile, "Detailed".
+  mdDetailed: {
+    box: "relative w-[64] h-[64] items-center justify-center",
+    image: "w-[64] h-[64]",
     text: "text-xl text-white font-bold",
   },
   // List row.
