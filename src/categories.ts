@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "@pocketjs/framework/fs";
 import type { CategoryId } from "./types.ts";
 
 /** A category whose label comes from the language's `categories` texts. */
-export type CategoryName = "recent" | "favorites" | "search" | "games" | "system" | "homebrew";
+export type CategoryName = "recent" | "favorites" | "search" | "games" | "system" | "homebrew" | "psm";
 
 export interface Category {
   id: CategoryId;
@@ -41,16 +41,22 @@ export const SMART_CATEGORIES: readonly Category[] = [
 
 /** The firmware's own applications. */
 export const SYSTEM_ID = "system";
+/**
+ * PlayStation Mobile titles. Added after the others existed, so its id has a
+ * prefix no label the user typed turns into.
+ */
+export const PSM_ID = "builtin-psm";
 
 export const BUILTIN_CATEGORIES: readonly Category[] = [
   { id: "games", label: "Games", name: "games" },
   { id: SYSTEM_ID, label: "System", name: "system" },
   { id: "homebrew", label: "Homebrew", name: "homebrew" },
+  { id: PSM_ID, label: "PS Mobile", name: "psm" },
 ];
 
 /**
  * A built-in category with no titles is left out of the tab bar. Set to true to
- * show all three always. Categories the user created always show.
+ * show all of them always. Categories the user created always show.
  */
 export const SHOW_EMPTY_CATEGORIES = false;
 
@@ -59,12 +65,19 @@ export const CATEGORY_ID_PATTERN = /^[a-z0-9-]{1,32}$/;
 
 /**
  * Category of an installed title, from its title id. Retail games use PCS ids,
- * system applications use NPXS ids, and everything else is homebrew.
+ * system applications use NPXS ids, PlayStation Mobile titles NPNA, NPOA,
+ * NPPA or NPQA and five digits, and everything else is homebrew.
  */
 export function categoryOf(titleId: string): CategoryId {
   if (titleId.startsWith("PCS")) return "games";
   if (titleId.startsWith("NPXS")) return SYSTEM_ID;
+  if (isPsmId(titleId)) return PSM_ID;
   return "homebrew";
+}
+
+/** A PlayStation Mobile title id (`NPNA00001`), as `psm.rs` lists them. */
+export function isPsmId(titleId: string): boolean {
+  return /^NP[NOPQ]A\d{5}$/.test(titleId);
 }
 
 export function cycleCategory(list: readonly CategoryId[], current: CategoryId, delta: number): CategoryId {
