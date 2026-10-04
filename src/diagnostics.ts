@@ -4,6 +4,7 @@
 
 interface TimingHost {
   __startupMarks?(): string;
+  __scanReport?(): string;
   __processMs?(): number;
 }
 // The host's `ui` object. The framework's own accessor works only after
@@ -62,5 +63,19 @@ export function startupEntries(): DiagnosticEntry[] {
   }
   entries.push({ label: "App begin", value: `at ${scriptStarted} ms` });
   for (const [label, ms] of phases) entries.push({ label: `App ${label}`, value: `${ms} ms` });
-  return entries;
+  return [...entries, ...scanEntries()];
+}
+
+/**
+ * What the last title scan found among PlayStation Mobile titles
+ * (`psm.rs` in the Vita host): `folders=3,source=app.db,bubbles=2,icons=2`.
+ * Nothing when this start read the saved list instead of scanning.
+ */
+function scanEntries(): DiagnosticEntry[] {
+  const report = host().__scanReport?.() ?? "";
+  if (!report) return [];
+  return report.split(",").flatMap((pair) => {
+    const [key, value] = pair.split("=");
+    return key && value ? [{ label: `PSM ${key}`, value }] : [];
+  });
 }

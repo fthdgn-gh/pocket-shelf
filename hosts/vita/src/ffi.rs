@@ -907,6 +907,18 @@ unsafe extern "C" fn js_startup_marks(
     new_js_string(ctx, &crate::startup_marks())
 }
 
+/// ui.__scanReport() -> what the last title scan found among PSM titles
+/// (psm.rs `report`). Host extra, for the diagnostics screen.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_scan_report(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    new_js_string(ctx, &crate::psm::report())
+}
+
 /// ui.__processMs() -> milliseconds since the process started. Host extra:
 /// the clock of `__startupMarks`, so the guest can time its own steps on it.
 #[cfg(feature = "installed-apps")]
@@ -1215,6 +1227,7 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"__appRescan\0", js_installed_rescan, 0);
         add_fn(ctx, ui_obj, b"__startupMarks\0", js_startup_marks, 0);
         add_fn(ctx, ui_obj, b"__processMs\0", js_process_ms, 0);
+        add_fn(ctx, ui_obj, b"__scanReport\0", js_scan_report, 0);
     }
 
     #[cfg(feature = "status")]

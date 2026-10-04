@@ -51,6 +51,7 @@ export const en = {
     games: "Games",
     system: "System",
     homebrew: "Homebrew",
+    psm: "PS Mobile",
   },
 
   // SELECT menu

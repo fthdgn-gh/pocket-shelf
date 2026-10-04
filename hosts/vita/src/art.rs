@@ -35,7 +35,7 @@ fn valid_name(name: &str) -> bool {
 
 /// Decode, crop to a centered square and box-filter down. Returns the texture
 /// side and its RGBA pixels.
-fn decode(path: &str) -> Option<(u32, Vec<u8>)> {
+pub(crate) fn decode(path: &str) -> Option<(u32, Vec<u8>)> {
     if fs::metadata(path).ok()?.len() > FILE_MAX {
         return None;
     }

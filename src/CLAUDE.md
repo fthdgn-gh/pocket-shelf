@@ -116,7 +116,7 @@ cannot be driven. Evidence comes from its log and from files under
 - **Prefer host extras over new spec ops.** Extras are `ui.__name` functions
   outside the numbered contract (`__appArt`, `__appBackdrop`,
   `__appBackdropFree`, `__artAccent`, `__appRescan`, `__startupMarks`,
-  `__processMs`, `__netGet`, `__netSave`, `__netState`,
+  `__processMs`, `__scanReport`, `__netGet`, `__netSave`, `__netState`,
   `__netText`, `__netClose`, `__status`). The one spec op added, `appIcon`, collided with
   upstream at 52 and is now **57**.
 - **Pictures decode on worker threads** (`jobs.rs`). Icons, custom art and
@@ -149,6 +149,29 @@ cannot be driven. Evidence comes from its log and from files under
   (`__appRescan`), which also reports how long the scan took. The scan blocks
   the main thread. In Vita3K a second start opens `titles.tsv` and neither
   app folder; the time saved on hardware is not measured yet.
+- **PlayStation Mobile titles** (`psm.rs`) are folders in `ux0:/psm` named
+  `NPNA`, `NPOA`, `NPPA` or `NPQA` and five digits. They have no
+  `param.sfo`. The name comes from the home screen's database
+  `ur0:shell/db/app.db` (`tbl_appinfo_icon`: `titleId`, `title`), read with
+  the system's SQLite module (`SceSqlite`); a folder with no row there has no
+  bubble and is left out. **The module needs `sceSqliteConfigMallocMethods`
+  first;** without it `sqlite3_open_v2` returns 7 (SQLITE_NOMEM), seen in
+  Vita3K. When the database cannot be read, every folder is listed, named
+  from `ur0:appmeta/<id>/param.sfo` or by id. Launch is
+  `psgm:play?titleid=<id>`, as for a game. **Icons are DDS:** the home
+  screen keeps a PSM icon as `ur0:appmeta/<id>/icon0.dds` (the database's
+  `iconPath` names it), 8320 bytes on hardware: a 128-byte header and a
+  128x128 DXT1 image. `dds.rs` decodes DXT1, DXT3, DXT5 and 32-bit DDS; its
+  tests run natively (`rustc --edition 2021 --test hosts/vita/src/dds.rs`).
+  Found through the Diagnostics lines: after "Rescan titles" they list the
+  first title's `ur0:appmeta` files ("PSM file"). The blocks are in plain
+  order (not swizzled). **Confirmed on hardware (four PSM titles):** listed
+  in the PS Mobile tab under their bubble names, icons, backdrops
+  (`pic0.png` in `ur0:appmeta`), and launch. This follows RetroFlow. The scan's findings (`__scanReport`) show as
+  "PSM" lines on the Diagnostics screen after a scan, not after a start that
+  read the list file. In Vita3K, with a hand-made `app.db` and two folders:
+  one listed under its database name, one left out, icon found. The list
+  file's header is version 2 since this; a version 1 file is scanned over.
 - **Retail games' files are encrypted.** For an icon or backdrop the host
   tries, in order: `ux0:/app/<id>/sce_sys` (plain for homebrew),
   `ur0:appmeta/<id>/` (exists only after the home screen opened that game's

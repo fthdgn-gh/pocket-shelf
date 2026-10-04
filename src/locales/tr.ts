@@ -44,6 +44,7 @@ export const tr: Messages = {
     games: "Oyunlar",
     system: "Sistem",
     homebrew: "Homebrew",
+    psm: "PS Mobile",
   },
 
   theme: "Tema",

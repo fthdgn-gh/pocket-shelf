@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { cleanTitle, isListed } from "../catalog.ts";
-import { categoryOf, cycleCategory, makeCategoryId } from "../categories.ts";
+import { PSM_ID, categoryOf, cycleCategory, isPsmId, makeCategoryId } from "../categories.ts";
 import { LANGUAGES, MESSAGES, fill, upper } from "../i18n.ts";
 import { ACCENTS_FIRST, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, LIST_ROWS_UNDER_STATUS, SHELF, carouselLayout } from "../layout.ts";
@@ -117,6 +117,8 @@ describe("categories", () => {
     expect(categoryOf("PCSA00069")).toBe("games");
     expect(categoryOf("NPXS10001")).toBe("system");
     expect(categoryOf("PBCF7609D")).toBe("homebrew");
+    expect(categoryOf("NPOA00013")).toBe(PSM_ID);
+    expect(categoryOf("NPNA00042")).toBe(PSM_ID);
   });
 
   test("cycleCategory wraps in both directions", () => {
@@ -419,4 +421,11 @@ describe("SELECT menu", () => {
   test("language is two presses up from the first row of the main page", () => {
     expect(MENU.main.at(-2)).toBe("language");
   });
+});
+
+test("isPsmId", () => {
+  for (const id of ["NPNA00001", "NPOA00013", "NPPA00007", "NPQA12345"]) expect(isPsmId(id)).toBe(true);
+  for (const id of ["NPXS10001", "NPEA00001", "NPOA0001", "NPOA000130", "NPOAX0013", "PCSE00001"]) {
+    expect(isPsmId(id)).toBe(false);
+  }
 });

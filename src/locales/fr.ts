@@ -44,6 +44,7 @@ export const fr: Messages = {
     games: "Jeux",
     system: "Système",
     homebrew: "Homebrew",
+    psm: "PS Mobile",
   },
 
   theme: "Thème",

@@ -6,6 +6,8 @@
 //! `appLaunch(titleId)` starts one through the system app manager. The table carries `kind: "native"`, so the framework treats the
 //! call as a process switch, not as a guest swap inside this process.
 //!
+//! PSM titles in `ux0:/psm` are added by `psm.rs`.
+//!
 //! Titles are read from each `sce_sys/param.sfo`. One file read per title is
 //! slow on the memory card (about ten seconds for a hundred titles), so the
 //! list is kept in a file in the data folder (cargo feature `data-fs`): the
@@ -79,7 +81,7 @@ const SYSTEM_URIS: &[(&str, &str)] = &[
 /// Layout: 20-byte header (`\0PSF`, version, key table offset, data table
 /// offset, entry count) followed by 16-byte entries of
 /// (key offset u16, format u16, length u32, max length u32, data offset u32).
-fn sfo_string(sfo: &[u8], key: &str) -> Option<String> {
+pub(crate) fn sfo_string(sfo: &[u8], key: &str) -> Option<String> {
     let u16_at = |at: usize| sfo.get(at..at + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
     let u32_at = |at: usize| {
         sfo.get(at..at + 4)
@@ -120,6 +122,11 @@ fn scan() -> Vec<Title> {
     let mut titles = Vec::new();
     scan_root(APP_ROOT, &mut titles);
     scan_root(SYSTEM_ROOT, &mut titles);
+    for (title_id, title) in unsafe { crate::psm::scan() } {
+        if title_id != SELF_TITLE_ID && !titles.iter().any(|item| item.title_id == title_id) {
+            titles.push(Title { title_id, title });
+        }
+    }
     titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
     titles
 }
@@ -171,8 +178,9 @@ fn is_system(title_id: &str) -> bool {
 }
 
 /// First line of the list file. A file that starts otherwise is scanned over.
+/// Version 2 added PSM titles; a version 1 list does not have them.
 #[cfg(feature = "data-fs")]
-const LIST_HEADER: &str = "pocket-shelf titles 1";
+const LIST_HEADER: &str = "pocket-shelf titles 2";
 
 #[cfg(feature = "data-fs")]
 fn list_path() -> String {
@@ -431,24 +439,51 @@ pub unsafe fn finish_launch() {
 }
 
 /// The title's `icon0.png` as tightly packed RGBA: from the first folder of
-/// `metadata_dirs` whose copy decodes, or from the title's encrypted files.
+/// `metadata_dirs` whose copy decodes, then for a PSM title the file the home
+/// screen's database names, then from the title's encrypted files.
 unsafe fn decode_icon(title_id: &str) -> Option<(u32, u32, Vec<u8>)> {
+    // The home screen keeps a PSM title's icon as `icon0.dds`.
     let from = |dirs: &[String]| {
-        dirs.iter()
-            .find_map(|base| decode_icon_file(&format!("{base}/icon0.png")))
+        dirs.iter().find_map(|base| {
+            decode_icon_file(&format!("{base}/icon0.png")).or_else(|| decode_icon_file(&format!("{base}/icon0.dds")))
+        })
     };
     // A retail game the home screen has not opened yet has no plain copy;
     // its own file is read through a decrypting mount.
-    from(&metadata_dirs(title_id)).or_else(|| with_decrypted(title_id, from))
+    from(&metadata_dirs(title_id))
+        .or_else(|| crate::psm::icon_path(title_id).and_then(|path| decode_icon_file(&path)))
+        .or_else(|| with_decrypted(title_id, from))
 }
 
-/// Decode one `icon0.png`. The core only accepts power-of-two textures up to
-/// `TEX_MAX_DIM`; other sizes have no icon.
+/// Decode one icon file. An icon whose sides are not powers of two (a PSM
+/// title's can be) is cropped to a square and scaled down to one, as custom
+/// box art is.
 fn decode_icon_file(path: &str) -> Option<(u32, u32, Vec<u8>)> {
+    decode_icon_exact(path).or_else(|| decode_icon_scaled(path))
+}
+
+#[cfg(feature = "data-fs")]
+fn decode_icon_scaled(path: &str) -> Option<(u32, u32, Vec<u8>)> {
+    crate::art::decode(path).map(|(side, rgba)| (side, side, rgba))
+}
+
+#[cfg(not(feature = "data-fs"))]
+fn decode_icon_scaled(_path: &str) -> Option<(u32, u32, Vec<u8>)> {
+    None
+}
+
+/// Decode one icon file (PNG, or DDS for a PSM title) as it is. The core only
+/// accepts power-of-two textures up to `TEX_MAX_DIM`; other sizes give None.
+fn decode_icon_exact(path: &str) -> Option<(u32, u32, Vec<u8>)> {
     if fs::metadata(path).ok()?.len() as usize > ICON_MAX {
         return None;
     }
     let bytes = fs::read(path).ok()?;
+    if crate::dds::is_dds(&bytes) {
+        let (width, height, rgba) = crate::dds::decode(&bytes)?;
+        let pow2 = |value: u32| value <= pocketjs_core::spec::TEX_MAX_DIM && value.is_power_of_two();
+        return (pow2(width) && pow2(height)).then_some((width, height, rgba));
+    }
     let mut decoder = png::Decoder::new(&bytes[..]);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;

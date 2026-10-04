@@ -31,7 +31,7 @@ usb-debug = ["vitasdk-sys/ScePower_stub", "vitasdk-sys/SceSysmem_stub"]
 # Native app navigation (docs/LAUNCHER.md): appTable/appLaunch list and start
 # the titles installed under ux0:/app. Opt-in per VPK, because a native table
 # makes the framework treat the guest as launcher-hosted.
-installed-apps = ["vitasdk-sys/SceAppMgr_stub", "dep:png"]
+installed-apps = ["vitasdk-sys/SceAppMgr_stub", "vitasdk-sys/SceSqlite_stub", "dep:png"]
 # globalThis.fs over ux0:/data/pocketjs/<title id>.
 data-fs = ["dep:pocket-fs"]
 # ui.__status() for a status bar (src/status.rs): local time and clock
