@@ -52,8 +52,11 @@ simulator and writes frames to `.pocket-build/validation/shelf-preview/`
 (ignored by git). It fakes the Vita host: a title table (including a
 125-title category), icons, backdrops, the network and SteamGridDB, and it
 answers "still decoding" at first like the real host. Shots are button
-scripts; adding a menu or editor row shifts the `DOWN` counts in existing
-shots. Its launch op does not end the app, so a shot can start several titles. It
+scripts. `menuTo("clock")` opens the SELECT menu on a named row, read from
+`MENU` in `menu-items.ts`, so menu changes do not shift them; adding an editor
+row shifts the `DOWN` counts in existing shots. A script that leaves a dialog
+opened from a group presses back once per page to reach the shelf (dialog,
+group, menu for Library). Its launch op does not end the app, so a shot can start several titles. It
 needs the `wasm32-unknown-unknown` Rust target.
 
 **Vita3K.** Its window cannot be seen or screenshotted from here, and it
@@ -252,7 +255,7 @@ the user reorders them, and can be hidden or moved in the category manager.
 English, Turkish, German, French and Spanish. `locales/en.ts` defines the
 texts and their type; the other files in `locales/` follow it, and `i18n.ts`
 lists them. `state.t()` gives the texts of the chosen language; the choice is
-the second to last row of the SELECT menu (two presses up from the first row)
+the second to last row of the SELECT menu's main page (two presses up from the first row)
 and is saved in `settings.json`. English is the default; the system language is not
 read.
 
@@ -277,11 +280,21 @@ read.
   headings.
 - `bun run shelf:preview 60-` renders twelve screens per translated language.
 
+## SELECT menu
+
+`MENU` in `menu-items.ts` lists the pages. The main page: Appearance ▸
+(theme, font, view, details, backdrop, icon box, Status bar ▸), Library ▸
+(categories, fetch artwork, clean up artwork, rescan titles), Confirm,
+Language, Diagnostics. Right or confirm opens a group; back returns to the
+page holding it, on its row (`parentPage`), and closes the menu from the main
+page. SELECT closes it from any page; it opens again on the main page. `menuChange` in `state.ts` acts on the row's name,
+and `components/menu.tsx` draws each row by name.
+
 ## Status bar
 
 A strip above the category header (`components/status-bar.tsx`): the time on
-the left; Wi-Fi, Bluetooth and the battery on the right. Three SELECT menu
-rows after "Icon box": "Status bar" (on/off), "Clock" (System, 24-hour,
+the left; Wi-Fi, Bluetooth and the battery on the right. The SELECT menu's
+"Status bar" group, inside Appearance, holds "Show" (on/off), "Clock" (System, 24-hour,
 12-hour) and "Battery percent" (on/off), all saved in `settings.json`. The
 app reads `__status` (`hosts/vita/src/status.rs`) on the first frame and then
 every 60 frames.
@@ -364,7 +377,7 @@ the bubble is about seven seconds, so about three are the system's own launch.
   was at 4088 before this work. Inside the app's code: `mount` 516, of which
   `tree` 284 and the framework's `setup` 20. The stopwatch time from the
   bubble has not been taken again.
-- **Diagnostics screen.** SELECT menu, "Diagnostics" (the last row): the startup timing of
+- **Diagnostics screen.** SELECT menu, "Diagnostics" (the last row of the main page): the startup timing of
   the current launch as a list. "Host" lines say when a phase finished
   (`startup_mark` in `lib.rs`, read through `__startupMarks`); "App" lines
   say how long a step took (`timed` in `diagnostics.ts`). Wrap a new startup

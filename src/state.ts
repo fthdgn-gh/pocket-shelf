@@ -54,17 +54,12 @@ import { searchTitles } from "./search.ts";
 import { CLOCK_FORMATS, loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
 import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
+import { MENU, isMenuPage, menuPath, parentPage, type MenuItem, type MenuPage } from "./menu-items.ts";
 import { readStatus, sameStatus, type Status } from "./status.ts";
 import { DEFAULT_THEME, THEMES, dynamicTheme, themeById, type ThemeId } from "./themes.ts";
 import type { CategoryId, ClockFormat, ConfirmMode, DetailLevel, Game, ViewMode } from "./types.ts";
 
-/**
- * Rows in the SELECT menu: theme, font, view, details, backdrop, icon box,
- * status bar, clock, battery percent, categories, fetch artwork, clean up artwork, rescan titles, confirm button,
- * language, diagnostics. Language is second to last, two presses up from the
- * first row, so it can be found in a language the user cannot read.
- */
-export const MENU_ROWS = 16;
+export type { MenuItem, MenuPage };
 
 /** Menu rows visible at once; the menu scrolls with the highlight. */
 export const MENU_VISIBLE = 7;
@@ -317,6 +312,7 @@ export function createLauncherState(catalog: Catalog) {
   );
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [menuRow, setMenuRow] = createSignal(0);
+  const [menuPage, setMenuPage] = createSignal<MenuPage>("main");
 
   // Icons are decoded by the host on request, so only items near the selection
   // ask for one. A custom art file wins over the installed title's own icon;
@@ -612,29 +608,90 @@ export function createLauncherState(catalog: Catalog) {
   let statusWait = STATUS_FRAMES - 1;
 
   // --- SELECT menu -------------------------------------------------------
-  const openMenu = () => setMenuOpen(true);
+  /** Show `page` with the row that opens `from` highlighted, or its first row. */
+  const showMenuPage = (page: MenuPage, from?: MenuPage) => {
+    setMenuPage(page);
+    setMenuRow(from ? Math.max(0, MENU[page].indexOf(from)) : 0);
+  };
+  // The menu opens on its main page. From a group it opens on the group's row
+  // there; from the main page, on the row it was left at.
+  const openMenu = () => {
+    const top = menuPath(menuPage())[1] ?? menuPage();
+    if (menuPage() !== "main") showMenuPage("main", top);
+    setMenuOpen(true);
+  };
   const closeMenu = () => setMenuOpen(false);
-  const toggleMenu = () => setMenuOpen((open) => !open);
-  const menuMove = (delta: number) => setMenuRow((row) => (row + delta + MENU_ROWS) % MENU_ROWS);
-  /** Step the highlighted menu row's value forward or back. */
+  const toggleMenu = () => (menuOpen() ? closeMenu() : openMenu());
+  /** Back to the page holding this one, on its row; the main page closes the menu. */
+  const menuBack = () => {
+    const parent = parentPage(menuPage());
+    if (parent) showMenuPage(parent, menuPage());
+    else closeMenu();
+  };
+  const menuItems = () => MENU[menuPage()];
+  const menuMove = (delta: number) => {
+    const count = menuItems().length;
+    setMenuRow((row) => (row + delta + count) % count);
+  };
+  /** Step the highlighted menu row's value forward or back, or open the group or dialog it names. */
   const menuChange = (delta: number) => {
-    const row = menuRow();
-    if (row === 0) setThemeId((id) => cycle(THEMES.map((item) => item.id), id, delta));
-    else if (row === 1) setFont((id) => cycle(FONTS.map((item) => item.id), id, delta));
-    else if (row === 2) setView(cycle(VIEW_MODES, view(), delta));
-    else if (row === 3) setDetail(cycle(DETAIL_LEVELS, detail(), delta));
-    else if (row === 4) setBackdropOn((on) => !on);
-    else if (row === 5) setIconBoxOn((on) => !on);
-    else if (row === 6) setStatusBarOn((on) => !on);
-    else if (row === 7) setClockFormat((format) => cycle(CLOCK_FORMATS, format, delta));
-    else if (row === 8) setBatteryPercentOn((on) => !on);
-    else if (row === 9) openCategoryManager();
-    else if (row === 10) scrape.start();
-    else if (row === 11) openCleanup();
-    else if (row === 12) openRescan();
-    else if (row === 13) toggleConfirm();
-    else if (row === 14) setLanguage((id) => cycle(LANGUAGES.map((item) => item.id), id, delta));
-    else openDiagnostics();
+    const item = menuItems()[menuRow()];
+    if (item === undefined) return;
+    if (isMenuPage(item)) {
+      if (delta < 0) return;
+      showMenuPage(item);
+      return;
+    }
+    switch (item) {
+      case "theme":
+        setThemeId((id) => cycle(THEMES.map((theme) => theme.id), id, delta));
+        break;
+      case "font":
+        setFont((id) => cycle(FONTS.map((entry) => entry.id), id, delta));
+        break;
+      case "view":
+        setView(cycle(VIEW_MODES, view(), delta));
+        break;
+      case "details":
+        setDetail(cycle(DETAIL_LEVELS, detail(), delta));
+        break;
+      case "backdrop":
+        setBackdropOn((on) => !on);
+        break;
+      case "iconBox":
+        setIconBoxOn((on) => !on);
+        break;
+      case "statusBar":
+        setStatusBarOn((on) => !on);
+        break;
+      case "clock":
+        setClockFormat((format) => cycle(CLOCK_FORMATS, format, delta));
+        break;
+      case "batteryPercent":
+        setBatteryPercentOn((on) => !on);
+        break;
+      case "categories":
+        openCategoryManager();
+        break;
+      case "fetchArt":
+        scrape.start();
+        break;
+      case "cleanArt":
+        openCleanup();
+        break;
+      case "rescan":
+        openRescan();
+        break;
+      case "confirm":
+        toggleConfirm();
+        break;
+      case "language":
+        setLanguage((id) => cycle(LANGUAGES.map((entry) => entry.id), id, delta));
+        break;
+      case "diagnostics":
+        openDiagnostics();
+        break;
+    }
   };
 
   // --- Per-title editor (triangle) ---------------------------------------
@@ -1367,7 +1424,7 @@ export function createLauncherState(catalog: Catalog) {
         closeCategoryManager();
         break;
       case "menu":
-        closeMenu();
+        menuBack();
         break;
     }
   };
@@ -1414,6 +1471,8 @@ export function createLauncherState(catalog: Catalog) {
     keyboardNote,
     menuOpen,
     menuRow,
+    menuPage,
+    menuItems,
     openMenu,
     closeMenu,
     toggleMenu,
