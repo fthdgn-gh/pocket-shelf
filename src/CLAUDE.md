@@ -586,7 +586,9 @@ every 60 frames.
   on hardware it is not verified.
 - **The list shows five rows under the bar.** The screen is 480x272 and six
   list rows filled it to the pixel; `listRows` in `layout.ts` and `pageSize`
-  take the setting. The carousel and grid fit with the bar.
+  take the setting. The carousel and grid fit with the bar. The "Detailed"
+  grid did not (its id line pushed the footer 13 px off screen), so its tiles
+  are 64 px instead of 72 (`GRID` in `layout.ts`).
 - The preview fakes `__status` as `21 47 1 72 0 80 1`; a shot can give its
   own line (`status`). Shots 80 to 87 cover the bar.
 
