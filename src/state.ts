@@ -29,6 +29,7 @@ import {
   releaseBackdrop,
 } from "./art-files.ts";
 import { boxColors, type BoxColors } from "./accent.ts";
+import { enablePlugin, pluginState, type PluginState } from "./adrenaline.ts";
 import { pumpNet } from "./net.ts";
 import { createOnlineFlow } from "./online.ts";
 import { KEY_MAX, fileBelongsTo } from "./steamgriddb.ts";
@@ -92,6 +93,7 @@ export const EDITOR_ROWS = 7;
 export const PICKER_ROWS = 5;
 
 export type Modal =
+  | "adrenaline"
   | "menu"
   | "editor"
   | "keyboard"
@@ -436,9 +438,40 @@ export function createLauncherState(catalog: Catalog) {
     if (searching()) clearSearch();
   };
 
+  // --- Adrenaline's boot plugin --------------------------------------------
+  // A title without a bubble starts through Adrenaline, with Pocket Shelf's
+  // plugin loaded at its XMB. When the plugin is not on, a drawer says why
+  // and offers to add it or turn it on; the plugin lists change only then.
+  const [adrPlugin, setAdrPlugin] = createSignal<PluginState | null>(null);
+  const [adrFailed, setAdrFailed] = createSignal(false);
+  const closeAdrenaline = () => setAdrPlugin(null);
+  const adrenalineConfirm = () => {
+    const plugin = adrPlugin();
+    if (plugin !== "missing" && plugin !== "off") {
+      closeAdrenaline();
+      return;
+    }
+    if (!enablePlugin()) {
+      setAdrFailed(true);
+      return;
+    }
+    closeAdrenaline();
+    launchSelected();
+  };
+
   const launchSelected = () => {
     const game = games()[selectedIndex()];
     if (!game) return;
+    if (native && game.adrenaline) {
+      const plugin = pluginState();
+      if (plugin !== "on") {
+        batch(() => {
+          setAdrFailed(false);
+          setAdrPlugin(plugin);
+        });
+        return;
+      }
+    }
     setLaunchingTitle(game.title);
     // The files are written before the request: the host ends this process
     // once this frame is on screen, and a process still alive when the system
@@ -1308,6 +1341,7 @@ export function createLauncherState(catalog: Catalog) {
 
   // --- Routing for whichever panel is on top ------------------------------
   const modal = (): Modal | null => {
+    if (adrPlugin() !== null) return "adrenaline";
     if (keyboardOpen()) return "keyboard";
     if (artOpen()) return "art";
     if (online.open()) return "online";
@@ -1357,6 +1391,9 @@ export function createLauncherState(catalog: Catalog) {
   };
   const modalConfirm = () => {
     switch (modal()) {
+      case "adrenaline":
+        adrenalineConfirm();
+        break;
       case "menu":
         menuChange(1);
         break;
@@ -1396,6 +1433,9 @@ export function createLauncherState(catalog: Catalog) {
   };
   const modalCancel = () => {
     switch (modal()) {
+      case "adrenaline":
+        closeAdrenaline();
+        break;
       case "keyboard":
         closeKeyboard();
         break;
@@ -1464,6 +1504,8 @@ export function createLauncherState(catalog: Catalog) {
     select,
     page,
     launchSelected,
+    adrPlugin,
+    adrFailed,
     searching,
     searchTerm,
     openSearch,

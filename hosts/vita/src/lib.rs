@@ -39,7 +39,13 @@ pub mod jobs;
 #[cfg(feature = "installed-apps")]
 pub mod psm;
 #[cfg(feature = "installed-apps")]
+pub mod adrenaline_config;
+#[cfg(feature = "installed-apps")]
+pub mod iso;
+#[cfg(feature = "installed-apps")]
 pub mod pspemu;
+#[cfg(feature = "installed-apps")]
+pub mod seplugins;
 pub mod input;
 pub mod net;
 pub mod pak;
@@ -645,4 +651,4 @@ unsafe fn reset_guest_state() {
 /// change. This pad moves the end of the code segment; when the error returns,
 /// resize it by a few KiB.
 #[used]
-static LINK_PAD: [u8; 3048] = [0x5a; 3048];
+static LINK_PAD: [u8; 7144] = [0x5a; 7144];

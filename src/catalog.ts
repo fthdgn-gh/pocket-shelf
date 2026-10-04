@@ -134,15 +134,19 @@ export function loadCatalog(): Catalog {
   if (table?.kind !== "native") return { native: false, games: [] };
   const apps = table.apps.filter((app) => isListed(app.id));
   const games: Game[] = apps.map((app, index) => {
-    // The Vita host adds the platform to each entry (hosts/vita/src/installed.rs).
-    const platform = platformOf((app as { platform?: unknown }).platform);
-    return {
+    // The Vita host adds the platform to each entry, and `adrenaline` to a
+    // PSP or PS1 title without a bubble (hosts/vita/src/installed.rs).
+    const extra = app as { platform?: unknown; adrenaline?: unknown };
+    const platform = platformOf(extra.platform);
+    const game: Game = {
       title: cleanTitle(app.title),
       id: app.id,
       genre: GENRES[platform],
       category: categoryOf(app.id, platform),
       tint: index % TINT_COUNT,
     };
+    if (extra.adrenaline === true) game.adrenaline = true;
+    return game;
   });
   return { native: true, games };
 }

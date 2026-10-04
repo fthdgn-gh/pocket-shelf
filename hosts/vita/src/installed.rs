@@ -28,6 +28,13 @@ struct Title {
     title: String,
     /// `vita` (ux0:/app and vs0:/app), `psm`, `psp` or `ps1`.
     platform: &'static str,
+    /// A PSP or PS1 title with no bubble on the home screen: it is started
+    /// through Adrenaline, its icon and picture come from its `EBOOT.PBP` or
+    /// its disc image.
+    adrenaline: bool,
+    /// A game in a disc image: the image's path under Adrenaline's memory
+    /// stick (`ISO/<name>.cso`).
+    image: Option<String>,
 }
 
 /// A platform name from the list file, as the `'static` the table uses.
@@ -139,12 +146,18 @@ fn scan() -> Vec<Title> {
     }
     for (title_id, title) in unsafe { crate::psm::scan(rows.as_deref()) } {
         if title_id != SELF_TITLE_ID && !titles.iter().any(|item| item.title_id == title_id) {
-            titles.push(Title { title_id, title, platform: "psm" });
+            titles.push(Title { title_id, title, platform: "psm", adrenaline: false, image: None });
         }
     }
     let known: Vec<String> = titles.iter().map(|item| item.title_id.clone()).collect();
     for item in unsafe { crate::pspemu::scan(rows.as_deref(), &known) } {
-        titles.push(Title { title_id: item.title_id, title: item.title, platform: item.platform });
+        titles.push(Title {
+            title_id: item.title_id,
+            title: item.title,
+            platform: item.platform,
+            adrenaline: !item.bubble,
+            image: item.image,
+        });
     }
     titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
     titles
@@ -188,6 +201,8 @@ fn scan_root(root: &str, titles: &mut Vec<Title>) {
             title_id: name,
             title,
             platform: "vita",
+            adrenaline: false,
+            image: None,
         });
     }
 }
@@ -199,17 +214,20 @@ fn is_system(title_id: &str) -> bool {
 
 /// First line of the list file. A file that starts otherwise is scanned over.
 /// Version 2 added PSM titles, version 3 PSP and PS1 titles and the platform
-/// column; an older list is scanned over.
+/// column, version 4 the launch column, version 5 the image column; an older
+/// list is scanned over.
 #[cfg(feature = "data-fs")]
-const LIST_HEADER: &str = "pocket-shelf titles 3";
+const LIST_HEADER: &str = "pocket-shelf titles 5";
 
 #[cfg(feature = "data-fs")]
 fn list_path() -> String {
     format!("{}/titles.tsv", crate::datafs::data_dir())
 }
 
-/// The saved list: the header, then one `<title id><TAB><platform><TAB><title>`
-/// line per title in scan order. None when there is no usable file.
+/// The saved list: the header, then one
+/// `<title id><TAB><platform><TAB><launch><TAB><image><TAB><title>` line per
+/// title in scan order, where launch is `uri` or `adrenaline` and image is a
+/// disc image's path under the memory stick, or empty. None when there is no usable file.
 #[cfg(feature = "data-fs")]
 fn load_list() -> Option<Vec<Title>> {
     let text = fs::read_to_string(list_path()).ok()?;
@@ -219,8 +237,15 @@ fn load_list() -> Option<Vec<Title>> {
     }
     let mut titles = Vec::new();
     for line in lines {
-        let mut fields = line.splitn(3, '\t');
-        let (id, platform, title) = (fields.next()?, platform_named(fields.next()?)?, fields.next()?);
+        let mut fields = line.splitn(5, '\t');
+        let (id, platform) = (fields.next()?, platform_named(fields.next()?)?);
+        let adrenaline = match fields.next()? {
+            "uri" => false,
+            "adrenaline" => true,
+            _ => return None,
+        };
+        let image = Some(fields.next()?).filter(|path| !path.is_empty()).map(String::from);
+        let title = fields.next()?;
         if !valid_title_id(id) || title.is_empty() {
             return None;
         }
@@ -228,6 +253,8 @@ fn load_list() -> Option<Vec<Title>> {
             title_id: String::from(id),
             title: String::from(title),
             platform,
+            adrenaline,
+            image,
         });
     }
     // An empty list is what a failed scan leaves; scan again.
@@ -243,6 +270,10 @@ fn save_list(titles: &[Title]) {
         text.push_str(&item.title_id);
         text.push('\t');
         text.push_str(item.platform);
+        text.push('\t');
+        text.push_str(if item.adrenaline { "adrenaline" } else { "uri" });
+        text.push('\t');
+        text.push_str(item.image.as_deref().unwrap_or(""));
         text.push('\t');
         text.push_str(&item.title);
         text.push('\n');
@@ -263,6 +294,9 @@ fn save_list(_titles: &[Title]) {}
 
 unsafe fn titles() -> &'static [Title] {
     if CACHE.is_none() {
+        // The first call of this process: a boot request still here never
+        // reached Adrenaline.
+        crate::pspemu::forget_request();
         CACHE = Some(load_list().unwrap_or_else(|| {
             let found = scan();
             save_list(&found);
@@ -358,6 +392,16 @@ pub unsafe fn listed(title_id: &str) -> bool {
     titles().iter().any(|item| item.title_id == title_id)
 }
 
+/// Where a PSP or PS1 title with no bubble keeps its icon and picture (its
+/// `EBOOT.PBP` or its disc image, read by `pspemu.rs`); None for other titles.
+pub unsafe fn classic_files(title_id: &str) -> Option<crate::pspemu::Files> {
+    let item = titles().iter().find(|item| item.title_id == title_id && item.adrenaline)?;
+    Some(match &item.image {
+        Some(path) => crate::pspemu::Files::Image(path.clone()),
+        None => crate::pspemu::Files::Pbp(String::from(title_id)),
+    })
+}
+
 fn push_json_str(output: &mut String, value: &str) {
     output.push('"');
     for character in value.chars() {
@@ -393,6 +437,9 @@ pub unsafe fn table_json() -> String {
         push_json_str(&mut output, &item.title);
         output.push_str(",\"platform\":");
         push_json_str(&mut output, item.platform);
+        if item.adrenaline {
+            output.push_str(",\"adrenaline\":true");
+        }
         output.push_str(",\"installed\":true}");
     }
     output.push_str("],\"current\":");
@@ -407,6 +454,9 @@ struct Launch {
     flags: i32,
     /// Send the request a second time, 10 ms after the first.
     repeat: bool,
+    /// Adrenaline started for a title without a bubble: its boot request
+    /// (`pspemu::request_boot`) is deleted when the system refuses the launch.
+    adrenaline: bool,
 }
 
 static mut LAUNCHED: Option<Launch> = None;
@@ -419,7 +469,16 @@ pub unsafe fn launch(title_id: &str) -> bool {
     if !valid_title_id(title_id) || !titles().iter().any(|item| item.title_id == title_id) {
         return false;
     }
-    let (uri, flags, repeat) = if is_system(title_id) {
+    let pbp = titles().iter().find(|item| item.title_id == title_id && item.adrenaline);
+    let adrenaline = pbp.is_some();
+    if let Some(item) = pbp {
+        if !crate::pspemu::request_boot(title_id, item.platform, item.image.as_deref()) {
+            return false;
+        }
+    }
+    let (uri, flags, repeat) = if adrenaline {
+        (format!("psgm:play?titleid={}", crate::pspemu::ADRENALINE_ID), LAUNCH_FLAGS, true)
+    } else if is_system(title_id) {
         match SYSTEM_URIS.iter().find(|(id, _)| *id == title_id) {
             Some((_, uri)) => (String::from(*uri), LAUNCH_FLAGS, false),
             None => (format!("psgm:play?titleid={title_id}"), SYSTEM_LIVEAREA_FLAGS, false),
@@ -430,7 +489,7 @@ pub unsafe fn launch(title_id: &str) -> bool {
     let Ok(uri) = CString::new(uri) else {
         return false;
     };
-    LAUNCHED = Some(Launch { uri, flags, repeat });
+    LAUNCHED = Some(Launch { uri, flags, repeat, adrenaline });
     true
 }
 
@@ -456,6 +515,9 @@ pub unsafe fn finish_launch() {
             launch.uri,
             code as u32
         ));
+        if launch.adrenaline {
+            crate::pspemu::forget_request();
+        }
         return;
     }
     if launch.repeat {
@@ -560,7 +622,13 @@ pub unsafe fn icon(ui: &mut pocketjs_core::Ui, title_id: &str) -> i32 {
         return *handle;
     }
     let title = String::from(title_id);
-    let poll = crate::jobs::poll(&format!("icon:{title_id}"), move || unsafe { decode_icon(&title) });
+    let classic = classic_files(title_id);
+    let poll = crate::jobs::poll(&format!("icon:{title_id}"), move || unsafe {
+        match &classic {
+            Some(files) => crate::pspemu::icon(files),
+            None => decode_icon(&title),
+        }
+    });
     let pixels = match poll {
         crate::jobs::Poll::Pending => return crate::jobs::PENDING,
         crate::jobs::Poll::Ready(pixels) => pixels,

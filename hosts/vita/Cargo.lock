@@ -649,6 +649,7 @@ name = "pocketjs-vita"
 version = "0.1.0"
 dependencies = [
  "libquickjs-sys",
+ "miniz_oxide 0.8.9",
  "png",
  "pocket-fs",
  "pocketjs-core",

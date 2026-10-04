@@ -24,6 +24,8 @@ export interface Game {
   backdrop?: string;
   /** Index of the tint used behind the title's art and for the screen's ambient color. */
   tint: number;
+  /** A PSP or PS1 title with no bubble, started through Adrenaline. */
+  adrenaline?: boolean;
 }
 
 /** How the status bar's clock is written: the system setting, or a fixed 12- or 24-hour clock. */

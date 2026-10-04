@@ -10,6 +10,8 @@ vitasdk-sys = { version = "0.3.3", features = ["SceAudio_stub", "SceCtrl_stub", 
 vita2d-sys = "0.1.1"
 # Decodes each title's icon0.png; built only with `installed-apps`.
 png = { version = "0.17", optional = true }
+# Raw deflate for CSO disc images (src/iso.rs); already a dependency of png.
+miniz_oxide = { version = "0.8", optional = true }
 
 # TLS for `http`. The Vita's own SceSsl cannot negotiate with servers that
 # present an ECDSA certificate, so the host carries a TLS stack in Rust.
@@ -31,7 +33,7 @@ usb-debug = ["vitasdk-sys/ScePower_stub", "vitasdk-sys/SceSysmem_stub"]
 # Native app navigation (docs/LAUNCHER.md): appTable/appLaunch list and start
 # the titles installed under ux0:/app. Opt-in per VPK, because a native table
 # makes the framework treat the guest as launcher-hosted.
-installed-apps = ["vitasdk-sys/SceAppMgr_stub", "vitasdk-sys/SceSqlite_stub", "dep:png"]
+installed-apps = ["vitasdk-sys/SceAppMgr_stub", "vitasdk-sys/SceRtc_stub", "vitasdk-sys/SceSqlite_stub", "dep:png", "dep:miniz_oxide"]
 # globalThis.fs over ux0:/data/pocketjs/<title id>.
 data-fs = ["dep:pocket-fs"]
 # ui.__status() for a status bar (src/status.rs): local time and clock

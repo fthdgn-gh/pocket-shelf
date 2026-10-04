@@ -922,6 +922,44 @@ unsafe extern "C" fn js_scan_report(
     new_js_string(ctx, &joined.join(","))
 }
 
+/// ui.__bootLog() -> the last lines of the boot plugin's log, one per line.
+/// Host extra, for the diagnostics screen.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_boot_log(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    new_js_string(ctx, &crate::pspemu::boot_log())
+}
+
+/// ui.__adrPlugin() -> whether Adrenaline loads Pocket Shelf's boot plugin:
+/// `noAdrenaline`, `missing`, `off` or `on` (`pspemu::plugin_state`). Host
+/// extra; the guest asks before starting a title through Adrenaline.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_adr_plugin(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    new_js_string(ctx, crate::pspemu::plugin_state())
+}
+
+/// ui.__adrPluginEnable() -> 1 when the plugin is now on, else 0. Host extra:
+/// adds the plugin to Adrenaline's lists or turns it back on, after the user
+/// agreed (`pspemu::enable_plugin`).
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_adr_plugin_enable(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    JS_NewInt32(ctx, crate::pspemu::enable_plugin() as i32)
+}
+
 /// ui.__processMs() -> milliseconds since the process started. Host extra:
 /// the clock of `__startupMarks`, so the guest can time its own steps on it.
 #[cfg(feature = "installed-apps")]
@@ -1231,6 +1269,9 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"__startupMarks\0", js_startup_marks, 0);
         add_fn(ctx, ui_obj, b"__processMs\0", js_process_ms, 0);
         add_fn(ctx, ui_obj, b"__scanReport\0", js_scan_report, 0);
+        add_fn(ctx, ui_obj, b"__adrPlugin\0", js_adr_plugin, 0);
+        add_fn(ctx, ui_obj, b"__bootLog\0", js_boot_log, 0);
+        add_fn(ctx, ui_obj, b"__adrPluginEnable\0", js_adr_plugin_enable, 0);
     }
 
     #[cfg(feature = "status")]

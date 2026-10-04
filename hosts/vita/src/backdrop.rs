@@ -221,10 +221,12 @@ pub unsafe fn texture(ui: &mut pocketjs_core::Ui, title_id: &str, file: &str) ->
         return -1;
     }
     let title = String::from(title_id);
+    let classic = if file.is_empty() { crate::installed::classic_files(title_id) } else { None };
     let poll = jobs::poll(&format!("backdrop:{key}"), move || {
-        let bytes = match path {
-            Some(path) => read_png(&path),
-            None => read_title(&title),
+        let bytes = match (path, &classic) {
+            (Some(path), _) => read_png(&path),
+            (None, Some(files)) => crate::pspemu::picture(files),
+            (None, None) => read_title(&title),
         };
         bytes.and_then(|bytes| decode(&bytes))
     });

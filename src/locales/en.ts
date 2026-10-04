@@ -185,6 +185,15 @@ export const en = {
   scanHelp: "Reads the installed titles again. Use it after installing or removing a title.",
   scanning: "Scanning...",
   scanDone: "{count} titles found in {seconds} s.",
+
+  // Adrenaline's boot plugin
+  adrTitle: "Adrenaline plugin",
+  adrAdd: "Add plugin",
+  adrTurnOn: "Turn on",
+  adrMissing: "{title} starts through Adrenaline. Pocket Shelf adds its own plugin to Adrenaline's plugin lists (ux0:pspemu/seplugins), which starts the game when Adrenaline opens. Add it and start the game?",
+  adrOff: "Pocket Shelf's plugin is turned off in Adrenaline's plugin lists. Without it, Adrenaline opens its menu instead of {title}. Turn it on and start the game?",
+  adrNone: "{title} starts through Adrenaline, and Adrenaline is not installed.",
+  adrFailed: "Adrenaline's plugin lists could not be changed.",
 };
 
 export type Messages = typeof en;
