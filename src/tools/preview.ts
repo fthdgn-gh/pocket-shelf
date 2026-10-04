@@ -13,6 +13,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ACCENT_HAS_ALPHA } from "../accent.ts";
+import { BUILTIN_CATEGORIES, PSM_ID, PSP_ID, PSX_ID, SYSTEM_ID } from "../categories.ts";
 import { MENU, menuPath, type MenuItem } from "../menu-items.ts";
 import { BTN, IMG_FLAG_LINEAR, PSM } from "../../contracts/spec/spec.ts";
 import { createSimFsHost } from "../../hosts/sim/fs.ts";
@@ -59,11 +60,11 @@ const TITLES: [id: string, title: string, platform?: string][] = [
   ["NPOA00013", "Tiny Racer"],
   ["NPNA00042", "Puzzle Garden"],
   ["NPPA00007", "Sky Kite"],
-  // PSP and PS1 Classics, as pspemu.rs lists them from ux0:/pspemu/PSP/GAME.
+  // PSP and PS1 (PSX) games, as pspemu.rs lists them from ux0:/pspemu/PSP/GAME.
   ["NPUZ00001", "Echo Chamber", "psp"],
   ["ULUS10041", "Velocity Run", "psp"],
-  ["SCUS94163", "Crystal Quest", "ps1"],
-  ["NPUJ00662", "Cave Raiders", "ps1"],
+  ["SCUS94163", "Crystal Quest", "psx"],
+  ["NPUJ00662", "Cave Raiders", "psx"],
   // A large category, to check that a long list scrolls like a short one.
   ...Array.from({ length: 120 }, (_, index): [string, string] => [
     `HBREW${String(index).padStart(4, "0")}`,
@@ -321,10 +322,10 @@ function installHost(ops: Record<string, unknown>): void {
   // A fixed reading, so shots do not change with the time they are taken.
   ops.__status = (): string => statusLine;
   ops.__scanReport = (): string =>
-    "PSM folders=4,PSM source=app.db,PSM bubbles=3,PSM appmetaIcons=3,PSP stick=ux0:/pspemu,PSP folders=5,PSP titles=4,PSP ps1=2,PSP psp=2,PSP noBubble=2,PSP firstNoBubble=SCUS94163,ISO files=2,ISO titles=2,ISO skipped=1,ISO skip=ISO/Other.zso format zso";
+    "PSM folders=4,PSM source=app.db,PSM bubbles=3,PSM appmetaIcons=3,PSP stick=ux0:/pspemu,PSP folders=5,PSP titles=4,PSP psx=2,PSP psp=2,PSP noBubble=2,PSP firstNoBubble=SCUS94163,ISO files=2,ISO titles=2,ISO skipped=1,ISO skip=ISO/Other.zso format zso";
   ops.__bootLog = (): string =>
     [
-      "age=4s path=ms0:/PSP/GAME/SCUS94163/EBOOT.PBP boot ps1",
+      "age=4s path=ms0:/PSP/GAME/SCUS94163/EBOOT.PBP boot psx",
       "trigger=after sceVshCommonGui_Module",
       "age=6s path=ms0:/ISO/Racing/Compressed Racer.cso boot iso",
       "driver=1 EBOOT.BIN",
@@ -406,6 +407,17 @@ interface Shot {
 const tap = (button: number, times = 1): Step[] => Array<Step>(times).fill(button);
 
 /**
+ * R presses from the first tab to a built-in category, read from the default
+ * order, so a change of order does not shift the shots. Assumes no smart tab
+ * (Last Played, Favorites) shows yet.
+ */
+function tabTo(id: string): Step[] {
+  const index = BUILTIN_CATEGORIES.findIndex((item) => item.id === id);
+  if (index < 0) throw new Error(`tabTo: no category ${id}`);
+  return tap(BTN.RTRIGGER, index);
+}
+
+/**
  * SELECT, then the presses that highlight `item`: down to each group on the
  * way and right into it, then down to the row. Assumes the main page opens on
  * its first row.
@@ -442,14 +454,14 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("scrape", [...menuTo("fetchArt"), BTN.CIRCLE]),
     shot("clean", [...menuTo("cleanArt"), BTN.CIRCLE, BTN.RIGHT]),
     shot("rescan", [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 20]]),
-    shot("adrenaline", [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE]),
+    shot("adrenaline", [...tabTo(PSP_ID), [0, 20], BTN.RIGHT, BTN.CIRCLE]),
   ];
 });
 
 const SHOTS: Shot[] = [
   { name: "01-shelf", steps: tap(BTN.RIGHT, 3) },
   { name: "02-shelf-first", steps: [] },
-  { name: "03-shelf-apps", steps: [BTN.RTRIGGER, BTN.RIGHT] },
+  { name: "03-shelf-apps", steps: [...tabTo(SYSTEM_ID), BTN.RIGHT] },
   { name: "04-menu", steps: [...tap(BTN.RIGHT, 2), ...menuTo("font")] },
   // SELECT, down to "View", right once: grid.
   { name: "05-grid", steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.DOWN] },
@@ -462,21 +474,21 @@ const SHOTS: Shot[] = [
   { name: "29-icon-box-off", steps: [...menuTo("iconBox"), BTN.RIGHT, BTN.SELECT, BTN.RIGHT] },
   { name: "30-menu-library", steps: [...menuTo("categories")] },
   // The PS Mobile tab, and what the scan found on the diagnostics screen.
-  { name: "91-psm-tab", steps: [...tap(BTN.RTRIGGER, 3), [0, 20]] },
-  { name: "93-psp-tab", steps: [...tap(BTN.RTRIGGER, 4), [0, 20]] },
-  { name: "94-ps1-tab", steps: [...tap(BTN.RTRIGGER, 5), [0, 20]] },
+  { name: "91-psm-tab", steps: [...tabTo(PSM_ID), [0, 20]] },
+  { name: "93-psp-tab", steps: [...tabTo(PSP_ID), [0, 20]] },
+  { name: "94-psx-tab", steps: [...tabTo(PSX_ID), [0, 20]] },
   // Starting a PSP title without a bubble while Adrenaline would not load the
   // boot plugin: not in its lists, turned off, no Adrenaline, then after
   // adding it, and when the lists cannot be changed.
-  { name: "95-adr-missing", steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
-  { name: "96-adr-off", plugin: "off", steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
-  { name: "97-adr-none", plugin: "noAdrenaline", steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
-  { name: "98-adr-added", steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE, BTN.CIRCLE] },
+  { name: "95-adr-missing", steps: [...tabTo(PSP_ID), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
+  { name: "96-adr-off", plugin: "off", steps: [...tabTo(PSP_ID), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
+  { name: "97-adr-none", plugin: "noAdrenaline", steps: [...tabTo(PSP_ID), [0, 20], BTN.RIGHT, BTN.CIRCLE] },
+  { name: "98-adr-added", steps: [...tabTo(PSP_ID), [0, 20], BTN.RIGHT, BTN.CIRCLE, BTN.CIRCLE] },
   {
     name: "99-adr-failed",
     plugin: "off",
     pluginLocked: true,
-    steps: [...tap(BTN.RTRIGGER, 4), [0, 20], BTN.RIGHT, BTN.CIRCLE, BTN.CIRCLE],
+    steps: [...tabTo(PSP_ID), [0, 20], BTN.RIGHT, BTN.CIRCLE, BTN.CIRCLE],
   },
   { name: "92-psm-diagnostics", steps: [...menuTo("diagnostics"), BTN.CIRCLE, ...tap(BTN.DOWN, 24)] },
   // The end of the screen: the image scan and the boot plugin's log.
@@ -531,19 +543,19 @@ const SHOTS: Shot[] = [
     steps: [...menuTo("theme"), BTN.LEFT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 5), [0, 40]],
   },
   // Deep into a category of 125 titles, in each view.
-  { name: "35-long-shelf", steps: [...tap(BTN.RTRIGGER, 2), [BTN.RIGHT, 420], [0, 30]] },
+  { name: "35-long-shelf", steps: [...tabTo("homebrew"), [BTN.RIGHT, 420], [0, 30]] },
   {
     name: "36-long-grid",
-    steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RTRIGGER, 2), [BTN.DOWN, 150], BTN.RIGHT, [0, 30]],
+    steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tabTo("homebrew"), [BTN.DOWN, 150], BTN.RIGHT, [0, 30]],
   },
   {
     name: "37-long-list",
-    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.RTRIGGER, 2), [BTN.DOWN, 300], BTN.UP, [0, 30]],
+    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tabTo("homebrew"), [BTN.DOWN, 300], BTN.UP, [0, 30]],
   },
   // Holding RIGHT for a second repeats the move.
   { name: "12-hold-repeat", steps: [[BTN.RIGHT, 60]] },
   // Launch from another category, start again: the selection comes back.
-  { name: "16-restored", steps: [...tap(BTN.RTRIGGER, 2), ...tap(BTN.RIGHT, 2), BTN.CIRCLE, "restart"] },
+  { name: "16-restored", steps: [...tabTo("homebrew"), ...tap(BTN.RIGHT, 2), BTN.CIRCLE, "restart"] },
   { name: "13-theme", steps: [...menuTo("theme"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
   { name: "14-theme-light", steps: [...menuTo("theme"), ...tap(BTN.LEFT, 2), BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
   // Mark the second and third titles as favorites, then go to the new tab.
@@ -631,7 +643,7 @@ const SHOTS: Shot[] = [
   { name: "59-wrap-grid", steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2), BTN.UP, [0, 30]] },
   { name: "61-wrap-list", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.UP, [0, 30]] },
   // A held direction stops at the end.
-  { name: "62-hold-stops", steps: [...tap(BTN.RTRIGGER, 1), [BTN.RIGHT, 120], [0, 30]] },
+  { name: "62-hold-stops", steps: [...tabTo(SYSTEM_ID), [BTN.RIGHT, 120], [0, 30]] },
   // After fetching for a category: the box art picker lists the title's own
   // file and shows the highlighted one beside the drawer.
   {

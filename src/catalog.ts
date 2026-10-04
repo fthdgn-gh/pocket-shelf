@@ -117,11 +117,11 @@ export function rescanTitles(): void {
   (getOps() as unknown as { __appRescan?(): number }).__appRescan?.();
 }
 
-const GENRES: Record<Platform, string> = { vita: "PS Vita", psm: "PS Mobile", psp: "PSP", ps1: "PS1" };
+const GENRES: Record<Platform, string> = { vita: "PS Vita", psm: "PS Mobile", psp: "PSP", psx: "PSX" };
 
 /** The platform an entry names; Vita for an entry with none or an unknown one. */
 function platformOf(value: unknown): Platform {
-  return value === "psm" || value === "psp" || value === "ps1" ? value : "vita";
+  return value === "psm" || value === "psp" || value === "psx" ? value : "vita";
 }
 
 /**

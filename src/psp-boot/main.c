@@ -29,7 +29,7 @@
  *
  * Request file `ms0:/PocketShelf/boot.txt`:
  *   <UTC tick in microseconds when written, as sceRtcGetCurrentTick gives>
- *   <psp, ps1 or iso>
+ *   <psp, psx or iso>
  *   <ms0:/PSP/GAME/<title id>/EBOOT.PBP, or ms0:/ISO/...(.iso|.cso)>
  *   <EBOOT.BIN or EBOOT.OLD, for iso only>
  *   <BOOT.BIN when the image has one, else "-"; for iso only>
@@ -78,7 +78,8 @@ StartModuleHandler sctrlHENSetStartModuleHandler(StartModuleHandler handler);
 #define APITYPE_DISC 0x120
 #define APITYPE_DISC_EMU_MS1 0x123
 #define APITYPE_MS_GAME 0x141
-#define APITYPE_MS_PS1 0x144
+/* PSP_INIT_APITYPE_MS_PS1 in the PSP SDK. */
+#define APITYPE_MS_PSX 0x144
 /* sctrlSESetBootConfFileIndex: NP9660 is 3 in both Adrenalines; the others
  * differ (see iso_driver). */
 #define BOOT_NP9660 3
@@ -348,14 +349,14 @@ static int boot_image(const char *boot_file, int has_boot_bin) {
 	return sctrlKernelLoadExecVSHWithApitype(apitype, boot_path, &param);
 }
 
-static int boot_eboot(int ps1) {
+static int boot_eboot(int psx) {
 	struct SceKernelLoadExecVSHParam param;
 	memset(&param, 0, sizeof(param));
 	param.size = sizeof(param);
 	param.args = strlen(path) + 1;
 	param.argp = path;
-	param.key = ps1 ? "pops" : "game";
-	return sctrlKernelLoadExecVSHWithApitype(ps1 ? APITYPE_MS_PS1 : APITYPE_MS_GAME, path, &param);
+	param.key = psx ? "pops" : "game";
+	return sctrlKernelLoadExecVSHWithApitype(psx ? APITYPE_MS_PSX : APITYPE_MS_GAME, path, &param);
 }
 
 /* Read, delete and act on the request. Returns only when nothing was booted. */
@@ -395,8 +396,8 @@ static void handle_request(void) {
 	}
 
 	int image = strcmp(lines[1], "iso") == 0;
-	int ps1 = strcmp(lines[1], "ps1") == 0;
-	if (!image && !ps1 && strcmp(lines[1], "psp") != 0) {
+	int psx = strcmp(lines[1], "psx") == 0;
+	if (!image && !psx && strcmp(lines[1], "psp") != 0) {
 		log_result(has_age, age, "bad kind", 0);
 		return;
 	}
@@ -419,9 +420,9 @@ static void handle_request(void) {
 		return;
 	}
 
-	log_result(has_age, age, image ? "boot iso" : ps1 ? "boot ps1" : "boot psp", 0);
+	log_result(has_age, age, image ? "boot iso" : psx ? "boot psx" : "boot psp", 0);
 	int has_boot_bin = image && count >= 5 && strcmp(lines[4], "BOOT.BIN") == 0;
-	int code = image ? boot_image(boot_file, has_boot_bin) : boot_eboot(ps1);
+	int code = image ? boot_image(boot_file, has_boot_bin) : boot_eboot(psx);
 	/* Only reached when the boot was refused. */
 	log_result(has_age, age, "refused", code);
 }
