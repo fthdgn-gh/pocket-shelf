@@ -1,14 +1,14 @@
 import type { FocusDirection } from "@pocketjs/framework/input";
-import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS } from "./layout.ts";
+import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, listRows } from "./layout.ts";
 import type { DetailLevel, ViewMode } from "./types.ts";
 
 export const VIEW_MODES: readonly ViewMode[] = ["carousel", "grid", "list"];
 export const DETAIL_LEVELS: readonly DetailLevel[] = ["basic", "normal", "detailed"];
 
-/** Items the L and R triggers jump over in each view. */
-export function pageSize(view: ViewMode): number {
+/** Items the L and R triggers jump over in each view. The list shows a row less under the status bar. */
+export function pageSize(view: ViewMode, statusBar = false): number {
   if (view === "grid") return GRID_COLUMNS * GRID_ROWS;
-  if (view === "list") return LIST_ROWS;
+  if (view === "list") return listRows(statusBar);
   return 1;
 }
 

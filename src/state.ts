@@ -51,19 +51,20 @@ import {
 import { loadRecent, pushRecent, saveRecent } from "./recent.ts";
 import { createScrapeFlow, type ScrapeScope } from "./scrape.ts";
 import { searchTitles } from "./search.ts";
-import { loadSettings, saveSettings } from "./settings.ts";
+import { CLOCK_FORMATS, loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
 import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
+import { readStatus, sameStatus, type Status } from "./status.ts";
 import { DEFAULT_THEME, THEMES, dynamicTheme, themeById, type ThemeId } from "./themes.ts";
-import type { CategoryId, ConfirmMode, DetailLevel, Game, ViewMode } from "./types.ts";
+import type { CategoryId, ClockFormat, ConfirmMode, DetailLevel, Game, ViewMode } from "./types.ts";
 
 /**
  * Rows in the SELECT menu: theme, font, view, details, backdrop, icon box,
- * categories, fetch artwork, clean up artwork, rescan titles, confirm button,
+ * status bar, clock, battery percent, categories, fetch artwork, clean up artwork, rescan titles, confirm button,
  * language, diagnostics. Language is second to last, two presses up from the
  * first row, so it can be found in a language the user cannot read.
  */
-export const MENU_ROWS = 13;
+export const MENU_ROWS = 16;
 
 /** Menu rows visible at once; the menu scrolls with the highlight. */
 export const MENU_VISIBLE = 7;
@@ -82,6 +83,9 @@ const PREVIEW_DELAY = 8;
 
 /** Frames between two requests for a picker picture the host is still decoding. */
 const PREVIEW_RETRY = 2;
+
+/** Frames between two readings of the status bar (about one second). */
+const STATUS_FRAMES = 60;
 
 /** Frames between two requests for the icons the host is still decoding. */
 const ICON_RETRY = 2;
@@ -257,6 +261,9 @@ export function createLauncherState(catalog: Catalog) {
   const [confirmMode, setConfirmMode] = createSignal<ConfirmMode>(saved?.confirm ?? "circle");
   const [backdropOn, setBackdropOn] = createSignal(saved?.backdrop ?? true);
   const [iconBoxOn, setIconBoxOn] = createSignal(saved?.iconBox ?? true);
+  const [statusBarOn, setStatusBarOn] = createSignal(saved?.statusBar ?? true);
+  const [clockFormat, setClockFormat] = createSignal<ClockFormat>(saved?.clock ?? "system");
+  const [batteryPercentOn, setBatteryPercentOn] = createSignal(saved?.batteryPercent ?? true);
 
   // The launcher process ends when a title starts, so the selection is saved
   // with the settings and restored on the next start.
@@ -281,13 +288,32 @@ export function createLauncherState(catalog: Catalog) {
       confirm: confirmMode(),
       backdrop: backdropOn(),
       iconBox: iconBoxOn(),
+      statusBar: statusBarOn(),
+      clock: clockFormat(),
+      batteryPercent: batteryPercentOn(),
       category,
       title: game?.id,
     });
   };
   // Persist on change; the initial run is skipped so a fresh start writes nothing.
   createEffect(
-    on([language, themeId, font, view, detail, confirmMode, backdropOn, iconBoxOn], persist, { defer: true }),
+    on(
+      [
+        language,
+        themeId,
+        font,
+        view,
+        detail,
+        confirmMode,
+        backdropOn,
+        iconBoxOn,
+        statusBarOn,
+        clockFormat,
+        batteryPercentOn,
+      ],
+      persist,
+      { defer: true },
+    ),
   );
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [menuRow, setMenuRow] = createSignal(0);
@@ -371,7 +397,7 @@ export function createLauncherState(catalog: Catalog) {
     loadIconsAround();
   };
 
-  const page = (direction: 1 | -1) => select(selectedIndex() + direction * pageSize(view()));
+  const page = (direction: 1 | -1) => select(selectedIndex() + direction * pageSize(view(), statusBarOn()));
 
   // --- Search (square) ----------------------------------------------------
   const searching = () => categoryId() === SEARCH_ID;
@@ -572,8 +598,18 @@ export function createLauncherState(catalog: Catalog) {
     blendDynamicColor();
     if (backdropWait > 0 && --backdropWait === 0) loadBackdrop();
     if (previewWait > 0 && --previewWait === 0) loadPickerPreview();
+    if (statusBarOn() && ++statusWait >= STATUS_FRAMES) {
+      statusWait = 0;
+      setStatus(readStatus());
+    }
     if (rescanWait > 0 && --rescanWait === 0) runRescan();
   };
+
+  // --- Status bar ------------------------------------------------------------
+  // Read on the first frame, then once a second while the bar is shown. An
+  // unchanged reading does not update the bar.
+  const [status, setStatus] = createSignal<Status | null>(null, { equals: sameStatus });
+  let statusWait = STATUS_FRAMES - 1;
 
   // --- SELECT menu -------------------------------------------------------
   const openMenu = () => setMenuOpen(true);
@@ -589,12 +625,15 @@ export function createLauncherState(catalog: Catalog) {
     else if (row === 3) setDetail(cycle(DETAIL_LEVELS, detail(), delta));
     else if (row === 4) setBackdropOn((on) => !on);
     else if (row === 5) setIconBoxOn((on) => !on);
-    else if (row === 6) openCategoryManager();
-    else if (row === 7) scrape.start();
-    else if (row === 8) openCleanup();
-    else if (row === 9) openRescan();
-    else if (row === 10) toggleConfirm();
-    else if (row === 11) setLanguage((id) => cycle(LANGUAGES.map((item) => item.id), id, delta));
+    else if (row === 6) setStatusBarOn((on) => !on);
+    else if (row === 7) setClockFormat((format) => cycle(CLOCK_FORMATS, format, delta));
+    else if (row === 8) setBatteryPercentOn((on) => !on);
+    else if (row === 9) openCategoryManager();
+    else if (row === 10) scrape.start();
+    else if (row === 11) openCleanup();
+    else if (row === 12) openRescan();
+    else if (row === 13) toggleConfirm();
+    else if (row === 14) setLanguage((id) => cycle(LANGUAGES.map((item) => item.id), id, delta));
     else openDiagnostics();
   };
 
@@ -1357,6 +1396,10 @@ export function createLauncherState(catalog: Catalog) {
     cancelButton,
     backdropOn,
     iconBoxOn,
+    statusBarOn,
+    clockFormat,
+    batteryPercentOn,
+    status,
     iconBox,
     backdrop,
     backdropUnder,

@@ -25,3 +25,6 @@ export interface Game {
   /** Index of the tint used behind the title's art and for the screen's ambient color. */
   tint: number;
 }
+
+/** How the status bar's clock is written: the system setting, or a fixed 12- or 24-hour clock. */
+export type ClockFormat = "system" | "12" | "24";

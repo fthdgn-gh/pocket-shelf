@@ -3,7 +3,7 @@ import { LANGUAGES, type Language } from "./i18n.ts";
 import { FONTS, type FontId } from "./text.ts";
 import { THEMES, type ThemeId } from "./themes.ts";
 import { DETAIL_LEVELS, VIEW_MODES } from "./navigation.ts";
-import type { ConfirmMode, DetailLevel, ViewMode } from "./types.ts";
+import type { ClockFormat, ConfirmMode, DetailLevel, ViewMode } from "./types.ts";
 
 export interface Settings {
   language: Language;
@@ -16,10 +16,17 @@ export interface Settings {
   backdrop: boolean;
   /** Whether an icon with transparent parts gets a box behind it. */
   iconBox: boolean;
+  /** Whether the status bar (time, Wi-Fi, Bluetooth, battery) is shown. */
+  statusBar: boolean;
+  clock: ClockFormat;
+  /** Whether the battery shows its charge as a number. */
+  batteryPercent: boolean;
   /** Category and title that were selected when the settings were last saved. */
   category?: string;
   title?: string;
 }
+
+export const CLOCK_FORMATS: readonly ClockFormat[] = ["system", "24", "12"];
 
 // Relative to the data folder, ux0:/data/PocketShelf/.
 const SETTINGS_FILE = "settings.json";
@@ -41,6 +48,9 @@ export function loadSettings(): Partial<Settings> | null {
     if (raw.confirm === "circle" || raw.confirm === "cross") result.confirm = raw.confirm;
     if (typeof raw.backdrop === "boolean") result.backdrop = raw.backdrop;
     if (typeof raw.iconBox === "boolean") result.iconBox = raw.iconBox;
+    if (typeof raw.statusBar === "boolean") result.statusBar = raw.statusBar;
+    if (CLOCK_FORMATS.includes(raw.clock as ClockFormat)) result.clock = raw.clock;
+    if (typeof raw.batteryPercent === "boolean") result.batteryPercent = raw.batteryPercent;
     if (typeof raw.category === "string") result.category = raw.category;
     if (typeof raw.title === "string") result.title = raw.title;
     return result;

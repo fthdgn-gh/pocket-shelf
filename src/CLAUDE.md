@@ -13,8 +13,8 @@ PocketJS framework and builds from the root `pocket.json`.
 - `origin` is `fthdgn-gh/pocket-shelf`. `upstream` is `pocket-stack/pocketjs`.
 - `apps/*` are upstream demos. `apps/hero` is imported by six device demos and
   `apps/launcher` is upstream's own "Pocket Launcher". Do not repurpose either.
-- The Vita host support is in `hosts/vita/src/` behind three cargo features:
-  `installed-apps`, `data-fs`, `http`.
+- The Vita host support is in `hosts/vita/src/` behind four cargo features:
+  `installed-apps`, `data-fs`, `http`, `status`.
 
 ## How we work
 
@@ -114,7 +114,7 @@ cannot be driven. Evidence comes from its log and from files under
   outside the numbered contract (`__appArt`, `__appBackdrop`,
   `__appBackdropFree`, `__artAccent`, `__appRescan`, `__startupMarks`,
   `__processMs`, `__netGet`, `__netSave`, `__netState`,
-  `__netText`, `__netClose`). The one spec op added, `appIcon`, collided with
+  `__netText`, `__netClose`, `__status`). The one spec op added, `appIcon`, collided with
   upstream at 52 and is now **57**.
 - **Pictures decode on worker threads** (`jobs.rs`). Icons, custom art and
   backdrops answer `-2` until ready and the app asks again every two frames.
@@ -277,6 +277,45 @@ read.
   headings.
 - `bun run shelf:preview 60-` renders twelve screens per translated language.
 
+## Status bar
+
+A strip above the category header (`components/status-bar.tsx`): the time on
+the left; Wi-Fi, Bluetooth and the battery on the right. Three SELECT menu
+rows after "Icon box": "Status bar" (on/off), "Clock" (System, 24-hour,
+12-hour) and "Battery percent" (on/off), all saved in `settings.json`. The
+app reads `__status` (`hosts/vita/src/status.rs`) on the first frame and then
+every 60 frames.
+
+- **`Date` in QuickJS is UTC on the Vita.** Checked in Vita3K: the host's
+  `sceRtcGetCurrentClockLocalTime` gave the Mac's local 10:25 while `Date`
+  gave 07:25 GMT. The time therefore comes from the host. "System" uses the
+  system's 12- or 24-hour setting (`sceAppUtilSystemParamGetInt`).
+- **Wi-Fi copies the Vita's own symbol** (the info bar icons in Sony's online
+  manual, `manuals.playstation.net/document/imgpsvita/basic_screens_13.png`):
+  a dot in the lower left and three quarter rings, lit from the inside out in
+  four levels (`wifiLevel`: 25% per ring). It shows only while connected;
+  Wi-Fi switched off and "on but not connected" both hide it. The value is `sceNetCtlInetGetState` plus the signal percent. Vita3K stubs
+  it as connected at 100%.
+- **Icons cannot be tinted**, so the Wi-Fi and Bluetooth symbols exist in two
+  inks: light for the dark themes and `-day` files for Daylight
+  (`isLightTheme` judges the theme by its background).
+- **Sizes:** the symbols are 12 px, drawn in the top left of a 16 px texture
+  and clipped; the battery body is 24x12. The number in it is 12 px bold, the
+  smallest baked size, so the body cannot get lower without a new font size.
+- **The battery is drawn with views**, after the iOS one: a rounded body
+  filled from the left, the number over it, a nub on the right. The charge is
+  the text color, the accent while charging, red at 15% or less. Its value is
+  `scePowerGetBatteryLifePercent`.
+- **Bluetooth is only "switched on in Settings"**, from the registry key
+  `/CONFIG/BT/bt_enable`. User-mode code has no call for connected devices.
+  The icon shows while it is on. The key read works in Vita3K (it answers 0);
+  on hardware it is not verified.
+- **The list shows five rows under the bar.** The screen is 480x272 and six
+  list rows filled it to the pixel; `listRows` in `layout.ts` and `pageSize`
+  take the setting. The carousel and grid fit with the bar.
+- The preview fakes `__status` as `21 47 1 72 0 80 1`; a shot can give its
+  own line (`status`). Shots 80 to 87 cover the bar.
+
 ## Search
 
 Square opens the keyboard (`openSearch` in `state.ts`); the field shows how
@@ -337,5 +376,3 @@ the bubble is about seven seconds, so about three are the system's own launch.
   and PSP and PS1 games that run under Adrenaline. Adrenaline's game bubbles
   (`PSPEMU` + digits) are hidden from the list for this reason; Adrenaline
   itself (`PSPEMUCFW`) is kept. The filter is in `catalog.ts`, not the host.
-- A clock in the header was skipped: the Vita's local time zone handling was
-  not verified.

@@ -24,6 +24,18 @@ const ICONS = {
   arrowLeft: { src: "icons/arrow-left.svg", box: "w-[8] h-[16] shrink-0", image: "w-[8] h-[16] shrink-0" },
   arrowRight: { src: "icons/arrow-right.svg", box: "w-[8] h-[16] shrink-0", image: "w-[8] h-[16] shrink-0" },
   plus: { src: "icons/plus.svg", box: "w-[16] h-[16] shrink-0", image: "w-[16] h-[16] shrink-0" },
+  // Status bar symbols, 12 wide in a 16 texture, in the ink for dark themes and
+  // the "Day" ink for Daylight.
+  bluetooth: { src: "icons/bluetooth.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  bluetoothDay: { src: "icons/bluetooth-day.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  wifi0: { src: "icons/wifi-0.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  wifi1: { src: "icons/wifi-1.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  wifi2: { src: "icons/wifi-2.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  wifi3: { src: "icons/wifi-3.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  wifi0Day: { src: "icons/wifi-0-day.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  wifi1Day: { src: "icons/wifi-1-day.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  wifi2Day: { src: "icons/wifi-2-day.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
+  wifi3Day: { src: "icons/wifi-3-day.svg", box: "w-[12] h-[12] shrink-0 overflow-hidden", image: "w-[16] h-[16] shrink-0" },
 } as const;
 
 export type IconName = keyof typeof ICONS;

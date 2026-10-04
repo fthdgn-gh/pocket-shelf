@@ -26,6 +26,13 @@ export const LIST_ROW_H = 30;
 export const LIST_GAP = 4;
 /** Rows that fit in the list viewport. */
 export const LIST_ROWS = 6;
+/** Rows that fit while the status bar takes the top of the screen. */
+export const LIST_ROWS_UNDER_STATUS = 5;
+
+/** List rows that fit, with or without the status bar. */
+export function listRows(statusBar: boolean): number {
+  return statusBar ? LIST_ROWS_UNDER_STATUS : LIST_ROWS;
+}
 
 export interface CarouselLayout {
   cardPitch: number;

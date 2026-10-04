@@ -162,3 +162,10 @@ export function themeById(id: ThemeId): Theme {
 export function alpha(color: string, pair: string): string {
   return `${color}${pair}`;
 }
+
+/** Whether a theme's screen is light (Daylight), judged from the top of its background. */
+export function isLightTheme(theme: Theme): boolean {
+  const rgb = parseInt(theme.bgTop.slice(1, 7), 16);
+  const luma = 0.2126 * ((rgb >> 16) & 0xff) + 0.7152 * ((rgb >> 8) & 0xff) + 0.0722 * (rgb & 0xff);
+  return luma > 128;
+}
