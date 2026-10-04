@@ -414,11 +414,17 @@ cannot be driven. Evidence comes from its log and from files under
 - **LiveArea text, not text in pictures.** The system draws its "Start" label
   over the bottom of the gate image (`startup.png`), which hid the name drawn
   there. The pictures hold no text; `src/tools/art.ts` also writes
-  `src/vita/sce_sys/livearea/contents/template.xml` (style `psmobile`, as
-  Adrenaline's LiveArea): the title from `pocket.json` in `frame2` (size 50,
-  bold, shadow) and "Version <major.minor>" in `frame3` (size 22). Run
-  `bun run shelf:art` after changing the title or version. Confirmed on
-  hardware (2026-10-04): the name and version show, clear of the gate.
+  `src/vita/sce_sys/livearea/contents/template.xml` (style `psmobile`), the
+  title and version from `pocket.json` and the author from `src/about.json`,
+  laid out as VitaShell's LiveArea: the title in `frame2`
+  (size 50, bold), "by <author>" in `frame3` (size 22; left out without an
+  author), "v<major.minor>" in `frame4` (size 18), all white with a shadow.
+  Run `bun run shelf:art` after changing the title, author or version.
+  Confirmed on hardware (2026-10-04) with the name and version: they show,
+  clear of the gate.
+- **The author is in `src/about.json`**, not `pocket.json`: the manifest
+  schema (framework) has no such field and rejects unknown keys. Adding one
+  to the framework was tried and undone; app-only values live in `src/`.
 - **The app's version is `pocket.json`'s `version`** (0.1.0 since
   2026-10-04; the 0.13.0 before it was the framework's release number).
   `tools/vita.ts` writes it to `param.sfo` as `APP_VER` (`MM.mm`, "00.01"),

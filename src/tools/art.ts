@@ -6,13 +6,15 @@
 //                                               while the app loads
 //   livearea/contents/bg.png          840x500  the LiveArea background
 //   livearea/contents/startup.png     280x158  the gate image
-//   livearea/contents/template.xml             the layout: the app's name and
-//                                               version as LiveArea text
+//   livearea/contents/template.xml             the layout: the app's name,
+//                                               author and version as text
 //
 // The pictures hold no text. The system draws its "Start" label over the
-// bottom of the gate image, which hid a name drawn there; the name and the
-// version are LiveArea text instead (the `psmobile` style's frame2 and
-// frame3, as Adrenaline's LiveArea uses them), read from pocket.json.
+// bottom of the gate image, which hid a name drawn there; the name, author
+// and version are LiveArea text instead (the name and version from
+// pocket.json, the author from src/about.json), in the
+// `psmobile` style's frames as VitaShell's LiveArea uses them: the name in
+// frame2, "by <author>" in frame3, "v<version>" in frame4.
 //
 //   bun run shelf:art
 //
@@ -31,6 +33,8 @@ import { deflateSync } from "node:zlib";
 const SRC = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const OUT = join(SRC, "vita/sce_sys");
 const MANIFEST = (await Bun.file(join(SRC, "../pocket.json")).json()) as { title: string; version: string };
+// Credits the manifest has no field for: src/about.json.
+const ABOUT = (await Bun.file(join(SRC, "about.json")).json()) as { author?: string };
 
 GlobalFonts.registerFromPath(join(SRC, "fonts/SpaceGrotesk-Bold.ttf"), "Shelf Bold");
 
@@ -199,8 +203,30 @@ function escapeXml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** The LiveArea layout: the name large in frame2, the version under it in frame3. */
+/** One line of LiveArea text in a frame, white with a shadow. */
+function frame(id: string, text: string, size: number, attributes: string, bold = false): string {
+  return `  <frame id="${id}">
+    <liveitem>
+      <text ${attributes}>
+        <str color="#ffffff" size="${size}"${bold ? ' bold="on"' : ""} shadow="on">${escapeXml(text)}</str>
+      </text>
+    </liveitem>
+  </frame>
+`;
+}
+
+/**
+ * The LiveArea layout: the name large in frame2, "by <author>" under it in
+ * frame3 (left out without an author), the version smaller in frame4.
+ */
 function template(): string {
+  const frames = [
+    frame("frame2", MANIFEST.title, 50, 'valign="bottom" align="left" text-align="left" text-valign="bottom" line-space="3" ellipsis="on"', true),
+    ABOUT.author
+      ? frame("frame3", `by ${ABOUT.author}`, 22, 'valign="top" align="left" text-align="left" text-valign="top" line-space="2" ellipsis="on"')
+      : "",
+    frame("frame4", `v${shortVersion(MANIFEST.version)}`, 18, 'align="left" text-align="left" word-wrap="off" ellipsis="on"'),
+  ];
   return `<?xml version="1.0" encoding="utf-8"?>
 <livearea style="psmobile" format-ver="01.00" content-rev="1">
   <livearea-background>
@@ -209,21 +235,7 @@ function template(): string {
   <gate>
     <startup-image>startup.png</startup-image>
   </gate>
-  <frame id="frame2">
-    <liveitem>
-      <text valign="bottom" align="left" text-align="left" text-valign="bottom" line-space="3" ellipsis="on">
-        <str color="#ffffff" size="50" bold="on" shadow="on">${escapeXml(MANIFEST.title)}</str>
-      </text>
-    </liveitem>
-  </frame>
-  <frame id="frame3">
-    <liveitem>
-      <text valign="top" align="left" text-align="left" text-valign="top" line-space="2" ellipsis="on">
-        <str color="#ffffff" size="22" shadow="on">Version ${escapeXml(shortVersion(MANIFEST.version))}</str>
-      </text>
-    </liveitem>
-  </frame>
-</livearea>
+${frames.join("")}</livearea>
 `;
 }
 
@@ -390,4 +402,6 @@ for (const [path, width, height, draw] of FILES) {
   console.log(`${path}  ${width}x${height}  ${png.length} bytes`);
 }
 await Bun.write(join(OUT, "livearea/contents/template.xml"), template());
-console.log(`livearea/contents/template.xml  ${MANIFEST.title}, version ${shortVersion(MANIFEST.version)}`);
+console.log(
+  `livearea/contents/template.xml  ${MANIFEST.title}, by ${ABOUT.author ?? "(no author)"}, v${shortVersion(MANIFEST.version)}`,
+);
