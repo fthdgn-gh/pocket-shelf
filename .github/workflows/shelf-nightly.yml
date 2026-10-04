@@ -1,0 +1,64 @@
+name: Pocket Shelf nightly
+
+# Rebuilds the `shelf-nightly` pre-release from main once a day, when main has
+# new commits. The release and its tag are replaced each time.
+#
+# Off by default: the schedule runs only while the repository variable
+# SHELF_NIGHTLY is `true` (Settings ▸ Secrets and variables ▸ Actions ▸
+# Variables). "Run workflow" builds and publishes one nightly regardless.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write # replacing the nightly release
+
+concurrency:
+  group: shelf-nightly
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'workflow_dispatch' || vars.SHELF_NIGHTLY == 'true'
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.compare.outputs.changed }}
+    steps:
+      - id: compare
+        name: Compare main with the last nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/shelf-nightly" --jq .object.sha 2>/dev/null || true)
+          if [ "$last" = "$GITHUB_SHA" ] && [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            echo "main has not changed since the last nightly."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    uses: ./.github/workflows/shelf-build.yml
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pocket-shelf-vpk
+      - name: Replace the nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          short=${GITHUB_SHA::7}
+          gh release delete shelf-nightly --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create shelf-nightly pocket-shelf.vpk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Pocket Shelf nightly $(date -u +%Y-%m-%d) (${short})" \
+            --notes "Built from main at ${short}. Untested; may not start. Install pocket-shelf.vpk with VitaShell." \
+            --prerelease --latest=false

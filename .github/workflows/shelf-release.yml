@@ -1,0 +1,75 @@
+name: Pocket Shelf release
+
+# Publishes a beta or stable release from a tag. The version in the tag must be
+# the one in pocket.json:
+#
+#   shelf-v0.1.0-beta.1   beta: a pre-release
+#   shelf-v0.1.0          stable: marked as the latest release
+#
+# The `shelf-` prefix keeps clear of upstream's `v*` tags, which trigger
+# release.yml (npm publishing).
+on:
+  push:
+    tags: ["shelf-v*"]
+
+permissions:
+  contents: write # creating the GitHub Release
+
+concurrency:
+  group: shelf-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    outputs:
+      channel: ${{ steps.tag.outputs.channel }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: tag
+        name: Check the tag against pocket.json
+        run: |
+          version=$(jq -r .version pocket.json)
+          tag="${GITHUB_REF_NAME}"
+          if [ "$tag" = "shelf-v${version}" ]; then
+            channel=stable
+          elif [[ "$tag" =~ ^shelf-v${version//./\\.}-beta\.[0-9]+$ ]]; then
+            channel=beta
+          else
+            echo "Tag $tag does not match pocket.json version ${version}."
+            echo "Expected shelf-v${version} (stable) or shelf-v${version}-beta.<n> (beta)."
+            exit 1
+          fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#shelf-v}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    uses: ./.github/workflows/shelf-build.yml
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pocket-shelf-vpk
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ needs.check.outputs.channel }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          if [ "$CHANNEL" = stable ]; then
+            flags=(--latest)
+            notes="Install pocket-shelf.vpk with VitaShell. See the README for Adrenaline and SteamGridDB setup."
+          else
+            flags=(--prerelease --latest=false)
+            notes="Beta build. Install pocket-shelf.vpk with VitaShell. See the README for Adrenaline and SteamGridDB setup."
+          fi
+          gh release create "$GITHUB_REF_NAME" pocket-shelf.vpk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Pocket Shelf ${VERSION}" \
+            --notes "$notes" \
+            "${flags[@]}"

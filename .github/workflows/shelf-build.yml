@@ -1,0 +1,64 @@
+name: Pocket Shelf build
+
+# Builds the release VPK and attaches it to the run as the `pocket-shelf-vpk`
+# artifact. shelf-release.yml and shelf-nightly.yml call it and publish the
+# result; run it by hand (Actions ▸ Pocket Shelf build ▸ Run workflow) to check
+# a build without publishing anything.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VITASDK: /home/runner/vitasdk
+  VDPM_NONINTERACTIVE: "1"
+  # The toolchain pinned in hosts/vita/rust-toolchain.toml and tools/vita.ts.
+  VITA_RUST: nightly-2026-05-28
+  CARGO_VITA_VERSION: 0.2.2
+
+jobs:
+  vpk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install VitaSDK
+        run: |
+          git clone --depth 1 https://github.com/vitasdk/vdpm /tmp/vdpm
+          (cd /tmp/vdpm && ./bootstrap-vitasdk.sh)
+          "$VITASDK/bin/vdpm" install libvita2d taihen
+          echo "$VITASDK/bin" >> "$GITHUB_PATH"
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$VITA_RUST" --profile minimal --component rust-src
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: hosts/vita -> target
+          key: ${{ env.VITA_RUST }}
+
+      - name: Install cargo-vita
+        run: |
+          if ! cargo vita --version 2>/dev/null | grep -q "$CARGO_VITA_VERSION"; then
+            cargo +"$VITA_RUST" install cargo-vita --version "$CARGO_VITA_VERSION" --locked --force
+          fi
+
+      - run: bun install --frozen-lockfile
+      - run: bun run shelf:check
+      - run: bun run shelf:test
+      - run: bun run shelf:build:release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pocket-shelf-vpk
+          path: dist/vita/pocket-shelf.vpk
+          if-no-files-found: error
