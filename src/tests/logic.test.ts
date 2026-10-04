@@ -8,6 +8,7 @@ import { categoryOf, cycleCategory, makeCategoryId } from "../categories.ts";
 import { LANGUAGES, MESSAGES, fill, upper } from "../i18n.ts";
 import { ACCENTS_FIRST, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, LIST_ROWS_UNDER_STATUS, SHELF, carouselLayout } from "../layout.ts";
+import { MENU, menuPath, parentPage, type MenuPage } from "../menu-items.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
 import { filesInUse, withoutFiles } from "../overrides.ts";
 import { RECENT_MAX, pushRecent } from "../recent.ts";
@@ -399,5 +400,23 @@ describe("layout", () => {
       // The row has 8 px of padding under the tiles for the frame.
       expect(tile * 1.25 + 3 * 1.25).toBeLessThanOrEqual(row - 8);
     }
+  });
+});
+
+describe("SELECT menu", () => {
+  test("every row is on exactly one page, and every page is reached from the main page", () => {
+    const pages = Object.keys(MENU) as MenuPage[];
+    const rows = pages.flatMap((page) => MENU[page]);
+    expect(new Set(rows).size).toBe(rows.length);
+    for (const page of pages) if (page !== "main") expect(menuPath(page)[0]).toBe("main");
+  });
+
+  test("Status bar sits inside Appearance", () => {
+    expect(parentPage("status")).toBe("appearance");
+    expect(menuPath("clock")).toEqual(["main", "appearance", "status"]);
+  });
+
+  test("language is two presses up from the first row of the main page", () => {
+    expect(MENU.main.at(-2)).toBe("language");
   });
 });

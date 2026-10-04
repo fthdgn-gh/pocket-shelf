@@ -13,6 +13,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ACCENT_HAS_ALPHA } from "../accent.ts";
+import { MENU, menuPath, type MenuItem } from "../menu-items.ts";
 import { BTN, IMG_FLAG_LINEAR, PSM } from "../../contracts/spec/spec.ts";
 import { createSimFsHost } from "../../hosts/sim/fs.ts";
 import { bootWorld, type SimWorld } from "../../hosts/sim/sim.ts";
@@ -362,6 +363,21 @@ interface Shot {
 
 const tap = (button: number, times = 1): Step[] => Array<Step>(times).fill(button);
 
+/**
+ * SELECT, then the presses that highlight `item`: down to each group on the
+ * way and right into it, then down to the row. Assumes the main page opens on
+ * its first row.
+ */
+function menuTo(item: MenuItem): Step[] {
+  const path = menuPath(item);
+  if (path.length === 0) throw new Error(`menuTo: no menu row ${item}`);
+  const steps: Step[] = [BTN.SELECT];
+  for (let index = 1; index < path.length; index++) {
+    steps.push(...tap(BTN.DOWN, MENU[path[index - 1]!].indexOf(path[index]!)), BTN.RIGHT);
+  }
+  return [...steps, ...tap(BTN.DOWN, MENU[path.at(-1)!].indexOf(item))];
+}
+
 // The screens with the most text, once per translated language.
 const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
   const shot = (name: string, steps: Step[]): Shot => ({ name: `60-${language}-${name}`, language, steps });
@@ -371,8 +387,8 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("menu", [BTN.SELECT, ...tap(BTN.UP, 2)]),
     shot("editor", [BTN.RIGHT, BTN.TRIANGLE]),
     shot("reset", [BTN.RIGHT, BTN.TRIANGLE, BTN.UP, BTN.CIRCLE]),
-    shot("categories", [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.SQUARE]),
-    shot("hidden", [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.START]),
+    shot("categories", [...menuTo("categories"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.SQUARE]),
+    shot("hidden", [...menuTo("categories"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.START]),
     shot("keyboard", [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE]),
     // R twice: the accents page. Its first key, typed plain and shifted.
     shot("accents", [BTN.SQUARE, ...tap(BTN.RTRIGGER, 2), BTN.CIRCLE, BTN.LTRIGGER, BTN.CIRCLE]),
@@ -381,9 +397,9 @@ const LANGUAGE_SHOTS: Shot[] = ["tr", "de", "fr", "es"].flatMap((language) => {
     shot("launching", [BTN.RIGHT, BTN.CIRCLE]),
     shot("picker", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, BTN.DOWN]),
     shot("online-key", [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE]),
-    shot("scrape", [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE]),
-    shot("clean", [BTN.SELECT, ...tap(BTN.DOWN, 11), BTN.CIRCLE, BTN.RIGHT]),
-    shot("rescan", [BTN.SELECT, ...tap(BTN.DOWN, 12), BTN.CIRCLE, BTN.CIRCLE, [0, 20]]),
+    shot("scrape", [...menuTo("fetchArt"), BTN.CIRCLE]),
+    shot("clean", [...menuTo("cleanArt"), BTN.CIRCLE, BTN.RIGHT]),
+    shot("rescan", [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 20]]),
   ];
 });
 
@@ -391,30 +407,34 @@ const SHOTS: Shot[] = [
   { name: "01-shelf", steps: tap(BTN.RIGHT, 3) },
   { name: "02-shelf-first", steps: [] },
   { name: "03-shelf-apps", steps: [BTN.RTRIGGER, BTN.RIGHT] },
-  { name: "04-menu", steps: [...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.DOWN] },
+  { name: "04-menu", steps: [...tap(BTN.RIGHT, 2), ...menuTo("font")] },
   // SELECT, down to "View", right once: grid.
-  { name: "05-grid", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.DOWN] },
-  { name: "06-list", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.DOWN, 2)] },
+  { name: "05-grid", steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.DOWN] },
+  { name: "06-list", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.DOWN, 2)] },
   { name: "07-editor", steps: [BTN.RIGHT, BTN.TRIANGLE] },
   { name: "08-keyboard", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, BTN.RIGHT, BTN.DOWN] },
   { name: "09-art-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE] },
-  { name: "10-categories", steps: [BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.DOWN] },
+  { name: "10-categories", steps: [...menuTo("categories"), BTN.CIRCLE, BTN.DOWN] },
   // Icon box off: SELECT, down to "Icon box", right once.
-  { name: "29-icon-box-off", steps: [BTN.SELECT, ...tap(BTN.DOWN, 5), BTN.RIGHT, BTN.SELECT, BTN.RIGHT] },
-  { name: "30-menu-scrolled", steps: [BTN.SELECT, ...tap(BTN.DOWN, 9)] },
+  { name: "29-icon-box-off", steps: [...menuTo("iconBox"), BTN.RIGHT, BTN.SELECT, BTN.RIGHT] },
+  { name: "30-menu-library", steps: [...menuTo("categories")] },
+  // The main page; back from Status bar to Appearance, then to the main page.
+  { name: "88-menu-main", steps: [BTN.SELECT] },
+  { name: "89-menu-back", steps: [...menuTo("clock"), BTN.CROSS] },
+  { name: "90-menu-back-main", steps: [...menuTo("clock"), ...tap(BTN.CROSS, 2)] },
   // Backdrop off: SELECT, down to "Backdrop", right once.
-  { name: "20-no-backdrop", steps: [BTN.SELECT, ...tap(BTN.DOWN, 4), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2)] },
+  { name: "20-no-backdrop", steps: [...menuTo("backdrop"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2)] },
   { name: "11-launching", steps: [...tap(BTN.RIGHT, 2), BTN.CIRCLE] },
   // Second theme, to check that colors come from the theme and not from literals.
-  { name: "17-detailed", steps: [BTN.SELECT, ...tap(BTN.DOWN, 3), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4)] },
+  { name: "17-detailed", steps: [...menuTo("details"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4)] },
   {
     name: "18-detailed-grid",
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 6)],
+    steps: [...menuTo("view"), BTN.RIGHT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 6)],
   },
-  { name: "19-basic", steps: [BTN.SELECT, ...tap(BTN.DOWN, 3), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4)] },
+  { name: "19-basic", steps: [...menuTo("details"), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4)] },
   {
     name: "21-list-detailed",
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 4)],
+    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 4)],
   },
   // Title editor, down to "SteamGridDB": no API key saved yet.
   { name: "22-online-key", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE] },
@@ -440,29 +460,29 @@ const SHOTS: Shot[] = [
   { name: "27-editor-rows", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4)] },
   { name: "28-backdrop-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, BTN.DOWN] },
   // Dynamic theme: one step left of Midnight. The colors follow the selected title.
-  { name: "31-dynamic", steps: [BTN.SELECT, BTN.LEFT, BTN.SELECT, [0, 30]] },
-  { name: "32-dynamic-next", steps: [BTN.SELECT, BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 2), [0, 40]] },
-  { name: "33-dynamic-menu", steps: [BTN.SELECT, BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4), [0, 40], BTN.SELECT, BTN.DOWN] },
+  { name: "31-dynamic", steps: [...menuTo("theme"), BTN.LEFT, BTN.SELECT, [0, 30]] },
+  { name: "32-dynamic-next", steps: [...menuTo("theme"), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 2), [0, 40]] },
+  { name: "33-dynamic-menu", steps: [...menuTo("theme"), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4), [0, 40], ...menuTo("font")] },
   {
     name: "34-dynamic-list",
-    steps: [BTN.SELECT, BTN.LEFT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 5), [0, 40]],
+    steps: [...menuTo("theme"), BTN.LEFT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 5), [0, 40]],
   },
   // Deep into a category of 125 titles, in each view.
   { name: "35-long-shelf", steps: [...tap(BTN.RTRIGGER, 2), [BTN.RIGHT, 420], [0, 30]] },
   {
     name: "36-long-grid",
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RTRIGGER, 2), [BTN.DOWN, 150], BTN.RIGHT, [0, 30]],
+    steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RTRIGGER, 2), [BTN.DOWN, 150], BTN.RIGHT, [0, 30]],
   },
   {
     name: "37-long-list",
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.RTRIGGER, 2), [BTN.DOWN, 300], BTN.UP, [0, 30]],
+    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.RTRIGGER, 2), [BTN.DOWN, 300], BTN.UP, [0, 30]],
   },
   // Holding RIGHT for a second repeats the move.
   { name: "12-hold-repeat", steps: [[BTN.RIGHT, 60]] },
   // Launch from another category, start again: the selection comes back.
   { name: "16-restored", steps: [...tap(BTN.RTRIGGER, 2), ...tap(BTN.RIGHT, 2), BTN.CIRCLE, "restart"] },
-  { name: "13-theme", steps: [BTN.SELECT, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
-  { name: "14-theme-light", steps: [BTN.SELECT, ...tap(BTN.LEFT, 2), BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
+  { name: "13-theme", steps: [...menuTo("theme"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
+  { name: "14-theme-light", steps: [...menuTo("theme"), ...tap(BTN.LEFT, 2), BTN.SELECT, ...tap(BTN.RIGHT, 5)] },
   // Mark the second and third titles as favorites, then go to the new tab.
   {
     name: "38-favorites",
@@ -477,7 +497,7 @@ const SHOTS: Shot[] = [
   // The same tab in the monospace font, the widest of the three.
   {
     name: "41-last-played-mono",
-    steps: [BTN.CIRCLE, BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, BTN.LTRIGGER],
+    steps: [BTN.CIRCLE, ...menuTo("font"), BTN.RIGHT, BTN.SELECT, BTN.LTRIGGER],
   },
   // Square, then "s" and "t" on the keyboard: the field counts the matches.
   { name: "42-search-typing", steps: [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.UP, ...tap(BTN.RIGHT, 3), BTN.CIRCLE] },
@@ -500,53 +520,53 @@ const SHOTS: Shot[] = [
   // The footer's five hints in the monospace font, the widest of the three.
   {
     name: "46-search-mono",
-    steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.START],
+    steps: [...menuTo("font"), BTN.RIGHT, BTN.SELECT, BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.START],
   },
   // A category named with letters from the accents page, kept across a restart.
   {
     name: "48-accent-category",
     steps: [
-      BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.TRIANGLE,
+      ...menuTo("categories"), BTN.CIRCLE, BTN.TRIANGLE,
       ...tap(BTN.RTRIGGER, 2), BTN.LTRIGGER, BTN.CIRCLE, BTN.DOWN, BTN.CIRCLE, BTN.DOWN, BTN.CIRCLE, BTN.START,
-      "restart", BTN.SELECT, ...tap(BTN.DOWN, 9), BTN.CIRCLE, BTN.UP,
+      "restart", ...menuTo("categories"), BTN.CIRCLE, BTN.UP,
     ],
   },
   // SELECT, down to "Fetch artwork": the titles to fetch for, the run, its end.
-  { name: "49-scrape-setup", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE] },
-  { name: "50-scrape-all", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, BTN.LEFT, BTN.DOWN] },
+  { name: "49-scrape-setup", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE] },
+  { name: "50-scrape-all", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE, BTN.LEFT, BTN.DOWN] },
   {
     name: "51-scrape-running",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90]],
   },
   {
     name: "52-scrape-done",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900]],
   },
   {
     name: "53-scrape-stopped",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90], BTN.CROSS],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90], BTN.CROSS],
   },
   // "All" after a run: every title is fetched for once more.
   {
     name: "56-scrape-replace",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, BTN.DOWN, BTN.RIGHT],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, BTN.DOWN, BTN.RIGHT],
   },
   // After a run every title of the category has a file: nothing is left to fetch.
   {
     name: "54-scrape-again",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE],
   },
-  { name: "55-scrape-shelf", key: true, steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]] },
+  { name: "55-scrape-shelf", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, [0, 40]] },
   // A press past an end of the list continues at the other end, in each view.
   { name: "57-wrap-shelf", steps: [BTN.LEFT, [0, 30]] },
   { name: "58-wrap-shelf-back", steps: [BTN.LEFT, [0, 30], BTN.RIGHT, [0, 30]] },
-  { name: "59-wrap-grid", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2), BTN.UP, [0, 30]] },
-  { name: "61-wrap-list", steps: [BTN.SELECT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.UP, [0, 30]] },
+  { name: "59-wrap-grid", steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2), BTN.UP, [0, 30]] },
+  { name: "61-wrap-list", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.UP, [0, 30]] },
   // A held direction stops at the end.
   { name: "62-hold-stops", steps: [...tap(BTN.RTRIGGER, 1), [BTN.RIGHT, 120], [0, 30]] },
   // After fetching for a category: the box art picker lists the title's own
@@ -554,31 +574,35 @@ const SHOTS: Shot[] = [
   {
     name: "63-picker-title",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]],
   },
   // Triangle: every file of the folder.
   {
     name: "64-picker-all",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), [0, 40]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), [0, 40]],
   },
   {
     name: "65-picker-backdrop",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 2), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 40]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 40]],
   },
   // The fixed rows preview too: "Default" is the title's own icon.
   { name: "66-picker-default", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]] },
   // The status bar row in the SELECT menu, and the shelf and list with the bar off.
-  { name: "80-status-row", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6)] },
-  { name: "81-status-off", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.RIGHT, BTN.SELECT] },
+  { name: "80-status-row", steps: [...menuTo("statusBar")] },
+  { name: "81-status-off", steps: [...menuTo("statusBar"), BTN.RIGHT, BTN.SELECT] },
   // 12-hour clock and no battery number; a low battery while charging.
-  { name: "84-status-12h", steps: [BTN.SELECT, ...tap(BTN.DOWN, 7), BTN.LEFT, BTN.DOWN, BTN.RIGHT, BTN.SELECT] },
+  { name: "84-status-12h", steps: [...menuTo("clock"), BTN.LEFT, BTN.DOWN, BTN.RIGHT, BTN.SELECT] },
   { name: "85-status-weak", status: "9 5 1 12 1 20 0", steps: [[0, 2]] },
   { name: "87-status-full", status: "9 5 1 100 0 100 1", steps: [[0, 2]] },
-  { name: "86-status-low", status: "9 5 1 9 0 0 1", steps: [BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.SELECT] },
-  { name: "83-status-daylight", steps: [BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.SELECT] },
-  { name: "82-status-off-list", steps: [BTN.SELECT, ...tap(BTN.DOWN, 6), BTN.RIGHT, ...tap(BTN.UP, 4), BTN.RIGHT, BTN.RIGHT, BTN.SELECT] },
+  { name: "86-status-low", status: "9 5 1 9 0 0 1", steps: [...menuTo("theme"), ...tap(BTN.RIGHT, 4), BTN.SELECT] },
+  { name: "83-status-daylight", steps: [...menuTo("theme"), ...tap(BTN.RIGHT, 4), BTN.SELECT] },
+  // Bar off, back to Appearance on its Status bar row, up to View, List.
+  {
+    name: "82-status-off-list",
+    steps: [...menuTo("statusBar"), BTN.RIGHT, BTN.CROSS, ...tap(BTN.UP, 4), ...tap(BTN.RIGHT, 2), BTN.SELECT],
+  },
   // A file the host cannot decode: its row shows a note and confirm keeps the
   // drawer open, whether pressed after the check or before it.
   {
@@ -601,28 +625,28 @@ const SHOTS: Shot[] = [
   {
     name: "67-clean-unused",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE],
   },
   // "All", then "Delete" once: the question before the files go.
   {
     name: "68-clean-ask",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, BTN.CIRCLE],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, BTN.CIRCLE],
   },
   {
     name: "69-clean-done",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2)],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2)],
   },
   // The titles are back on their own icons.
   {
     name: "70-clean-shelf",
     key: true,
-    steps: [BTN.SELECT, ...tap(BTN.DOWN, 10), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2), ...tap(BTN.CROSS, 2), BTN.RIGHT, [0, 40]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2), ...tap(BTN.CROSS, 3), BTN.RIGHT, [0, 40]],
   },
   // Rescan titles: before, and after a scan that finds one more title.
-  { name: "71-rescan", steps: [BTN.SELECT, ...tap(BTN.DOWN, 12), BTN.CIRCLE] },
-  { name: "72-rescan-done", steps: [BTN.SELECT, ...tap(BTN.DOWN, 12), BTN.CIRCLE, BTN.CIRCLE, [0, 20]] },
+  { name: "71-rescan", steps: [...menuTo("rescan"), BTN.CIRCLE] },
+  { name: "72-rescan-done", steps: [...menuTo("rescan"), BTN.CIRCLE, BTN.CIRCLE, [0, 20]] },
   // Mark a favorite, start again: the changes come back from the one-file cache.
   { name: "73-changes-kept", steps: [BTN.RIGHT, BTN.TRIANGLE, BTN.CIRCLE, BTN.CROSS, "restart", [0, 20]] },
   // Diagnostics: the startup timing, first lines and scrolled.
@@ -630,7 +654,7 @@ const SHOTS: Shot[] = [
   { name: "74-diagnostics", steps: [BTN.SELECT, BTN.UP, BTN.CIRCLE] },
   { name: "75-diagnostics-scrolled", steps: [BTN.SELECT, BTN.UP, BTN.CIRCLE, ...tap(BTN.DOWN, 12)] },
   { name: "76-menu-end", steps: [BTN.SELECT, BTN.UP] },
-  { name: "15-mono-font", steps: [BTN.SELECT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
+  { name: "15-mono-font", steps: [...menuTo("font"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
   ...LANGUAGE_SHOTS,
 ];
 
