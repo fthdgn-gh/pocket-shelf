@@ -45,6 +45,8 @@ export const de: Messages = {
     system: "System",
     homebrew: "Homebrew",
     psm: "PS Mobile",
+    psp: "PSP",
+    ps1: "PS1",
   },
 
   theme: "Design",

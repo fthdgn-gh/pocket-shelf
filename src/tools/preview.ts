@@ -28,7 +28,7 @@ const SCALE = 2;
 
 // Sample library. Ids follow the Vita prefixes the app sorts by: PCS* retail
 // games, NPXS* system apps, NP?A* PlayStation Mobile, anything else homebrew.
-const TITLES: [id: string, title: string][] = [
+const TITLES: [id: string, title: string, platform?: string][] = [
   ["PCSA00069", "Gravity Daze"],
   ["PCSB00245", "Neon Drift"],
   ["PCSE00317", "Castle Siege Tactics"],
@@ -59,6 +59,11 @@ const TITLES: [id: string, title: string][] = [
   ["NPOA00013", "Tiny Racer"],
   ["NPNA00042", "Puzzle Garden"],
   ["NPPA00007", "Sky Kite"],
+  // PSP and PS1 Classics, as pspemu.rs lists them from ux0:/pspemu/PSP/GAME.
+  ["NPUZ00001", "Echo Chamber", "psp"],
+  ["ULUS10041", "Velocity Run", "psp"],
+  ["SCUS94163", "Crystal Quest", "ps1"],
+  ["NPUJ00662", "Cave Raiders", "ps1"],
   // A large category, to check that a long list scrolls like a short one.
   ...Array.from({ length: 120 }, (_, index): [string, string] => [
     `HBREW${String(index).padStart(4, "0")}`,
@@ -296,13 +301,14 @@ function installHost(ops: Record<string, unknown>): void {
   ops.appTable = () =>
     JSON.stringify({
       kind: "native",
-      apps: TITLES.map(([id, title]) => ({ output: id, id, title, installed: true })),
+      apps: TITLES.map(([id, title, platform]) => ({ output: id, id, title, installed: true, platform })),
       current: "PBCF7609D",
       resume: null,
     });
   // A fixed reading, so shots do not change with the time they are taken.
   ops.__status = (): string => statusLine;
-  ops.__scanReport = (): string => "folders=4,source=app.db,bubbles=3,icons=3";
+  ops.__scanReport = (): string =>
+    "PSM folders=4,PSM source=app.db,PSM bubbles=3,PSM appmetaIcons=3,PSP folders=6,PSP bubbles=4,PSP ps1=2,PSP psp=2";
   ops.__processMs = (): number => Math.round(performance.now()) + 420;
   ops.__startupMarks = (): string => "main=3,graphics=120,dev=125,pak=400,quickjs=420,eval=900,frame=930";
   // A scan finds a title that was installed after the list was last read.
@@ -425,6 +431,8 @@ const SHOTS: Shot[] = [
   { name: "30-menu-library", steps: [...menuTo("categories")] },
   // The PS Mobile tab, and what the scan found on the diagnostics screen.
   { name: "91-psm-tab", steps: [...tap(BTN.RTRIGGER, 3), [0, 20]] },
+  { name: "93-psp-tab", steps: [...tap(BTN.RTRIGGER, 4), [0, 20]] },
+  { name: "94-ps1-tab", steps: [...tap(BTN.RTRIGGER, 5), [0, 20]] },
   { name: "92-psm-diagnostics", steps: [...menuTo("diagnostics"), BTN.CIRCLE, ...tap(BTN.DOWN, 24)] },
   // The main page; back from Status bar to Appearance, then to the main page.
   { name: "88-menu-main", steps: [BTN.SELECT] },

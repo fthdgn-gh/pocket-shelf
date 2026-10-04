@@ -149,6 +149,26 @@ cannot be driven. Evidence comes from its log and from files under
   (`__appRescan`), which also reports how long the scan took. The scan blocks
   the main thread. In Vita3K a second start opens `titles.tsv` and neither
   app folder; the time saved on hardware is not measured yet.
+- **The home screen's database** (`appdb.rs`): `ur0:shell/db/app.db`,
+  table `tbl_appinfo_icon` (`titleId`, `title`, `iconPath`), one row per
+  bubble. Read once per scan with the system's SQLite module and shared by
+  the PSM and PSP/PS1 scans; the icon decoder also asks it for `iconPath`.
+- **PSP and PS1 Classics** (`pspemu.rs`): folders in
+  `ux0:/pspemu/PSP/GAME/<id>/` with an `EBOOT.PBP`. Only those with a bubble
+  row of the same id are listed (an official package installed for the
+  Vita's own emulator); `psgm:play?titleid=<id>` starts them without
+  Adrenaline. The PBP header gives the offset of its plain `PARAM.SFO`;
+  `CATEGORY` `ME` is PS1, anything else PSP. The host sends a `platform`
+  (`vita`, `psm`, `psp`, `ps1`) with each title in the table and stores it in
+  `titles.tsv` (header version 3); `categoryOf` puts PSP and PS1 titles in the
+  `builtin-psp` and `builtin-ps1` categories, which follow PS Mobile. Folders
+  without a bubble (homebrew, games installed for Adrenaline) and ISO/CSO
+  files are not listed yet; launching those needs Adrenaline (RetroFlow ships
+  a helper bubble whose `data/boot.bin` it rewrites per launch). Diagnostics
+  shows `PSP folders`, `bubbles`, `ps1`, `psp`, and when ids do not meet,
+  `firstNoBubble` and `firstOther`. In Vita3K with made-up PBPs: a PSP and a
+  PS1 title listed by bubble name, a folder without a bubble left out, the PSP
+  icon decoded from `icon0.dds`. Not yet seen on hardware.
 - **PlayStation Mobile titles** (`psm.rs`) are folders in `ux0:/psm` named
   `NPNA`, `NPOA`, `NPPA` or `NPQA` and five digits. They have no
   `param.sfo`. The name comes from the home screen's database
@@ -408,7 +428,7 @@ the bubble is about seven seconds, so about three are the system's own launch.
 - A full title scan is 2.8 to 3.5 s, which the title list file avoids.
 ## Open items
 
-- **Next planned work:** list PSP and PS1 Classics that install on the Vita,
-  and PSP and PS1 games that run under Adrenaline. Adrenaline's game bubbles
+- **Next planned work:** PSP and PS1 games that run under Adrenaline
+  (folders without a bubble, then ISO and CSO files). Adrenaline's game bubbles
   (`PSPEMU` + digits) are hidden from the list for this reason; Adrenaline
   itself (`PSPEMUCFW`) is kept. The filter is in `catalog.ts`, not the host.

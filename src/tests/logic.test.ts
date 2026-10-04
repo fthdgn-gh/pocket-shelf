@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { cleanTitle, isListed } from "../catalog.ts";
-import { PSM_ID, categoryOf, cycleCategory, isPsmId, makeCategoryId } from "../categories.ts";
+import { PS1_ID, PSM_ID, PSP_ID, categoryOf, cycleCategory, isPsmId, makeCategoryId } from "../categories.ts";
 import { LANGUAGES, MESSAGES, fill, upper } from "../i18n.ts";
 import { ACCENTS_FIRST, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn } from "../keyboard.ts";
 import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, LIST_ROWS_UNDER_STATUS, SHELF, carouselLayout } from "../layout.ts";
@@ -119,6 +119,10 @@ describe("categories", () => {
     expect(categoryOf("PBCF7609D")).toBe("homebrew");
     expect(categoryOf("NPOA00013")).toBe(PSM_ID);
     expect(categoryOf("NPNA00042")).toBe(PSM_ID);
+    // PSP and PS1 Classics by the platform the host reports, whatever the id.
+    expect(categoryOf("NPUZ00001", "psp")).toBe(PSP_ID);
+    expect(categoryOf("SCUS94163", "ps1")).toBe(PS1_ID);
+    expect(categoryOf("SCUS94163")).toBe("homebrew");
   });
 
   test("cycleCategory wraps in both directions", () => {
