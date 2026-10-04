@@ -52,7 +52,7 @@ jobs:
     needs: [check, build]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pocket-shelf-vpk
       - name: Publish the GitHub Release

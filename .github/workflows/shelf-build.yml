@@ -57,7 +57,7 @@ jobs:
       - run: bun run shelf:test
       - run: bun run shelf:build:release
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pocket-shelf-vpk
           path: dist/vita/pocket-shelf.vpk
