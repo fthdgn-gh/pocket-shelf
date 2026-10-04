@@ -389,6 +389,18 @@ cannot be driven. Evidence comes from its log and from files under
   `lib.rs` by a few KiB. Roughly one code change in twenty triggers it.
 - **LiveArea PNGs must be indexed 8-bit.** `tools/vita-package.ts` enforces it;
   `src/tools/art.ts` quantizes them.
+- **LiveArea text, not text in pictures.** The system draws its "Start" label
+  over the bottom of the gate image (`startup.png`), which hid the name drawn
+  there. The pictures hold no text; `src/tools/art.ts` also writes
+  `src/vita/sce_sys/livearea/contents/template.xml` (style `psmobile`, as
+  Adrenaline's LiveArea): the title from `pocket.json` in `frame2` (size 50,
+  bold, shadow) and "Version <major.minor>" in `frame3` (size 22). Run
+  `bun run shelf:art` after changing the title or version. Confirmed on
+  hardware (2026-10-04): the name and version show, clear of the gate.
+- **The app's version is `pocket.json`'s `version`** (0.1.0 since
+  2026-10-04; the 0.13.0 before it was the framework's release number).
+  `tools/vita.ts` writes it to `param.sfo` as `APP_VER` (`MM.mm`, "00.01"),
+  which the system shows as the app's version.
 - The title id comes from the app id in `pocket.json`. Changing the id makes a
   new bubble and a new data folder.
 
