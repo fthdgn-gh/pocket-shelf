@@ -44,9 +44,16 @@ and its Vita host.
 
 ## Install
 
-1. Download `pocket-shelf.vpk` from
-   [Releases](https://github.com/fthdgn-gh/pocket-shelf/releases), or build it
-   yourself (see [Building](#building)). Releases come in three channels:
+1. Download `pocket-shelf.vpk` from the newest tagged release, or build it
+   yourself (see [Building](#building)).
+
+   [![Newest release](https://img.shields.io/github/v/release/fthdgn-gh/pocket-shelf?include_prereleases&sort=semver&label=newest%20release)](https://github.com/fthdgn-gh/pocket-shelf/releases)
+
+   There is no stable release yet. The current one is the beta
+   [`shelf-v0.1.0-beta.1`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.1.0-beta.1)
+   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.1.0-beta.1/pocket-shelf.vpk)).
+   GitHub marks betas as pre-releases, so its "Latest" label does not point to
+   them. Releases come in three channels:
    - **Stable:** tested on hardware.
    - **Beta** (marked pre-release): new features, tested less.
    - **Nightly** (`shelf-nightly`, when available): the current `main`, untested.
