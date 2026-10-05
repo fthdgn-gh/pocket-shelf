@@ -24,6 +24,8 @@ pub mod ffi;
 pub mod graphics;
 #[cfg(feature = "http")]
 pub mod http;
+#[cfg(feature = "self-update")]
+pub mod update;
 #[cfg(feature = "installed-apps")]
 pub mod accent;
 #[cfg(feature = "installed-apps")]

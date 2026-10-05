@@ -3,8 +3,8 @@
 //! An app starts a request and polls it once per frame; the request itself
 //! runs on its own thread, so the 60 fps main thread never waits on the
 //! network. A response either stays in memory as text (an API reply) or goes
-//! straight to a PNG file in the app's data folder (an image), so a large
-//! picture never passes through the guest.
+//! straight to a file in the app's data folder (a PNG image, or the app's own
+//! update package), so a large file never passes through the guest.
 //!
 //! TLS is rustls with the RustCrypto provider and Mozilla's root
 //! certificates, over std::net sockets. The system's SceSsl is not used: it
@@ -14,7 +14,7 @@
 //! Host extras on `ui` (not spec ops):
 //!
 //!   __netGet(url, authorization) -> id | -1    text response, at most TEXT_MAX
-//!   __netSave(url, path) -> id | -1            PNG to <data folder>/<path>
+//!   __netSave(url, path) -> id | -1            PNG or update VPK to <data folder>/<path>
 //!   __netState(id) -> "busy <received> <total>"
 //!                   | "done <http status> <received>"
 //!                   | "error <reason>"
@@ -35,8 +35,12 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
 /// Largest text response kept in memory.
 const TEXT_MAX: usize = 512 * 1024;
-/// Largest file written. Matches the largest picture the decoders read.
+/// Largest picture written. Matches the largest picture the decoders read.
 const FILE_MAX: usize = 8 * 1024 * 1024;
+/// Largest update package written. A release VPK is about 2.5 MB.
+const VPK_MAX: usize = 64 * 1024 * 1024;
+/// The one path an update package is saved to (src/updates.ts `UPDATE_FILE`).
+pub const UPDATE_VPK: &str = "update/pocket-shelf.vpk";
 /// Requests running or waiting to be read at once.
 const SLOTS_MAX: usize = 4;
 const READ_CHUNK: usize = 16 * 1024;
@@ -50,6 +54,8 @@ const IO_TIMEOUT: Duration = Duration::from_secs(30);
 const WORKER_STACK: usize = 512 * 1024;
 const USER_AGENT: &str = "PocketShelf/1.0 (PS Vita)";
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+/// A VPK is a ZIP file: its first local file header.
+const ZIP_SIGNATURE: [u8; 4] = [b'P', b'K', 3, 4];
 
 enum Outcome {
     Busy,
@@ -86,8 +92,11 @@ fn tls_config() -> Option<Arc<ClientConfig>> {
 }
 
 /// A file a download may be written to: `art/<name>.png` or
-/// `backdrops/<name>.png`, with a plain file name.
+/// `backdrops/<name>.png` with a plain file name, or `UPDATE_VPK`.
 fn valid_dest(path: &str) -> bool {
+    if path == UPDATE_VPK {
+        return true;
+    }
     let Some((dir, name)) = path.split_once('/') else {
         return false;
     };
@@ -111,7 +120,7 @@ fn finish(id: i32, outcome: Outcome) {
 }
 
 /// Start a GET. `auth` is the Authorization header's value ("" for none);
-/// `dest` is a path under the data folder for a PNG download, or None to keep
+/// `dest` is a path under the data folder for a file download, or None to keep
 /// the response as text. Returns the request id, or -1 when the request is
 /// refused: not an https URL, a bad path, no free slot, or no network stack.
 pub fn start(url: &str, auth: &str, dest: Option<&str>) -> i32 {
@@ -145,12 +154,13 @@ pub fn start(url: &str, auth: &str, dest: Option<&str>) -> i32 {
     }
     let url = String::from(url);
     let auth = String::from(auth);
+    let package = dest == Some(UPDATE_VPK);
     let dest = dest.map(|path| format!("{}/{path}", crate::datafs::data_dir()));
     let spawned = std::thread::Builder::new()
         .name(String::from("pocket-http"))
         .stack_size(WORKER_STACK)
         .spawn(move || {
-            let outcome = match run(id, &url, &auth, dest.as_deref(), &cancel) {
+            let outcome = match run(id, &url, &auth, dest.as_deref(), package, &cancel) {
                 Ok(status) => Outcome::Done { status },
                 Err(reason) => {
                     if let Some(path) = dest.as_deref() {
@@ -266,7 +276,8 @@ fn open(url: &str, auth: &str) -> Result<(BufReader<StreamOwned<ClientConnection
 }
 
 /// The request itself, on the worker thread. Returns the HTTP status.
-fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, cancel: &AtomicBool) -> Result<i32, String> {
+/// `package` marks the update VPK, which has its own size limit and signature.
+fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, package: bool, cancel: &AtomicBool) -> Result<i32, String> {
     let mut url = String::from(url);
     let mut auth = String::from(auth);
     let mut redirects = 0;
@@ -301,7 +312,11 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, cancel: &AtomicBool) 
     // Only a 200 is written to disk; any other reply is kept as text so the
     // app can report it.
     let saving = dest.filter(|_| status == 200);
-    let limit = if saving.is_some() { FILE_MAX } else { TEXT_MAX };
+    let limit = match (saving, package) {
+        (None, _) => TEXT_MAX,
+        (Some(_), false) => FILE_MAX,
+        (Some(_), true) => VPK_MAX,
+    };
     let part = saving.map(|path| format!("{path}.part"));
     let mut file = match (&part, saving) {
         (Some(part), Some(path)) => {
@@ -379,7 +394,11 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, cancel: &AtomicBool) 
     }
     if let (Some(file), Some(part), Some(path)) = (file, part, saving) {
         drop(file);
-        if received < head.len() || head != PNG_SIGNATURE {
+        if package {
+            if head[..4] != ZIP_SIGNATURE {
+                return Err(String::from("not a vpk"));
+            }
+        } else if received < head.len() || head != PNG_SIGNATURE {
             return Err(String::from("not a png"));
         }
         let _ = fs::remove_file(path);

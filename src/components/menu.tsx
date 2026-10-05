@@ -1,6 +1,7 @@
 import { For } from "solid-js";
 import { LANGUAGES } from "../i18n.ts";
 import { FONTS } from "../text.ts";
+import { BUILD, buildLabel } from "../updates.ts";
 import { MENU_VISIBLE, type LauncherState, type MenuItem } from "../state.ts";
 import { hints, Prompt, type IconName } from "./icons.tsx";
 import { Drawer, OptionRow, Spacer } from "./panel.tsx";
@@ -27,6 +28,8 @@ export function MenuOverlay(props: { state: LauncherState }) {
         return { label: t().statusBar, step: "right" };
       case "library":
         return { label: t().library, step: "right" };
+      case "updates":
+        return { label: t().updates, step: "right" };
       case "theme":
         return { label: t().theme, value: t().themes[state.theme().id], step: "both" };
       case "font":
@@ -53,6 +56,10 @@ export function MenuOverlay(props: { state: LauncherState }) {
         return { label: t().cleanArt, step: "right" };
       case "rescan":
         return { label: t().rescan, step: "right" };
+      case "updateChannel":
+        return { label: t().updateChannel, value: t().updateChannels[state.updateChannel()], step: "both" };
+      case "checkUpdates":
+        return { label: t().checkUpdates, value: buildLabel(BUILD), step: "right" };
       case "confirm":
         return { label: t().confirm, icon: state.confirmButton(), step: "both" };
       case "language":

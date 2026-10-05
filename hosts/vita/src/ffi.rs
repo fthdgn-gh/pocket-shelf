@@ -1084,8 +1084,8 @@ unsafe extern "C" fn js_net_get(
     JS_NewInt32(ctx, id)
 }
 
-/// ui.__netSave(url, path) -> request id | -1. Downloads a PNG to `path`
-/// under the data folder.
+/// ui.__netSave(url, path) -> request id | -1. Downloads a PNG, or the
+/// update package, to `path` under the data folder.
 #[cfg(feature = "http")]
 unsafe extern "C" fn js_net_save(
     ctx: *mut JSContext,
@@ -1131,6 +1131,28 @@ unsafe extern "C" fn js_net_close(
 ) -> JSValue {
     crate::http::close(arg_i32(ctx, argc, argv, 0));
     JS_NewInt32(ctx, 0)
+}
+
+/// ui.__updateUnpack() -> 0 | -1: unpack the downloaded update (hosts/vita/src/update.rs).
+#[cfg(feature = "self-update")]
+unsafe extern "C" fn js_update_unpack(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    JS_NewInt32(ctx, if crate::update::unpack_start() { 0 } else { -1 })
+}
+
+/// ui.__updateState() -> "idle" | "busy d t" | "done version" | "error reason".
+#[cfg(feature = "self-update")]
+unsafe extern "C" fn js_update_state(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    new_js_string(ctx, &crate::update::state())
 }
 
 /// ui.__appArt(fileName) -> texture handle | -1 | -2. Host extra (not a spec op):
@@ -1310,6 +1332,12 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"__netState\0", js_net_state, 1);
         add_fn(ctx, ui_obj, b"__netText\0", js_net_text, 1);
         add_fn(ctx, ui_obj, b"__netClose\0", js_net_close, 1);
+    }
+
+    #[cfg(feature = "self-update")]
+    {
+        add_fn(ctx, ui_obj, b"__updateUnpack\0", js_update_unpack, 0);
+        add_fn(ctx, ui_obj, b"__updateState\0", js_update_state, 0);
     }
 
     // Custom box art: the texture op and the folder the files go in.

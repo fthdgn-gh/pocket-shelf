@@ -188,6 +188,28 @@ export const de: Messages = {
   },
   scanDone: "{count} Titel in {seconds} s gefunden.",
 
+  // Updates (SELECT-Menü -> Updates)
+  updates: "Updates",
+  updateChannel: "Kanal",
+  updateChannels: { stable: "Stabil", beta: "Beta", nightly: "Nightly", off: "Aus" },
+  checkUpdates: "Nach Updates suchen",
+  checkAgain: "Erneut suchen",
+  installedVersion: "Installiert",
+  availableVersion: "Verfügbar",
+  updateDownload: "Laden",
+  updateLater: "Später",
+  updateChecking: "GitHub wird nach der neuesten Version gefragt...",
+  updateCurrent: "Dies ist die neueste Version auf diesem Kanal.",
+  updateAvailableHelp: "Die neue Version laden? Nach 'Später' bietet die Suche beim Start sie nicht erneut an.",
+  updateDownloading: "Wird geladen... {done} von {total} MB",
+  updateUnpacking: "Paket wird geprüft... {done} von {total} Dateien",
+  updateReady: "Geladen und geprüft. Diese Version kann es noch nicht installieren.",
+  updateUnreachable: "GitHub ist nicht erreichbar ({error}).",
+  updateBadReply: "GitHub hat unerwartet geantwortet (HTTP {status}).",
+  updateFailed: "Das Paket ist nicht verwendbar ({error}).",
+  updateOff: "Updates sind aus. Wähle zuerst einen Kanal.",
+  updateNotSupported: "Diese Version kann keine Updates laden.",
+
   // Startplugin für Adrenaline
   adrTitle: "Adrenaline-Plugin",
   adrAdd: "Plugin hinzufügen",

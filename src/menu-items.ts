@@ -1,10 +1,10 @@
 /**
  * The SELECT menu's pages. A row named after a page opens that page: the main
- * page holds Appearance and Library, and Appearance holds Status bar. Language is second to
+ * page holds Appearance, Library and Updates, and Appearance holds Status bar. Language is second to
  * last on the main page, two presses up from the first row, so it can be
  * found in a language the user cannot read.
  */
-export type MenuPage = "main" | "appearance" | "status" | "library";
+export type MenuPage = "main" | "appearance" | "status" | "library" | "updates";
 export type MenuItem =
   | MenuPage
   | "theme"
@@ -20,14 +20,17 @@ export type MenuItem =
   | "fetchArt"
   | "cleanArt"
   | "rescan"
+  | "updateChannel"
+  | "checkUpdates"
   | "confirm"
   | "language"
   | "diagnostics";
 export const MENU: Record<MenuPage, readonly MenuItem[]> = {
-  main: ["appearance", "library", "confirm", "language", "diagnostics"],
+  main: ["appearance", "library", "updates", "confirm", "language", "diagnostics"],
   appearance: ["theme", "font", "view", "details", "backdrop", "iconBox", "status"],
   status: ["statusBar", "clock", "batteryPercent"],
   library: ["categories", "fetchArt", "cleanArt", "rescan"],
+  updates: ["updateChannel", "checkUpdates"],
 };
 export const isMenuPage = (item: MenuItem): item is MenuPage => item in MENU;
 

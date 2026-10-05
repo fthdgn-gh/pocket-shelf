@@ -42,6 +42,8 @@ status = ["vitasdk-sys/SceAppUtil_stub", "vitasdk-sys/ScePower_stub", "vitasdk-s
 # HTTPS GET for apps (src/http.rs): text replies and PNG downloads into the
 # data folder.
 http = ["data-fs", "dep:rustls", "dep:rustls-rustcrypto", "dep:webpki-roots"]
+# The app's own update (src/update.rs): unpack a downloaded release VPK.
+self-update = ["http", "installed-apps"]
 capture = []
 bench = []
 
