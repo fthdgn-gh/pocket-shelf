@@ -111,9 +111,20 @@ bun run shelf:preview         # render screens to PNG without a Vita
 Install the release build on hardware. The debug executable is 105 MB, and
 the system reads it from the memory card on every launch.
 
-`shelf:preview` needs the `wasm32-unknown-unknown` Rust target. The Adrenaline
-plugin is committed as `src/vita/psp/pocketshelf.prx`. To rebuild it after
-changing `src/psp-boot/`, run `bun run shelf:plugin`, which needs pspdev.
+`shelf:preview` runs the PocketJS engine compiled to WebAssembly. When
+`hosts/web/pocketjs.wasm` is missing, the first run builds it with
+`cargo build --target wasm32-unknown-unknown`, which needs Rust's WebAssembly
+target. Add it once:
+
+```sh
+rustup target add wasm32-unknown-unknown
+```
+
+`bun run bootstrap` also installs it, along with the stable toolchain.
+
+The Adrenaline plugin is committed as `src/vita/psp/pocketshelf.prx`. To
+rebuild it after changing `src/psp-boot/`, run `bun run shelf:plugin`, which
+needs pspdev.
 
 Notes on the engine limits, host behavior, and what has been verified where are
 in [`src/CLAUDE.md`](./src/CLAUDE.md).
