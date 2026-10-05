@@ -14,7 +14,8 @@ export function UpdateOverlay(props: { state: LauncherState }) {
   const update = state.update;
   const t = state.t;
   const step = update.step;
-  const busy = () => step() === "checking" || step() === "downloading" || step() === "unpacking";
+  const busy = () =>
+    step() === "checking" || step() === "downloading" || step() === "unpacking" || step() === "installing";
   return (
     <Drawer state={state} title={t().updates} size="wide">
       <OptionRow state={state} active={false} label={t().installedVersion} value={buildLabel(BUILD)} />
@@ -57,20 +58,27 @@ export function UpdateOverlay(props: { state: LauncherState }) {
               : fill(t().updateUnpacking, { done: update.progress().done, total: update.progress().total })}
           </Note>
         </Match>
-        <Match when={step() === "ready" || step() === "failed"}>
+        <Match when={step() === "installing"}>
+          <Note state={state}>{update.status() || t().updateInstalling}</Note>
+        </Match>
+        <Match when={step() === "ready" || step() === "updated" || step() === "failed"}>
           <Note state={state}>{update.status()}</Note>
         </Match>
       </Switch>
       <Prompt
         state={state}
         parts={
-          busy()
-            ? hints([state.cancelButton(), step() === "checking" ? t().close : t().stop])
-            : step() === "available"
-              ? hints([state.confirmButton(), t().updateDownload], [state.cancelButton(), t().updateLater])
-              : step() === "ready"
-                ? hints([state.confirmButton(), t().close])
-                : hints([state.confirmButton(), t().checkAgain], [state.cancelButton(), t().close])
+          step() === "installing"
+            ? []
+            : busy()
+              ? hints([state.cancelButton(), step() === "downloading" ? t().stop : t().close])
+              : step() === "available"
+                ? hints([state.confirmButton(), t().updateDownload], [state.cancelButton(), t().updateLater])
+                : step() === "ready"
+                  ? hints([state.confirmButton(), t().updateInstall], [state.cancelButton(), t().close])
+                  : step() === "updated"
+                    ? hints([state.confirmButton(), t().close])
+                    : hints([state.confirmButton(), t().checkAgain], [state.cancelButton(), t().close])
         }
       />
     </Drawer>

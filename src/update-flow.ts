@@ -16,9 +16,13 @@ import {
   type UpdateChannel,
 } from "./updates.ts";
 
+// hosts/vita/src/update.rs
 interface UpdateHost {
   __updateUnpack?(): number;
+  __updateInstall?(): number;
+  __updateLaunch?(): number;
   __updateState?(): string;
+  __updateResult?(): string;
 }
 
 const host = () => getOps() as unknown as UpdateHost;
@@ -29,22 +33,33 @@ const host = () => getOps() as unknown as UpdateHost;
  *  - "current": nothing newer on the channel;
  *  - "available": a release to download, with "Download" and "Later";
  *  - "downloading", "unpacking": getting it ready;
- *  - "ready": the package is unpacked and checked;
+ *  - "ready": the package is unpacked and checked, with "Install";
+ *  - "installing": installing the updater app, which then takes over;
+ *  - "updated": the updater installed the release (shown after the restart);
  *  - "failed": a step went wrong; `status` says which.
  */
-export type UpdateStep = "checking" | "current" | "available" | "downloading" | "unpacking" | "ready" | "failed";
+export type UpdateStep =
+  | "checking"
+  | "current"
+  | "available"
+  | "downloading"
+  | "unpacking"
+  | "ready"
+  | "installing"
+  | "updated"
+  | "failed";
 
 interface Deps {
   t: () => Messages;
   channel: () => UpdateChannel;
-  /** Whether no other drawer is open, so an update found at start can be shown. */
+  /** Whether no other drawer is open, so something found at start can be shown. */
   idle: () => boolean;
 }
 
-/** Whether this build can download and unpack its own update. */
+/** Whether this build can download and install its own update. */
 export const canUpdate = () => typeof host().__updateUnpack === "function" && netAvailable();
 
-/** Checking GitHub for a newer build of the chosen channel, and getting it (SELECT menu -> Updates). */
+/** Checking GitHub for a newer build of the chosen channel, and installing it (SELECT menu -> Updates). */
 export function createUpdateFlow(deps: Deps) {
   const t = deps.t;
   const [open, setOpen] = createSignal(false);
@@ -55,9 +70,11 @@ export function createUpdateFlow(deps: Deps) {
 
   let cancel: (() => void) | undefined;
   let turn = 0;
-  let unpacking = false;
-  // An update found by the check at start, shown once no other drawer is open.
-  let offer: Release | undefined;
+  // A host step is running: its state is read once per frame.
+  let polling = false;
+  // What to show once no other drawer is open: an update the check at start
+  // found, or the updater's report after a restart.
+  let pending: (() => void) | undefined;
 
   const fail = (message: string) =>
     batch(() => {
@@ -69,7 +86,6 @@ export function createUpdateFlow(deps: Deps) {
     turn++;
     cancel?.();
     cancel = undefined;
-    unpacking = false;
   };
 
   /** Ask GitHub; `found` gets the channel's update, or undefined when there is none. */
@@ -95,6 +111,10 @@ export function createUpdateFlow(deps: Deps) {
 
   /** Open the drawer and check now (SELECT menu -> Check for updates). */
   const check = () => {
+    if (polling) {
+      setOpen(true);
+      return;
+    }
     stop();
     batch(() => {
       setOpen(true);
@@ -107,13 +127,29 @@ export function createUpdateFlow(deps: Deps) {
     request(show, fail);
   };
 
-  /** The check at start: at most once a day, and silent unless it finds an update not put off before. */
-  const checkAtStart = () => {
+  /**
+   * At start: the updater's report when it ran, else the check, at most once
+   * a day and silent unless it finds an update not put off before.
+   */
+  const atStart = () => {
+    const report = host().__updateResult?.() ?? "";
+    if (report) {
+      const [kind, ...rest] = report.split(" ");
+      pending = () =>
+        batch(() => {
+          setRelease(undefined);
+          if (kind === "ok") {
+            setStep("updated");
+            setStatus(fill(t().updateDone, { version: rest.join(" ") }));
+          } else fail(fill(t().updateInstallFailed, { error: rest.join(" ") || "unknown" }));
+        });
+      return;
+    }
     const record = loadUpdateRecord();
     if (!canUpdate() || !checkDue(deps.channel(), record, Date.now())) return;
     request(
       (update) => {
-        if (update && releaseKey(update) !== record.later) offer = update;
+        if (update && releaseKey(update) !== record.later) pending = () => show(update);
       },
       () => {},
     );
@@ -136,7 +172,7 @@ export function createUpdateFlow(deps: Deps) {
         cancel = undefined;
         if (!result.ok) return fail(fill(t().downloadFailed, { error: result.error }));
         if (result.status !== 200) return fail(fill(t().updateBadReply, { status: result.status }));
-        unpack();
+        runHost("unpacking", host().__updateUnpack);
       },
       (received, total) => {
         if (mine === turn) setProgress({ done: received, total: total || chosen.size });
@@ -144,12 +180,14 @@ export function createUpdateFlow(deps: Deps) {
     );
   };
 
-  const unpack = () => {
-    if ((host().__updateUnpack?.() ?? -1) < 0) return fail(fill(t().updateFailed, { error: "busy" }));
-    unpacking = true;
+  /** Start a host step and follow its state in `frame`. */
+  const runHost = (next: UpdateStep, start: (() => number) | undefined) => {
+    if ((start?.() ?? -1) < 0) return fail(fill(t().updateFailed, { error: "busy" }));
+    polling = true;
     batch(() => {
-      setStep("unpacking");
+      setStep(next);
       setProgress({ done: 0, total: 0 });
+      setStatus("");
     });
   };
 
@@ -158,49 +196,68 @@ export function createUpdateFlow(deps: Deps) {
       case "available":
         download();
         break;
+      case "ready":
+        runHost("installing", host().__updateInstall);
+        break;
       case "failed":
       case "current":
         check();
         break;
-      case "ready":
+      case "updated":
         setOpen(false);
         break;
     }
   };
 
-  /** Back out: a running step stops, an offered update is put off, else the drawer closes. */
+  /**
+   * Back out: an offered update is put off, a download stops. A host step
+   * (unpacking, installing) runs on; the drawer only closes.
+   */
   const cancelStep = () => {
     const current = release();
     if (step() === "available" && current) saveUpdateRecord({ ...loadUpdateRecord(), later: releaseKey(current) });
-    stop();
+    if (!polling) stop();
     setOpen(false);
   };
 
   /** Call once per frame. */
   const frame = () => {
-    if (offer && !open() && deps.idle()) {
-      const update = offer;
-      offer = undefined;
+    if (pending && !open() && deps.idle()) {
+      const showPending = pending;
+      pending = undefined;
       setOpen(true);
-      show(update);
+      showPending();
     }
-    if (!unpacking) return;
+    if (!polling) return;
     const [kind, ...rest] = (host().__updateState?.() ?? "error unavailable").split(" ");
-    if (kind === "busy") {
-      setProgress({ done: Number(rest[0]) || 0, total: Number(rest[1]) || 0 });
-      return;
+    switch (kind) {
+      case "busy":
+        setProgress({ done: Number(rest[0]) || 0, total: Number(rest[1]) || 0 });
+        return;
+      case "idle":
+      case "installing":
+        return;
+      case "done":
+        polling = false;
+        batch(() => {
+          setStep("ready");
+          setStatus(t().updateReady);
+        });
+        return;
+      case "installed":
+        polling = false;
+        setOpen(true);
+        setStatus(t().updateRestarting);
+        // The process ends after this frame; the updater takes over.
+        if ((host().__updateLaunch?.() ?? -1) < 0) fail(fill(t().updateInstallFailed, { error: "launch" }));
+        return;
+      default:
+        polling = false;
+        fail(fill(t().updateFailed, { error: rest.join(" ") || "unknown" }));
     }
-    if (kind === "idle") return;
-    unpacking = false;
-    if (kind === "done") {
-      batch(() => {
-        setStep("ready");
-        setStatus(t().updateReady);
-      });
-    } else fail(fill(t().updateFailed, { error: rest.join(" ") || "unknown" }));
   };
 
-  return { open, step, status, release, progress, check, checkAtStart, confirm, cancel: cancelStep, frame };
+  return { open, step, status, release, progress, check, atStart, confirm, cancel: cancelStep, frame };
 }
 
 export type UpdateFlow = ReturnType<typeof createUpdateFlow>;

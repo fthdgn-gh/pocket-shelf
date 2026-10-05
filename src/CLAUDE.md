@@ -499,7 +499,7 @@ cannot be driven. Evidence comes from its log and from files under
 ## Updates
 
 SELECT ▸ Updates: **Channel** (Stable, Beta, Nightly, Off; setting `updates`)
-and **Check for updates**. Work in progress; parts 1 to 3 of 4 are done.
+and **Check for updates**. Built; the install has not run on hardware yet.
 
 - **Build identity:** `src/tools/build-info.ts` writes `src/build-info.json`
   (ignored by git) before every shelf build, check, test and preview: the
@@ -512,9 +512,10 @@ and **Check for updates**. Work in progress; parts 1 to 3 of 4 are done.
   (`0.1.0-beta.1` < `0.1.0`); nightly compares the `shelf-nightly` release's
   `target_commitish` (the workflow sets it to the commit) with the build's.
   A build ahead of the channel is not offered the older release.
-- **At start:** at most once a day (`update.json`: `checkedAt`, `later`), on a
-  background request; an update shows its drawer once no other drawer is open.
-  "Later" stores the release so the check at start does not offer it again.
+- **At start:** the updater's report if it ran, else a check at most once a
+  day (`update.json`: `checkedAt`, `later`) on a background request; what it
+  finds opens the drawer once no other drawer is open. "Later" stores the
+  release so the check at start does not offer it again.
 - **Download:** `http.rs` accepts one more destination, `update/pocket-shelf.vpk`
   (64 MB limit, ZIP signature). GitHub answers the asset URL with one redirect.
 - **Unpack:** `update.rs` unpacks it into `update/pkg/` on a thread (stored and
@@ -522,10 +523,21 @@ and **Check for updates**. Work in progress; parts 1 to 3 of 4 are done.
   to name this title id. Checked in Vita3K (2026-10-05) with VitaShell's VPK:
   the download matched a direct download and the unpack ended with
   `title id VITASHELL`, as it should.
-- **Not done:** installing (part 4). Plan: write `sce_sys/package/head.bin`,
-  install a small helper app (`POCKTUPDR`) with the system's promoter, start
-  it, and let it promote `update/pkg/` and start Pocket Shelf again.
-  Vita3K has no promoter: hardware only.
+- **Install:** the installer (`scePromoterUtilityPromotePkgWithRif`) replaces
+  `ux0:app/POCKTSHLF`, which the running app is mounted from, so a separate
+  app installs it: **Pocket Shelf Updater** (`POCKTUPDR`, `src/updater/`,
+  **GPL-3.0** because it uses VitaShell's `makeHeadBin`, `fpkg_hmac` and
+  `head.bin`; the rest of the app stays MIT). Its build is committed in
+  `src/vita/updater/` (VPK path `updater/`, with its own `head.bin` made by
+  `src/updater/make-package.ts`, checked byte for byte against VitaShell's C);
+  rebuild with `bun run shelf:updater`. Pocket Shelf copies it to
+  `update/helper/`, installs it, starts it (`installed::launch_unlisted`) and
+  exits; the updater installs `update/pkg/`, writes `update/result.txt` and
+  starts Pocket Shelf, which shows the result, deletes `update/` and removes
+  the updater (`scePromoterUtilityDeletePkg`).
+- **Not verified:** the install. Vita3K has no promoter, so it runs on
+  hardware only, and it needs two releases on GitHub (one installed, a newer
+  one offered).
 
 ## Data folder (`ux0:/data/PocketShelf/`)
 
@@ -537,7 +549,8 @@ and **Check for updates**. Work in progress; parts 1 to 3 of 4 are done.
 last first, at most 15), `titles/<title id>.json` (per-title overrides:
 category, title, art, backdrop, favorite), `art/`, `backdrops/`,
 `steamgriddb.txt`, `update.json` (last update check, a release put off),
-`update/` (the downloaded VPK and `pkg/`, the package unpacked from it).
+`update/` (the downloaded VPK, `pkg/` unpacked from it, `helper/` while the
+updater is installed, `result.txt` from the updater).
 
 ## Category order
 
