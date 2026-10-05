@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/vita-runtime.yml"
       - "hosts/vita/**"
+      - "devices/vita/pocket-vita-gxm/**"
       - "tools/vita*.ts"
       - "tools/vita-usb/**"
       - "tests/vita*.test.ts"
@@ -20,6 +21,7 @@ on:
     paths:
       - ".github/workflows/vita-runtime.yml"
       - "hosts/vita/**"
+      - "devices/vita/pocket-vita-gxm/**"
       - "tools/vita*.ts"
       - "tools/vita-usb/**"
       - "tests/vita*.test.ts"
@@ -52,3 +54,4 @@ jobs:
       # Pure host tests: this validates protocol/package behavior, not Vita
       # hardware, GXM rendering, or kernel-driver loading.
       - run: bun test tests/vita-dev.test.ts tests/vita-package.test.ts tests/npm-package.test.ts
+      - run: cargo test --locked --manifest-path devices/vita/pocket-vita-gxm/Cargo.toml

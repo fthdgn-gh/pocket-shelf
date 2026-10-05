@@ -43,6 +43,8 @@ const SUITE: readonly Stage[] = [
     // wasm-auxiliary.test.ts loads hosts/web/pocketjs.wasm.
     prep: [["bun", "tools/wasm.ts"]],
     tests: [
+      "tests/device-lease.test.ts",
+      "tests/device-evidence.test.ts",
       "tests/release-check.test.ts",
       "tests/release-notes.test.ts",
       "tests/platform-contracts.test.ts",
@@ -58,6 +60,7 @@ const SUITE: readonly Stage[] = [
       "tests/pocket-system.test.ts",
       "tests/site-stage.test.ts",
       "tests/site-nexus.test.ts",
+      "tests/site-pocket3d.test.ts",
       "tests/site-arcade.test.ts",
       "tests/site-showcase.test.ts",
       "tests/motions-attribution.test.ts",
@@ -66,6 +69,11 @@ const SUITE: readonly Stage[] = [
       "tests/quickjs-c-harness.test.ts",
       "tests/native-source.test.ts",
       "tests/3ds-profile.test.ts",
+      "tests/pica-kernel.test.ts",
+      "tests/pocket3d-title.test.ts",
+      "tests/pocket3d-icon.test.ts",
+      "tests/pocket3d-interface.test.ts",
+      "tests/pocket3d-license.test.ts",
       "tests/media-service.test.ts",
       "tests/media.test.ts",
       "tests/service-client.test.ts",
