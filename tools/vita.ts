@@ -226,7 +226,17 @@ const applicationId =
   `dev.pocket-nexus.legacy.${outputApp.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
 const packageTitle =
   buildPlan?.app.title ?? stockDemo?.title ?? `PocketJS ${outputApp}`;
-const titleId = vitaTitleId(applicationId);
+// POCKET_VITA_TITLE_ID replaces the id derived from the manifest id, for an
+// app that wants a readable one (Pocket Shelf's `POCKTSHLF`). The system
+// accepts nine uppercase letters or digits.
+const titleIdOverride = process.env.POCKET_VITA_TITLE_ID;
+if (titleIdOverride !== undefined && !/^[A-Z0-9]{9}$/.test(titleIdOverride)) {
+  console.error(
+    `PocketJS vita: POCKET_VITA_TITLE_ID must be nine uppercase letters or digits, got "${titleIdOverride}"`,
+  );
+  process.exit(1);
+}
+const titleId = titleIdOverride ?? vitaTitleId(applicationId);
 const nativeBuild = randomBytes(16).toString("hex");
 const usb = usbDebug ? await prepareVitaUsb() : undefined;
 
