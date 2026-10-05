@@ -1507,7 +1507,7 @@ export function createLauncherState(catalog: Catalog) {
 
   timed("icons", loadIconsAround);
 
-  update.checkAtStart();
+  update.atStart();
 
   return {
     games,

@@ -171,3 +171,8 @@ set to `true` (Settings ▸ Secrets and variables ▸ Actions ▸ Variables).
 [MIT](./LICENSE), the same as PocketJS. Fonts: Space Grotesk (SIL OFL 1.1),
 Hack (MIT) and Inter (SIL OFL, in [`assets/fonts/`](./assets/fonts/)). See
 [`src/fonts/NOTICE.md`](./src/fonts/NOTICE.md).
+
+The updater app in [`src/updater/`](./src/updater/) (`POCKTUPDR`, which
+installs Pocket Shelf's updates) is a separate program under the
+[GPL-3.0](./src/updater/LICENSE): it uses VitaShell's package installer code.
+The VPK carries its build in `updater/`.

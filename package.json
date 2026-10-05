@@ -358,6 +358,7 @@
     "shelf:check": "bun src/tools/build-info.ts && bun tools/pocket.ts check --target vita && bunx tsc --noEmit",
     "shelf:test": "bun src/tools/build-info.ts && bun test ./src",
     "shelf:preview": "bun src/tools/build-info.ts && POCKET_MINIFY=1 POCKET_FONT_REGULAR=src/fonts/SpaceGrotesk-Regular.ttf POCKET_FONT_BOLD=src/fonts/SpaceGrotesk-Bold.ttf POCKET_FONT_MONO=src/fonts/Hack-Regular.ttf bun src/tools/preview.ts",
+    "shelf:updater": "bun src/updater/make-package.ts",
     "shelf:plugin": "PSPDEV=${PSPDEV:-$HOME/pspdev} && PATH=$PSPDEV/bin:$PATH make -C src/psp-boot && cp src/psp-boot/pocketshelf.prx src/vita/psp/pocketshelf.prx",
     "shelf:art": "bun src/tools/art.ts",
     "shelf:icons": "bun src/tools/icons.ts"

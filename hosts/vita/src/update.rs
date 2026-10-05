@@ -5,13 +5,29 @@
 //! `update/pkg/` on a worker thread, so the main thread keeps drawing, and
 //! checks that it is this app: its `param.sfo` must name this title id.
 //!
+//! Installing: the system's package installer replaces `ux0:app/<title id>`,
+//! which this running app is mounted from, so a separate app does it. The VPK
+//! carries that app, Pocket Shelf Updater (`app0:updater/`, built from
+//! src/updater/, GPL-3.0). `install_start` installs it with the installer
+//! (`__updateInstall`), the guest then starts it (`__updateLaunch`) and this
+//! process ends. The updater installs `update/pkg/`, writes
+//! `update/result.txt` and starts Pocket Shelf again, which reads the result
+//! (`__updateResult`) and removes the updater app.
+//!
 //! Host extras on `ui` (not spec ops):
 //!
-//!   __updateUnpack() -> 0 | -1     start unpacking; -1 while one runs
+//!   __updateUnpack() -> 0 | -1     start unpacking; -1 while a step runs
+//!   __updateInstall() -> 0 | -1    install the updater app; -1 unless unpacked
+//!   __updateLaunch() -> 0 | -1     start the updater after this frame and exit
 //!   __updateState() -> "idle"
 //!                    | "busy <files done> <files>"
-//!                    | "done <version>"   the package's APP_VER
+//!                    | "done <version>"   unpacked: the package's APP_VER
+//!                    | "installing"
+//!                    | "installed"        the updater app is ready to start
 //!                    | "error <reason>"
+//!   __updateResult() -> "" | "ok <version>" | "error <reason>"
+//!                    the updater's report, read once at start; the update
+//!                    files and the updater app are then removed
 
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
@@ -26,10 +42,17 @@ const ENTRY_MAX: usize = 64 * 1024 * 1024;
 /// The end-of-central-directory record is in the file's last 64 KiB + 22 bytes.
 const TAIL_MAX: u64 = 65_557;
 
+/// The updater app's title id (src/updater/Makefile).
+const UPDATER_ID: &str = "POCKTUPDR";
+/// Where the VPK carries the updater's package.
+const UPDATER_SOURCE: &str = "app0:updater";
+
 enum State {
     Idle,
     Busy { done: usize, total: usize },
     Done { version: String },
+    Installing,
+    Installed,
     Failed(String),
 }
 
@@ -52,7 +75,7 @@ pub fn unpack_start() -> bool {
         let Ok(mut state) = STATE.lock() else {
             return false;
         };
-        if matches!(*state, State::Busy { .. }) {
+        if matches!(*state, State::Busy { .. } | State::Installing) {
             return false;
         }
         *state = State::Busy { done: 0, total: 0 };
@@ -83,6 +106,8 @@ pub fn state() -> String {
         Ok(State::Idle) => String::from("idle"),
         Ok(State::Busy { done, total }) => format!("busy {done} {total}"),
         Ok(State::Done { version }) => format!("done {version}"),
+        Ok(State::Installing) => String::from("installing"),
+        Ok(State::Installed) => String::from("installed"),
         Ok(State::Failed(reason)) => format!("error {reason}"),
         Err(_) => String::from("error state"),
     }
@@ -246,4 +271,154 @@ fn crc32(bytes: &[u8]) -> u32 {
     !bytes
         .iter()
         .fold(!0u32, |crc, &byte| table[((crc ^ byte as u32) & 0xff) as usize] ^ (crc >> 8))
+}
+
+// --- Installing ----------------------------------------------------------------
+
+fn update_dir() -> String {
+    format!("{}/update", crate::datafs::data_dir())
+}
+
+/// Copy the files under `from` into `to`, folders included.
+fn copy_tree(from: &str, to: &str) -> Result<(), String> {
+    fs::create_dir_all(to).map_err(|_| format!("mkdir {to}"))?;
+    for entry in fs::read_dir(from).map_err(|_| format!("read {from}"))? {
+        let entry = entry.map_err(|_| format!("read {from}"))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let source = format!("{from}/{name}");
+        let target = format!("{to}/{name}");
+        if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+            copy_tree(&source, &target)?;
+        } else {
+            fs::copy(&source, &target).map_err(|_| format!("copy {name}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// The installer is part of the system's PAF library, which has to be loaded first.
+/// The argument block and options are the values the system expects for it.
+struct Promoter;
+
+impl Promoter {
+    unsafe fn open() -> Result<Self, String> {
+        use vitasdk_sys::*;
+        let mut argp: [u32; 6] = [0x18_0000, u32::MAX, u32::MAX, 1, u32::MAX, u32::MAX];
+        let mut result: i32 = -1;
+        let opt = SceSysmoduleOpt { flags: 16, result: &mut result, unused: [-1, -1] };
+        let code = sceSysmoduleLoadModuleInternalWithArg(
+            SCE_SYSMODULE_INTERNAL_PAF,
+            core::mem::size_of_val(&argp) as u32,
+            argp.as_mut_ptr().cast(),
+            &opt,
+        );
+        if code < 0 {
+            return Err(format!("paf 0x{:08x}", code as u32));
+        }
+        let code = sceSysmoduleLoadModuleInternal(SCE_SYSMODULE_INTERNAL_PROMOTER_UTIL);
+        if code < 0 {
+            Self::unload_paf();
+            return Err(format!("promoter 0x{:08x}", code as u32));
+        }
+        let code = scePromoterUtilityInit();
+        if code < 0 {
+            sceSysmoduleUnloadModuleInternal(SCE_SYSMODULE_INTERNAL_PROMOTER_UTIL);
+            Self::unload_paf();
+            return Err(format!("promoter init 0x{:08x}", code as u32));
+        }
+        Ok(Promoter)
+    }
+
+    unsafe fn unload_paf() {
+        let opt = vitasdk_sys::SceSysmoduleOpt { flags: 0, result: core::ptr::null_mut(), unused: [0, 0] };
+        vitasdk_sys::sceSysmoduleUnloadModuleInternalWithArg(
+            vitasdk_sys::SCE_SYSMODULE_INTERNAL_PAF,
+            0,
+            core::ptr::null_mut(),
+            &opt,
+        );
+    }
+}
+
+impl Drop for Promoter {
+    fn drop(&mut self) {
+        unsafe {
+            vitasdk_sys::scePromoterUtilityExit();
+            vitasdk_sys::sceSysmoduleUnloadModuleInternal(vitasdk_sys::SCE_SYSMODULE_INTERNAL_PROMOTER_UTIL);
+            Self::unload_paf();
+        }
+    }
+}
+
+fn install_updater() -> Result<(), String> {
+    let dir = format!("{}/helper", update_dir());
+    let _ = fs::remove_dir_all(&dir);
+    copy_tree(UPDATER_SOURCE, &dir)?;
+    let path = std::ffi::CString::new(dir.as_str()).map_err(|_| String::from("path"))?;
+    unsafe {
+        let _promoter = Promoter::open()?;
+        let code = vitasdk_sys::scePromoterUtilityPromotePkgWithRif(path.as_ptr(), 1);
+        if code < 0 {
+            let _ = fs::remove_dir_all(&dir);
+            return Err(format!("install updater 0x{:08x}", code as u32));
+        }
+    }
+    let _ = fs::remove_dir_all(&dir);
+    Ok(())
+}
+
+/// Install the updater app on a worker thread. False unless a package is unpacked.
+pub fn install_start() -> bool {
+    {
+        let Ok(mut state) = STATE.lock() else {
+            return false;
+        };
+        if !matches!(*state, State::Done { .. }) {
+            return false;
+        }
+        *state = State::Installing;
+    }
+    let spawned = std::thread::Builder::new()
+        .name(String::from("pocket-update"))
+        .spawn(|| match install_updater() {
+            Ok(()) => set(State::Installed),
+            Err(reason) => set(State::Failed(reason)),
+        });
+    if spawned.is_err() {
+        set(State::Failed(String::from("thread")));
+        return false;
+    }
+    true
+}
+
+/// Start the updater after this frame; this process then ends.
+pub fn launch() -> bool {
+    let ready = matches!(STATE.lock().as_deref(), Ok(State::Installed));
+    ready && unsafe { crate::installed::launch_unlisted(UPDATER_ID) }
+}
+
+/// The updater's report from its last run, read once. When there is one, or
+/// the updater app is still installed, the update files and the app are
+/// removed on a worker thread.
+pub fn take_result() -> String {
+    let dir = update_dir();
+    let path = format!("{dir}/result.txt");
+    let report = fs::read_to_string(&path).map(|text| String::from(text.trim())).unwrap_or_default();
+    let updater_left = fs::metadata(format!("ux0:/app/{UPDATER_ID}")).is_ok();
+    if !report.is_empty() || updater_left {
+        let _ = fs::remove_file(&path);
+        let _ = std::thread::Builder::new().name(String::from("pocket-update")).spawn(move || {
+            let _ = fs::remove_dir_all(&dir);
+            if updater_left {
+                if let Ok(id) = std::ffi::CString::new(UPDATER_ID) {
+                    unsafe {
+                        if let Ok(_promoter) = Promoter::open() {
+                            vitasdk_sys::scePromoterUtilityDeletePkg(id.as_ptr());
+                        }
+                    }
+                }
+            }
+        });
+    }
+    report
 }

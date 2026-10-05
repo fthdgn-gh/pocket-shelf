@@ -1144,7 +1144,40 @@ unsafe extern "C" fn js_update_unpack(
     JS_NewInt32(ctx, if crate::update::unpack_start() { 0 } else { -1 })
 }
 
-/// ui.__updateState() -> "idle" | "busy d t" | "done version" | "error reason".
+/// ui.__updateInstall() -> 0 | -1: install the updater app (hosts/vita/src/update.rs).
+#[cfg(feature = "self-update")]
+unsafe extern "C" fn js_update_install(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    JS_NewInt32(ctx, if crate::update::install_start() { 0 } else { -1 })
+}
+
+/// ui.__updateLaunch() -> 0 | -1: start the updater after this frame and exit.
+#[cfg(feature = "self-update")]
+unsafe extern "C" fn js_update_launch(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    JS_NewInt32(ctx, if crate::update::launch() { 0 } else { -1 })
+}
+
+/// ui.__updateResult() -> "" | "ok version" | "error reason": the updater's last report.
+#[cfg(feature = "self-update")]
+unsafe extern "C" fn js_update_result(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    new_js_string(ctx, &crate::update::take_result())
+}
+
+/// ui.__updateState() -> "idle" | "busy d t" | "done version" | "installing" | "installed" | "error reason".
 #[cfg(feature = "self-update")]
 unsafe extern "C" fn js_update_state(
     ctx: *mut JSContext,
@@ -1338,6 +1371,9 @@ pub unsafe fn register(
     {
         add_fn(ctx, ui_obj, b"__updateUnpack\0", js_update_unpack, 0);
         add_fn(ctx, ui_obj, b"__updateState\0", js_update_state, 0);
+        add_fn(ctx, ui_obj, b"__updateInstall\0", js_update_install, 0);
+        add_fn(ctx, ui_obj, b"__updateLaunch\0", js_update_launch, 0);
+        add_fn(ctx, ui_obj, b"__updateResult\0", js_update_result, 0);
     }
 
     // Custom box art: the texture op and the folder the files go in.

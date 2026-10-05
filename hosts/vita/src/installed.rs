@@ -613,6 +613,18 @@ pub unsafe fn launch(title_id: &str) -> bool {
     true
 }
 
+/// Start `title_id` after the current frame, as `launch` does, for an app
+/// the scan does not list: Pocket Shelf's updater (`update.rs`), installed
+/// moments before. Only called with that constant id.
+#[cfg(feature = "self-update")]
+pub(crate) unsafe fn launch_unlisted(title_id: &str) -> bool {
+    let Ok(uri) = CString::new(format!("psgm:play?titleid={title_id}")) else {
+        return false;
+    };
+    LAUNCHED = Some(Launch { uri, flags: LAUNCH_FLAGS, repeat: true, adrenaline: false });
+    true
+}
+
 /// Send an accepted launch and end this process. Called by main once the
 /// frame that made the request has presented.
 ///
