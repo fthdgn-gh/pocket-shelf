@@ -10,7 +10,7 @@ Pocket Shelf is written in TypeScript with Solid and runs on
 of PocketJS: the app lives in [`src/`](./src/), and the rest is the framework
 and its Vita host.
 
-- Title id `PBCF7609D`, app id `dev.fthdgn.pocket-shelf`
+- Title id `POCKTSHLF`, app id `dev.fthdgn.pocket-shelf`
 - Version 0.1.0
 
 <p align="center">

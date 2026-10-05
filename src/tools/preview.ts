@@ -322,7 +322,7 @@ function installHost(ops: Record<string, unknown>): void {
         platform,
         ...(NO_BUBBLE.has(id) ? { adrenaline: true } : {}),
       })),
-      current: "PBCF7609D",
+      current: "POCKTSHLF",
       resume: null,
     });
   // A fixed reading, so shots do not change with the time they are taken.

@@ -6,7 +6,7 @@ being true.
 
 ## What this is
 
-Pocket Shelf (`dev.fthdgn.pocket-shelf`, Vita title id `PBCF7609D`) is a PS Vita
+Pocket Shelf (`dev.fthdgn.pocket-shelf`, Vita title id `POCKTSHLF`) is a PS Vita
 launcher for installed titles. It lives in this `src/` folder of a fork of the
 PocketJS framework and builds from the root `pocket.json`.
 
@@ -429,8 +429,20 @@ cannot be driven. Evidence comes from its log and from files under
   2026-10-04; the 0.13.0 before it was the framework's release number).
   `tools/vita.ts` writes it to `param.sfo` as `APP_VER` (`MM.mm`, "00.01"),
   which the system shows as the app's version.
-- The title id comes from the app id in `pocket.json`. Changing the id makes a
-  new bubble and a new data folder.
+- **The title id is `POCKTSHLF`**, set by `POCKET_VITA_TITLE_ID` in the
+  `shelf:build` script (`tools/vita.ts` checks it: nine uppercase letters or
+  digits). Without it the id is derived from the app id in `pocket.json`; that
+  was `PBCF7609D` until 2026-10-05. Changing the id installs a new bubble and
+  leaves the old one; the data folder (`ux0:/data/PocketShelf/`) is fixed in
+  `datafs.rs` and stays the same.
+- **The title id must not start with `PC`.** `PCKTSHELF` was tried first: on
+  the user's Vita the VitaCheat plugin's thread crashed in the app (prefetch
+  abort, PC 0x0; the app's own thread was fine), and the app opened with
+  VitaCheat turned off. `POCKTSHLF` runs with VitaCheat on (hardware,
+  2026-10-05). Retail ids start with `PCS`; VitaCheat likely treats `PC` ids
+  as retail games. Read a `psp2dmp` with xyzz's `vita-parse-core` (Python 2;
+  under Python 3 it needs `pyelftools==0.29` and a bytes fix in `util.py`)
+  against `hosts/vita/target/armv7-sony-vita-newlibeabihf/release/pocketjs-vita.elf`.
 
 ## SteamGridDB
 

@@ -116,7 +116,7 @@ describe("categories", () => {
   test("categoryOf reads the title id prefix", () => {
     expect(categoryOf("PCSA00069")).toBe("games");
     expect(categoryOf("NPXS10001")).toBe("system");
-    expect(categoryOf("PBCF7609D")).toBe("homebrew");
+    expect(categoryOf("POCKTSHLF")).toBe("homebrew");
     expect(categoryOf("NPOA00013")).toBe(PSM_ID);
     expect(categoryOf("NPNA00042")).toBe(PSM_ID);
     // PSP and PS1 (PSX) games by the platform the host reports, whatever the id.
