@@ -188,6 +188,28 @@ export const tr: Messages = {
   },
   scanDone: "{seconds} sn içinde {count} başlık bulundu.",
 
+  // Güncellemeler (SELECT menüsü -> Güncellemeler)
+  updates: "Güncellemeler",
+  updateChannel: "Kanal",
+  updateChannels: { stable: "Kararlı", beta: "Beta", nightly: "Gecelik", off: "Kapalı" },
+  checkUpdates: "Güncellemeleri denetle",
+  checkAgain: "Yeniden denetle",
+  installedVersion: "Yüklü",
+  availableVersion: "Yeni sürüm",
+  updateDownload: "İndir",
+  updateLater: "Sonra",
+  updateChecking: "GitHub'dan en yeni sürüm soruluyor...",
+  updateCurrent: "Bu kanaldaki en yeni sürüm yüklü.",
+  updateAvailableHelp: "Yeni sürüm indirilsin mi? Sonra derseniz açılıştaki denetim bunu bir daha sormaz.",
+  updateDownloading: "İndiriliyor... {done} / {total} MB",
+  updateUnpacking: "Paket denetleniyor... {done} / {total} dosya",
+  updateReady: "İndirildi ve denetlendi. Bu sürüm onu henüz yükleyemiyor.",
+  updateUnreachable: "GitHub'a ulaşılamadı ({error}).",
+  updateBadReply: "GitHub beklenmeyen bir yanıt gönderdi (HTTP {status}).",
+  updateFailed: "Paket kullanılamıyor ({error}).",
+  updateOff: "Güncellemeler kapalı. Önce bir kanal seçin.",
+  updateNotSupported: "Bu sürüm güncelleme indiremiyor.",
+
   // Adrenaline başlatma eklentisi
   adrTitle: "Adrenaline eklentisi",
   adrAdd: "Eklentiyi ekle",

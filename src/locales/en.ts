@@ -204,6 +204,28 @@ export const en = {
   },
   scanDone: "{count} titles found in {seconds} s.",
 
+  // Updates (SELECT menu -> Updates)
+  updates: "Updates",
+  updateChannel: "Channel",
+  updateChannels: { stable: "Stable", beta: "Beta", nightly: "Nightly", off: "Off" },
+  checkUpdates: "Check for updates",
+  checkAgain: "Check again",
+  installedVersion: "Installed",
+  availableVersion: "Available",
+  updateDownload: "Download",
+  updateLater: "Later",
+  updateChecking: "Asking GitHub for the newest release...",
+  updateCurrent: "This is the newest release on this channel.",
+  updateAvailableHelp: "Download the new release? A check at start does not offer it again after Later.",
+  updateDownloading: "Downloading... {done} of {total} MB",
+  updateUnpacking: "Checking the package... {done} of {total} files",
+  updateReady: "Downloaded and checked. This build cannot install it yet.",
+  updateUnreachable: "Could not reach GitHub ({error}).",
+  updateBadReply: "GitHub sent an unexpected reply (HTTP {status}).",
+  updateFailed: "The package cannot be used ({error}).",
+  updateOff: "Updates are off. Choose a channel first.",
+  updateNotSupported: "This build cannot download updates.",
+
   // Adrenaline's boot plugin
   adrTitle: "Adrenaline plugin",
   adrAdd: "Add plugin",

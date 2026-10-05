@@ -13,8 +13,8 @@ PocketJS framework and builds from the root `pocket.json`.
 - `origin` is `fthdgn-gh/pocket-shelf`. `upstream` is `pocket-stack/pocketjs`.
 - `apps/*` are upstream demos. `apps/hero` is imported by six device demos and
   `apps/launcher` is upstream's own "Pocket Launcher". Do not repurpose either.
-- The Vita host support is in `hosts/vita/src/` behind four cargo features:
-  `installed-apps`, `data-fs`, `http`, `status`.
+- The Vita host support is in `hosts/vita/src/` behind five cargo features:
+  `installed-apps`, `data-fs`, `http`, `status`, `self-update`.
 
 ## How we work
 
@@ -496,6 +496,37 @@ cannot be driven. Evidence comes from its log and from files under
   (`withoutFiles`). "Delete" is pressed twice. A title that is no longer
   installed still counts as using its files.
 
+## Updates
+
+SELECT ▸ Updates: **Channel** (Stable, Beta, Nightly, Off; setting `updates`)
+and **Check for updates**. Work in progress; parts 1 to 3 of 4 are done.
+
+- **Build identity:** `src/tools/build-info.ts` writes `src/build-info.json`
+  (ignored by git) before every shelf build, check, test and preview: the
+  version from a `shelf-v<version>` tag (CI's `GITHUB_REF_NAME`), else
+  `pocket.json`'s; the channel (`stable`/`beta` from the tag, `nightly` for
+  other CI builds, `local` here); the commit. A fresh install checks its own
+  channel; a local build defaults to Off.
+- **Check:** `src/updates.ts` reads `api.github.com/repos/fthdgn-gh/pocket-shelf/releases?per_page=10`
+  (no key; 60 requests an hour per address). Stable and beta compare versions
+  (`0.1.0-beta.1` < `0.1.0`); nightly compares the `shelf-nightly` release's
+  `target_commitish` (the workflow sets it to the commit) with the build's.
+  A build ahead of the channel is not offered the older release.
+- **At start:** at most once a day (`update.json`: `checkedAt`, `later`), on a
+  background request; an update shows its drawer once no other drawer is open.
+  "Later" stores the release so the check at start does not offer it again.
+- **Download:** `http.rs` accepts one more destination, `update/pocket-shelf.vpk`
+  (64 MB limit, ZIP signature). GitHub answers the asset URL with one redirect.
+- **Unpack:** `update.rs` unpacks it into `update/pkg/` on a thread (stored and
+  deflate entries, CRC-32 checked, no `..` paths) and requires its `param.sfo`
+  to name this title id. Checked in Vita3K (2026-10-05) with VitaShell's VPK:
+  the download matched a direct download and the unpack ended with
+  `title id VITASHELL`, as it should.
+- **Not done:** installing (part 4). Plan: write `sce_sys/package/head.bin`,
+  install a small helper app (`POCKTUPDR`) with the system's promoter, start
+  it, and let it promote `update/pkg/` and start Pocket Shelf again.
+  Vita3K has no promoter: hardware only.
+
 ## Data folder (`ux0:/data/PocketShelf/`)
 
 `titles.tsv` (the host's list of installed titles; deleting it forces a scan),
@@ -505,7 +536,8 @@ cannot be driven. Evidence comes from its log and from files under
 `categories.json`, `recent.json` (title ids, the one started
 last first, at most 15), `titles/<title id>.json` (per-title overrides:
 category, title, art, backdrop, favorite), `art/`, `backdrops/`,
-`steamgriddb.txt`.
+`steamgriddb.txt`, `update.json` (last update check, a release put off),
+`update/` (the downloaded VPK and `pkg/`, the package unpacked from it).
 
 ## Category order
 

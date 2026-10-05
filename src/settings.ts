@@ -4,6 +4,7 @@ import { FONTS, type FontId } from "./text.ts";
 import { THEMES, type ThemeId } from "./themes.ts";
 import { DETAIL_LEVELS, VIEW_MODES } from "./navigation.ts";
 import type { ClockFormat, ConfirmMode, DetailLevel, ViewMode } from "./types.ts";
+import { UPDATE_CHANNELS, type UpdateChannel } from "./updates.ts";
 
 export interface Settings {
   language: Language;
@@ -21,6 +22,8 @@ export interface Settings {
   clock: ClockFormat;
   /** Whether the battery shows its charge as a number. */
   batteryPercent: boolean;
+  /** Which releases the app checks GitHub for (src/updates.ts). */
+  updates: UpdateChannel;
   /** Category and title that were selected when the settings were last saved. */
   category?: string;
   title?: string;
@@ -51,6 +54,7 @@ export function loadSettings(): Partial<Settings> | null {
     if (typeof raw.statusBar === "boolean") result.statusBar = raw.statusBar;
     if (CLOCK_FORMATS.includes(raw.clock as ClockFormat)) result.clock = raw.clock;
     if (typeof raw.batteryPercent === "boolean") result.batteryPercent = raw.batteryPercent;
+    if (UPDATE_CHANNELS.includes(raw.updates as UpdateChannel)) result.updates = raw.updates;
     if (typeof raw.category === "string") result.category = raw.category;
     if (typeof raw.title === "string") result.title = raw.title;
     return result;

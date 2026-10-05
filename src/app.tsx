@@ -30,6 +30,7 @@ import { OnlineOverlay } from "./components/online.tsx";
 import { RescanOverlay } from "./components/rescan.tsx";
 import { ScanPage } from "./components/scan-page.tsx";
 import { ScrapeOverlay } from "./components/scrape.tsx";
+import { UpdateOverlay } from "./components/update.tsx";
 import { setupDone, timed } from "./diagnostics.ts";
 import { fill } from "./i18n.ts";
 import { installInput } from "./input.ts";
@@ -152,6 +153,9 @@ function Shelf() {
       </Show>
       <Show when={state.modal() === "rescan"}>
         <RescanOverlay state={state} />
+      </Show>
+      <Show when={state.update.open()}>
+        <UpdateOverlay state={state} />
       </Show>
       <Show when={state.modal() === "diagnostics"}>
         <DiagnosticsOverlay state={state} />

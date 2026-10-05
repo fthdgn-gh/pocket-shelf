@@ -51,6 +51,8 @@ import {
 } from "./overrides.ts";
 import { loadRecent, pushRecent, saveRecent } from "./recent.ts";
 import { createScrapeFlow, type ScrapeScope } from "./scrape.ts";
+import { createUpdateFlow } from "./update-flow.ts";
+import { DEFAULT_CHANNEL, UPDATE_CHANNELS, type UpdateChannel } from "./updates.ts";
 import { searchTitles } from "./search.ts";
 import { CLOCK_FORMATS, loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
@@ -100,6 +102,7 @@ export type Modal =
   | "scrape"
   | "clean"
   | "rescan"
+  | "update"
   | "diagnostics";
 
 /** What the file picker is choosing: a title's icon or its backdrop. */
@@ -258,6 +261,7 @@ export function createLauncherState(catalog: Catalog) {
   const [statusBarOn, setStatusBarOn] = createSignal(saved?.statusBar ?? true);
   const [clockFormat, setClockFormat] = createSignal<ClockFormat>(saved?.clock ?? "system");
   const [batteryPercentOn, setBatteryPercentOn] = createSignal(saved?.batteryPercent ?? true);
+  const [updateChannel, setUpdateChannel] = createSignal<UpdateChannel>(saved?.updates ?? DEFAULT_CHANNEL);
 
   // The launcher process ends when a title starts, so the selection is saved
   // with the settings and restored on the next start.
@@ -285,6 +289,7 @@ export function createLauncherState(catalog: Catalog) {
       statusBar: statusBarOn(),
       clock: clockFormat(),
       batteryPercent: batteryPercentOn(),
+      updates: updateChannel(),
       category,
       title: game?.id,
     });
@@ -304,6 +309,7 @@ export function createLauncherState(catalog: Catalog) {
         statusBarOn,
         clockFormat,
         batteryPercentOn,
+        updateChannel,
       ],
       persist,
       { defer: true },
@@ -616,6 +622,7 @@ export function createLauncherState(catalog: Catalog) {
     pumpBackdrops();
     online.frame();
     scrape.frame();
+    update.frame();
     if (iconsPending && ++iconWait >= ICON_RETRY) {
       iconWait = 0;
       iconsPending = false;
@@ -711,6 +718,12 @@ export function createLauncherState(catalog: Catalog) {
         break;
       case "rescan":
         openRescan();
+        break;
+      case "updateChannel":
+        setUpdateChannel((channel) => cycle(UPDATE_CHANNELS, channel, delta));
+        break;
+      case "checkUpdates":
+        update.check();
         break;
       case "confirm":
         toggleConfirm();
@@ -1094,6 +1107,12 @@ export function createLauncherState(catalog: Catalog) {
       .map((item) => ({ id: item.id, label: item.label, titles: titlesOf(item.id) }))
       .filter((item) => item.titles.length > 0),
   ];
+  const update = createUpdateFlow({
+    t,
+    channel: updateChannel,
+    idle: () => modal() === null,
+  });
+
   const scrape = createScrapeFlow({
     t,
     scopes: scrapeScopes,
@@ -1356,6 +1375,7 @@ export function createLauncherState(catalog: Catalog) {
     if (artOpen()) return "art";
     if (online.open()) return "online";
     if (scrape.open()) return "scrape";
+    if (update.open()) return "update";
     if (cleanOpen()) return "clean";
     if (rescanOpen()) return "rescan";
     if (diagnosticsOpen()) return "diagnostics";
@@ -1430,6 +1450,9 @@ export function createLauncherState(catalog: Catalog) {
       case "scrape":
         scrape.confirm();
         break;
+      case "update":
+        update.confirm();
+        break;
       case "clean":
         cleanConfirm();
         break;
@@ -1458,6 +1481,9 @@ export function createLauncherState(catalog: Catalog) {
       case "scrape":
         scrape.cancel();
         break;
+      case "update":
+        update.cancel();
+        break;
       case "clean":
         closeCleanup();
         break;
@@ -1480,6 +1506,8 @@ export function createLauncherState(catalog: Catalog) {
   };
 
   timed("icons", loadIconsAround);
+
+  update.checkAtStart();
 
   return {
     games,
@@ -1559,6 +1587,8 @@ export function createLauncherState(catalog: Catalog) {
     pickerKind,
     online,
     scrape,
+    update,
+    updateChannel,
     cleanRow,
     cleanEvery,
     cleanArmed,
