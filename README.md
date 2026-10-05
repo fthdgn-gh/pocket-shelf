@@ -13,6 +13,14 @@ and its Vita host.
 - Title id `PBCF7609D`, app id `dev.fthdgn.pocket-shelf`
 - Version 0.1.0
 
+<p align="center">
+  <img src="./src/screenshots/carousel.png" width="720" alt="Pocket Shelf's carousel view on the PS Mobile tab: the selected title's icon enlarged in an accent frame, its name below, the tabs, status bar and button hints along the edges." />
+</p>
+
+| Grid | List |
+| --- | --- |
+| ![The grid view on the Games tab: two rows of five title icons with the selected one framed, its name and title id below.](./src/screenshots/grid.png) | ![The list view on the Homebrew tab: title rows with small icons, the selected row highlighted over its backdrop.](./src/screenshots/list.png) |
+
 ## Features
 
 - **Tabs per kind of title:** Games, Homebrew, PS Mobile, PSP, PSX and System,
