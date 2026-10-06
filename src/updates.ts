@@ -26,6 +26,8 @@ export const NIGHTLY_TAG = "shelf-nightly";
 const VPK_NAME = "pocket-shelf.vpk";
 /** Where the download goes, under the data folder. hosts/vita/src/http.rs allows only this name. */
 export const UPDATE_FILE = "update/pocket-shelf.vpk";
+/** The release's version for the updater's screen (src/updater/main.c reads it). */
+export const UPDATE_VERSION_FILE = "update/version.txt";
 
 /** A release that can be installed. */
 export interface Release {

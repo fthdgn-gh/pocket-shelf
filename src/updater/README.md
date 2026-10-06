@@ -16,9 +16,10 @@ share files on disk and start each other.
 2. Pocket Shelf copies `app0:updater/` (this program's package, built into
    `src/vita/updater/`) to `update/helper/`, installs it with the package
    installer, starts it and exits.
-3. The updater checks that `update/pkg/` is Pocket Shelf (`TITLE_ID` is
+3. The updater reads the release's version from `update/version.txt` (written
+   by Pocket Shelf, shown on its screen), checks that `update/pkg/` is Pocket Shelf (`TITLE_ID` is
    `POCKTSHLF`), writes `sce_sys/package/head.bin`, installs the package,
-   writes `update/result.txt` (`ok <APP_VER>` or `error <step> <code>`) and
+   writes `update/result.txt` (`ok` or `error <step> <code>`) and
    starts Pocket Shelf.
 4. Pocket Shelf shows the result, deletes `update/` and removes the updater
    app.

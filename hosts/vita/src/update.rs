@@ -25,7 +25,7 @@
 //!                    | "installing"
 //!                    | "installed"        the updater app is ready to start
 //!                    | "error <reason>"
-//!   __updateResult() -> "" | "ok <version>" | "error <reason>"
+//!   __updateResult() -> "" | "ok" | "error <reason>"
 //!                    the updater's report, read once at start; the update
 //!                    files and the updater app are then removed
 
