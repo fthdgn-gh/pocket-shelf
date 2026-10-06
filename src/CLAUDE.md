@@ -499,7 +499,7 @@ cannot be driven. Evidence comes from its log and from files under
 ## Updates
 
 SELECT ▸ Updates: **Channel** (Stable, Beta, Nightly, Off; setting `updates`)
-and **Check for updates**. Built; the install has not run on hardware yet.
+and **Check for updates**. The install works on hardware.
 
 - **Build identity:** `src/tools/build-info.ts` writes `src/build-info.json`
   (ignored by git) before every shelf build, check, test and preview: the
@@ -532,12 +532,17 @@ and **Check for updates**. Built; the install has not run on hardware yet.
   `src/updater/make-package.ts`, checked byte for byte against VitaShell's C);
   rebuild with `bun run shelf:updater`. Pocket Shelf copies it to
   `update/helper/`, installs it, starts it (`installed::launch_unlisted`) and
-  exits; the updater installs `update/pkg/`, writes `update/result.txt` and
+  exits; the updater installs `update/pkg/` (its screen shows the version
+  Pocket Shelf wrote to `update/version.txt`; `APP_VER` holds only `MM.mm`),
+  writes `update/result.txt` (`ok` or `error ...`) and
   starts Pocket Shelf, which shows the result, deletes `update/` and removes
   the updater (`scePromoterUtilityDeletePkg`).
-- **Not verified:** the install. Vita3K has no promoter, so it runs on
-  hardware only, and it needs two releases on GitHub (one installed, a newer
-  one offered).
+- **Confirmed on hardware (2026-10-06):** a release build of `main` made as
+  `GITHUB_REF_NAME=shelf-v0.1.0-beta.0 bun run shelf:build:release` was
+  offered `shelf-v0.1.0-beta.1` at start, downloaded, installed it through
+  the updater and restarted. Vita3K has no promoter, so the install runs on
+  hardware only. The first try showed nothing at start; it did after
+  `update.json` (the last check's time) was deleted.
 
 ## Data folder (`ux0:/data/PocketShelf/`)
 

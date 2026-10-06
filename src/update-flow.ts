@@ -1,17 +1,21 @@
 import { batch, createSignal } from "solid-js";
+import { writeFileSync } from "@pocketjs/framework/fs";
 import { getOps } from "@pocketjs/framework/host";
 import { fill, type Messages } from "./i18n.ts";
 import { getText, netAvailable, saveFile } from "./net.ts";
 import {
   BUILD,
+  buildLabel,
   checkDue,
   loadUpdateRecord,
   parseReleases,
   pickUpdate,
   RELEASES_URL,
   releaseKey,
+  releaseLabel,
   saveUpdateRecord,
   UPDATE_FILE,
+  UPDATE_VERSION_FILE,
   type Release,
   type UpdateChannel,
 } from "./updates.ts";
@@ -140,7 +144,8 @@ export function createUpdateFlow(deps: Deps) {
           setRelease(undefined);
           if (kind === "ok") {
             setStep("updated");
-            setStatus(fill(t().updateDone, { version: rest.join(" ") }));
+            // The running build is the one the updater installed.
+            setStatus(fill(t().updateDone, { version: buildLabel(BUILD) }));
           } else fail(fill(t().updateInstallFailed, { error: rest.join(" ") || "unknown" }));
         });
       return;
@@ -196,9 +201,17 @@ export function createUpdateFlow(deps: Deps) {
       case "available":
         download();
         break;
-      case "ready":
+      case "ready": {
+        // For the updater's screen; it leaves the version out without the file.
+        const chosen = release();
+        try {
+          if (chosen) writeFileSync(UPDATE_VERSION_FILE, releaseLabel(chosen));
+        } catch (error) {
+          console.log(`Update version not saved: ${error}`);
+        }
         runHost("installing", host().__updateInstall);
         break;
+      }
       case "failed":
       case "current":
         check();

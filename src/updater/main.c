@@ -45,6 +45,7 @@
 #define PACKAGE_DIR UPDATE_DIR "/pkg"
 #define HEAD_BIN PACKAGE_DIR "/sce_sys/package/head.bin"
 #define RESULT_FILE UPDATE_DIR "/result.txt"
+#define VERSION_FILE UPDATE_DIR "/version.txt"
 
 extern unsigned char _binary_head_bin_start;
 extern unsigned char _binary_head_bin_size;
@@ -196,7 +197,29 @@ static int promote(const char *path) {
   return res;
 }
 
-// "ok <APP_VER>" or "error <step> 0x<code>", read by Pocket Shelf at its next start.
+// The release's version ("0.1.0-beta.2"), which Pocket Shelf writes to
+// VERSION_FILE before it starts the updater; `out` gets " <version>", or ""
+// when the file is missing or holds anything but a short version.
+static void read_version(char *out, int out_size) {
+  uint8_t *text = NULL;
+  int size = 0;
+  out[0] = '\0';
+  if (read_file(VERSION_FILE, &text, &size) < 0)
+    return;
+  while (size > 0 && (text[size - 1] == '\n' || text[size - 1] == '\r' || text[size - 1] == ' '))
+    size--;
+  int valid = size > 0 && size < 40;
+  for (int i = 0; valid && i < size; i++) {
+    uint8_t c = text[i];
+    valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' || c == '-' ||
+            c == ' ' || c == '(' || c == ')';
+  }
+  if (valid)
+    snprintf(out, out_size, " %.*s", size, (const char *)text);
+  free(text);
+}
+
+// "ok" or "error <step> 0x<code>", read by Pocket Shelf at its next start.
 static void report(const char *line) {
   write_file(RESULT_FILE, line, strlen(line));
 }
@@ -207,7 +230,8 @@ static int work(SceSize args, void *argp) {
   char line[96];
   uint8_t *sfo = NULL;
   int size = 0;
-  char title_id[16] = "", content_id[48] = "", version[16] = "";
+  char title_id[16] = "", content_id[48] = "", version[48];
+  read_version(version, sizeof(version));
 
   if (read_file(PACKAGE_DIR "/sce_sys/param.sfo", &sfo, &size) < 0) {
     report("error package missing");
@@ -216,7 +240,6 @@ static int work(SceSize args, void *argp) {
   }
   sfo_string(sfo, size, "TITLE_ID", title_id, sizeof(title_id));
   sfo_string(sfo, size, "CONTENT_ID", content_id, sizeof(content_id));
-  sfo_string(sfo, size, "APP_VER", version, sizeof(version));
   free(sfo);
   if (strcmp(title_id, APP_ID) != 0) {
     report("error title id");
@@ -230,7 +253,7 @@ static int work(SceSize args, void *argp) {
     goto done;
   }
 
-  snprintf(status, sizeof(status), "Installing Pocket Shelf %s...", version);
+  snprintf(status, sizeof(status), "Installing Pocket Shelf%s...", version);
   int res = promote(PACKAGE_DIR);
   if (res < 0) {
     snprintf(line, sizeof(line), "error install 0x%08X", (unsigned)res);
@@ -238,9 +261,8 @@ static int work(SceSize args, void *argp) {
     snprintf(status, sizeof(status), "Installing failed (0x%08X).", (unsigned)res);
     goto done;
   }
-  snprintf(line, sizeof(line), "ok %s", version);
-  report(line);
-  snprintf(status, sizeof(status), "Pocket Shelf %s is installed. Starting it...", version);
+  report("ok");
+  snprintf(status, sizeof(status), "Pocket Shelf%s is installed. Starting it...", version);
 
 done:
   finished = 1;
