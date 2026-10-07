@@ -17,17 +17,19 @@ and its Vita host.
   <img src="./src/screenshots/carousel.png" width="720" alt="Pocket Shelf's carousel view on the PS Mobile tab: the selected title's icon enlarged in an accent frame, its name below, the tabs, status bar and button hints along the edges." />
 </p>
 
-| Grid | List |
-| --- | --- |
-| ![The grid view on the Games tab: two rows of five title icons with the selected one framed, its name and title id below.](./src/screenshots/grid.png) | ![The list view on the Homebrew tab: title rows with small icons, the selected row highlighted over its backdrop.](./src/screenshots/list.png) |
+| Cascade | Grid | List |
+| --- | --- | --- |
+| ![The cascade view on the PSP tab: the selected title's icon large at the left in an accent frame, the next titles shrinking and darkening to the right, its name below.](./src/screenshots/cascade.png) | ![The grid view on the Games tab: two rows of five title icons with the selected one framed, its name and title id below.](./src/screenshots/grid.png) | ![The list view on the Homebrew tab: title rows with small icons, the selected row highlighted over its backdrop.](./src/screenshots/list.png) |
 
 ## Features
 
 - **Tabs per kind of title:** Games, Homebrew, PS Mobile, PSP, PSX and System,
   with a title count on each. You can add your own categories, and rename,
   reorder or hide any of them. "Last Played" and "Favorites" fill themselves.
-- **Three views:** a carousel, a five-column grid and a list. Each has three
-  detail levels: Basic, Normal and Detailed.
+- **Four views:** a carousel, a five-column grid, a list, and a cascade after
+  the Xbox 360 dashboard: the selected title at the left and the next ones
+  shrinking to the right. Each has three detail levels: Basic, Normal and
+  Detailed.
 - **PSP and PS1 games through Adrenaline.** This covers EBOOTs in
   `PSP/GAME` and ISO and CSO images in `ISO`. Pocket Shelf boots the game with
   its own small VSH plugin, so you don't have to pick it in the XMB. Before it
@@ -41,6 +43,7 @@ and its Vita host.
   takes its colors from the selected title.
 - **Status bar** with the clock, Wi-Fi, Bluetooth and battery.
 - **Five languages:** English, Turkish, German, French and Spanish.
+- **Updates from GitHub** on the channel you pick (see [Updates](#updates)).
 
 ## Install
 
@@ -50,8 +53,8 @@ and its Vita host.
    [![Newest release](https://img.shields.io/github/v/release/fthdgn-gh/pocket-shelf?include_prereleases&sort=semver&label=newest%20release)](https://github.com/fthdgn-gh/pocket-shelf/releases)
 
    There is no stable release yet. The current one is the beta
-   [`shelf-v0.1.0-beta.1`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.1.0-beta.1)
-   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.1.0-beta.1/pocket-shelf.vpk)).
+   [`shelf-v0.1.0-beta.2`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.1.0-beta.2)
+   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.1.0-beta.2/pocket-shelf.vpk)).
    GitHub marks betas as pre-releases, so its "Latest" label does not point to
    them. Releases come in three channels:
    - **Stable:** tested on hardware.
@@ -62,6 +65,13 @@ and its Vita host.
    installed titles and shows its progress. Later starts read the saved list.
 
 After you install or remove a title, run **SELECT ▸ Library ▸ Rescan titles**.
+
+### Updates
+
+**SELECT ▸ Updates** sets the channel (Stable, Beta, Nightly or Off) and checks
+for a newer release. Pocket Shelf also checks once a day at start. To install,
+it downloads the VPK, then starts a separate app, Pocket Shelf Updater, which
+installs it, opens the new version and is removed again.
 
 ### Adrenaline (PSP and PS1 games)
 
@@ -149,7 +159,7 @@ Three GitHub Actions workflows build and publish the VPK:
 The tag's version must be the `version` in `pocket.json`:
 
 ```sh
-git tag shelf-v0.1.0-beta.1   # beta: published as a pre-release
+git tag shelf-v0.1.0-beta.2   # beta: published as a pre-release
 git tag shelf-v0.1.0          # stable: published as the latest release
 git push origin <tag>
 ```
