@@ -543,6 +543,13 @@ and **Check for updates**. The install works on hardware.
   the updater and restarted. Vita3K has no promoter, so the install runs on
   hardware only. The first try showed nothing at start; it did after
   `update.json` (the last check's time) was deleted.
+- **The updater stopped responding on hardware (2026-10-07)** while
+  installing beta.1 to beta.2: the install completed (after a restart of the
+  Vita, Pocket Shelf was the new version, showed the result and deleted
+  `update/`), but the updater froze on its last screen and did not start
+  Pocket Shelf. So it stopped after `report("ok")`: in the two seconds of
+  drawing, `vita2d_fini`, or the launch requests and exit. The same code
+  restarted Pocket Shelf in the 2026-10-06 test. Not yet known which step.
 
 ## Data folder (`ux0:/data/PocketShelf/`)
 
@@ -568,7 +575,10 @@ it). `cascadeSlot` gives each offset's place. **Transitions follow class
 changes only, not `style` props**, so the tiles are tweened with `animate`
 (240 ms) when the offset changes; a tile mounts in its place. One tile before
 the selection stays mounted and slides off the left. Preview shots `c1` to
-`c6`. Seen by the user in Vita3K (2026-10-07); not yet on hardware.
+`c6`. Confirmed on hardware (2026-10-07, beta.2), screenshot
+`src/screenshots/cascade.png`. **The shade covers the whole square**, so on an
+icon with clear bars (PSP icons fitted into the square) it shows as a dark box
+above and below the picture.
 
 ## Category order
 
