@@ -66,7 +66,7 @@ export const de: Messages = {
   manage: "Verwalten",
   confirm: "Bestätigen",
   language: "Sprache",
-  views: { carousel: "Karussell", grid: "Raster", list: "Liste" },
+  views: { carousel: "Karussell", grid: "Raster", list: "Liste", cascade: "Kaskade" },
   detailLevels: { basic: "Einfach", normal: "Normal", detailed: "Ausführlich" },
   themes: {
     midnight: "Mitternacht",

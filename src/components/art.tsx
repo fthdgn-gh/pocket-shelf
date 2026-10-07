@@ -23,6 +23,22 @@ const SIZES = {
     image: "w-[100] h-[100]",
     text: "text-2xl text-white font-bold",
   },
+  // Cascade tile, one size per detail level (see CASCADE in layout.ts).
+  cascadeBasic: {
+    box: "relative w-[144] h-[144] items-center justify-center",
+    image: "w-[144] h-[144]",
+    text: "text-4xl text-white font-bold",
+  },
+  cascadeNormal: {
+    box: "relative w-[128] h-[128] items-center justify-center",
+    image: "w-[128] h-[128]",
+    text: "text-4xl text-white font-bold",
+  },
+  cascadeDetailed: {
+    box: "relative w-[112] h-[112] items-center justify-center",
+    image: "w-[112] h-[112]",
+    text: "text-4xl text-white font-bold",
+  },
   // List detail pane.
   lg: {
     box: "relative w-[104] h-[104] items-center justify-center",

@@ -6,7 +6,7 @@
 //   text.ts         fonts and the text class per role
 //   catalog.ts      reads the host's installed-title table
 //   navigation.ts   view modes and D-pad movement per view
-//   views/          shelf (carousel), grid and list
+//   views/          shelf (carousel), grid, list and cascade
 //   components/     title art, header, footer, drawers, keyboard
 
 import { createSignal, onMount, Show } from "solid-js";
@@ -37,6 +37,7 @@ import { installInput } from "./input.ts";
 import { createLauncherState } from "./state.ts";
 import { fontSlot } from "./text.ts";
 import { CarouselView } from "./views/carousel.tsx";
+import { CascadeView } from "./views/cascade.tsx";
 import { GridView } from "./views/grid.tsx";
 import { ListView } from "./views/list.tsx";
 
@@ -124,6 +125,9 @@ function Shelf() {
           </Show>
           <Show when={state.view() === "list"}>
             <ListView state={state} />
+          </Show>
+          <Show when={state.view() === "cascade"}>
+            <CascadeView state={state} />
           </Show>
         </Show>
       </Show>

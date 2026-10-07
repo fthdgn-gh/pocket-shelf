@@ -557,6 +557,19 @@ category, title, art, backdrop, favorite), `art/`, `backdrops/`,
 `update/` (the downloaded VPK, `pkg/` unpacked from it, `helper/` while the
 updater is installed, `result.txt` from the updater).
 
+## Cascade view
+
+The fourth view (`views/cascade.tsx`), after the Xbox 360 dashboard of 2008
+(the "NXE"): the selected tile at the left at full size (`CASCADE` in
+`layout.ts`: 144, 128, 112 px), the next five each 80% of the one before,
+from the third on a quarter behind the tile in front, and darkened by a
+theme-colored shade (not opacity, which would show the tile behind through
+it). `cascadeSlot` gives each offset's place. **Transitions follow class
+changes only, not `style` props**, so the tiles are tweened with `animate`
+(240 ms) when the offset changes; a tile mounts in its place. One tile before
+the selection stays mounted and slides off the left. Preview shots `c1` to
+`c6`. Not yet seen in Vita3K or on hardware.
+
 ## Category order
 
 The default tab order is `BUILTIN_CATEGORIES` in `categories.ts`: Games,
