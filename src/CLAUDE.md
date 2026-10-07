@@ -568,7 +568,7 @@ it). `cascadeSlot` gives each offset's place. **Transitions follow class
 changes only, not `style` props**, so the tiles are tweened with `animate`
 (240 ms) when the offset changes; a tile mounts in its place. One tile before
 the selection stays mounted and slides off the left. Preview shots `c1` to
-`c6`. Not yet seen in Vita3K or on hardware.
+`c6`. Seen by the user in Vita3K (2026-10-07); not yet on hardware.
 
 ## Category order
 
