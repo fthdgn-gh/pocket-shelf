@@ -1,8 +1,8 @@
 import type { FocusDirection } from "@pocketjs/framework/input";
-import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, listRows } from "./layout.ts";
+import { CASCADE_DEPTH, GRID_COLUMNS, GRID_ROWS, LIST_ROWS, listRows } from "./layout.ts";
 import type { DetailLevel, ViewMode } from "./types.ts";
 
-export const VIEW_MODES: readonly ViewMode[] = ["carousel", "grid", "list"];
+export const VIEW_MODES: readonly ViewMode[] = ["carousel", "grid", "list", "cascade"];
 export const DETAIL_LEVELS: readonly DetailLevel[] = ["basic", "normal", "detailed"];
 
 /** Items the L and R triggers jump over in each view. The list shows a row less under the status bar. */
@@ -16,6 +16,8 @@ export function pageSize(view: ViewMode, statusBar = false): number {
 export function iconRadius(view: ViewMode): number {
   if (view === "grid") return GRID_COLUMNS * 2;
   if (view === "list") return LIST_ROWS + 2;
+  // The cascade shows its tiles after the selected one only.
+  if (view === "cascade") return CASCADE_DEPTH + 1;
   // Two full tiles show on each side of the selected one, and part of a third.
   return 3;
 }
@@ -38,7 +40,7 @@ export function moveSelection(
   const step = direction === "left" || direction === "up" ? -1 : 1;
   const horizontal = direction === "left" || direction === "right";
   let next: number | null = null;
-  if (view === "carousel") {
+  if (view === "carousel" || view === "cascade") {
     next = horizontal ? index + step : null;
   } else if (view === "list") {
     next = horizontal ? null : index + step;

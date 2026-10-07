@@ -674,6 +674,19 @@ const SHOTS: Shot[] = [
   { name: "61-wrap-list", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.UP, [0, 30]] },
   // A held direction stops at the end.
   { name: "62-hold-stops", steps: [...tabTo(SYSTEM_ID), [BTN.RIGHT, 120], [0, 30]] },
+  // The cascade: SELECT, down to "View", right three times.
+  { name: "c1-cascade", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
+  { name: "c2-cascade-first", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT] },
+  {
+    name: "c3-cascade-detailed",
+    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2)],
+  },
+  {
+    name: "c4-cascade-basic",
+    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.DOWN, ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.RIGHT],
+  },
+  { name: "c5-cascade-long", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, ...tabTo("homebrew"), [BTN.RIGHT, 300], [0, 30]] },
+  { name: "c6-cascade-wrap", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, BTN.LEFT, [0, 30]] },
   // After fetching for a category: the box art picker lists the title's own
   // file and shows the highlighted one beside the drawer.
   {

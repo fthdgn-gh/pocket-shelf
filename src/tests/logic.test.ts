@@ -7,7 +7,17 @@ import { cleanTitle, isListed } from "../catalog.ts";
 import { BUILTIN_CATEGORIES, PSM_ID, PSP_ID, PSX_ID, SYSTEM_ID, categoryOf, cycleCategory, isPsmId, makeCategoryId } from "../categories.ts";
 import { LANGUAGES, MESSAGES, fill, upper } from "../i18n.ts";
 import { ACCENTS_FIRST, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn } from "../keyboard.ts";
-import { GRID_COLUMNS, GRID_ROWS, LIST_ROWS, LIST_ROWS_UNDER_STATUS, SHELF, carouselLayout } from "../layout.ts";
+import {
+  CASCADE,
+  CASCADE_DEPTH,
+  GRID_COLUMNS,
+  GRID_ROWS,
+  LIST_ROWS,
+  LIST_ROWS_UNDER_STATUS,
+  SHELF,
+  carouselLayout,
+  cascadeSlot,
+} from "../layout.ts";
 import { MENU, menuPath, parentPage, type MenuPage } from "../menu-items.ts";
 import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
 import { filesInUse, withoutFiles } from "../overrides.ts";
@@ -109,6 +119,39 @@ describe("paging and icon loading", () => {
     expect(iconRadius("grid")).toBeGreaterThanOrEqual(GRID_COLUMNS * GRID_ROWS);
     expect(iconRadius("list")).toBeGreaterThanOrEqual(LIST_ROWS);
     expect(iconRadius("carousel")).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("cascade", () => {
+  test("moves on the horizontal axis, like the shelf", () => {
+    expect(moveSelection("cascade", "right", 0, 3)).toBe(1);
+    expect(moveSelection("cascade", "down", 0, 3)).toBeNull();
+    expect(moveSelection("cascade", "right", 2, 3, true)).toBe(0);
+  });
+
+  test("the selected tile is in front, at full size, and later tiles recede", () => {
+    for (const detail of ["basic", "normal", "detailed"] as const) {
+      const selected = cascadeSlot(detail, 0);
+      expect(selected).toMatchObject({ scale: 1, opacity: 1, shade: 0 });
+      let previous = selected;
+      for (let offset = 1; offset <= CASCADE_DEPTH; offset++) {
+        const slot = cascadeSlot(detail, offset);
+        expect(slot.x).toBeGreaterThan(previous.x);
+        expect(slot.scale).toBeLessThan(previous.scale);
+        expect(slot.shade).toBeGreaterThan(previous.shade);
+        expect(slot.z).toBeLessThan(previous.z);
+        previous = slot;
+      }
+      // The second tile starts past the selected one's right edge.
+      expect(cascadeSlot(detail, 1).x).toBeGreaterThan(selected.x + CASCADE[detail].tile);
+      expect(cascadeSlot(detail, CASCADE_DEPTH + 1).opacity).toBe(0);
+      expect(cascadeSlot(detail, -1).opacity).toBe(0);
+      expect(cascadeSlot(detail, -1).x + CASCADE[detail].tile).toBeLessThan(0);
+    }
+  });
+
+  test("icons load for every tile it shows", () => {
+    expect(iconRadius("cascade")).toBeGreaterThanOrEqual(CASCADE_DEPTH);
   });
 });
 

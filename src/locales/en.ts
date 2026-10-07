@@ -74,7 +74,7 @@ export const en = {
   manage: "Manage",
   confirm: "Confirm",
   language: "Language",
-  views: { carousel: "Carousel", grid: "Grid", list: "List" },
+  views: { carousel: "Carousel", grid: "Grid", list: "List", cascade: "Cascade" },
   detailLevels: { basic: "Basic", normal: "Normal", detailed: "Detailed" },
   themes: {
     midnight: "Midnight",

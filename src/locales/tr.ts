@@ -66,7 +66,7 @@ export const tr: Messages = {
   manage: "Yönet",
   confirm: "Onay",
   language: "Dil",
-  views: { carousel: "Şerit", grid: "Izgara", list: "Liste" },
+  views: { carousel: "Şerit", grid: "Izgara", list: "Liste", cascade: "Kademe" },
   detailLevels: { basic: "Temel", normal: "Normal", detailed: "Ayrıntılı" },
   themes: {
     midnight: "Gece Yarısı",

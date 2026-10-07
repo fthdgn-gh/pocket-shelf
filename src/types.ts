@@ -1,4 +1,4 @@
-export type ViewMode = "carousel" | "grid" | "list";
+export type ViewMode = "carousel" | "grid" | "list" | "cascade";
 /** Built-in ids are "games", "system" and "homebrew"; smart and custom categories have their own. */
 export type CategoryId = string;
 /** How much text each title shows: none, its title, or title and title id. */
