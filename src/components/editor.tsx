@@ -2,6 +2,7 @@ import { For, Show } from "solid-js";
 import { fitTitle } from "../catalog.ts";
 import { fill } from "../i18n.ts";
 import { NO_BACKDROP } from "../overrides.ts";
+import { SCRAPER_NAMES, type ScraperId } from "../scrapers.ts";
 import type { LauncherState } from "../state.ts";
 import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
@@ -10,7 +11,7 @@ import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
 // Room for a value beside its label in a wide drawer, with its arrow.
 const VALUE_W = 160;
 
-/** Per-title editor: favorite, category, title, box art, backdrop, SteamGridDB and reset. */
+/** Per-title editor: favorite, category, title, box art, backdrop, finding artwork online, and reset. */
 export function EditorOverlay(props: { state: LauncherState }) {
   const { state } = props;
   const t = state.t;
@@ -35,7 +36,12 @@ export function EditorOverlay(props: { state: LauncherState }) {
       { label: t().title, value: fit(game?.title ?? ""), step: "right" as const },
       { label: t().boxArt, value: fit(art()), step: "right" as const },
       { label: t().backdrop, value: fit(backdrop()), step: "right" as const },
-      { label: "SteamGridDB", value: t().search, step: "right" as const },
+      {
+        label: t().findArt,
+        // The choice is a setting: Auto, SteamGridDB or libretro.
+        value: state.scraperChoice() === "auto" ? t().sourceAuto : SCRAPER_NAMES[state.scraperChoice() as ScraperId],
+        step: "both" as const,
+      },
       { label: t().reset, value: "", step: undefined },
     ];
   };

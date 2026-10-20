@@ -14,7 +14,11 @@
 //! Host extras on `ui` (not spec ops):
 //!
 //!   __netGet(url, authorization) -> id | -1    text response, at most TEXT_MAX
-//!   __netSave(url, path) -> id | -1            PNG or update VPK to <data folder>/<path>
+//!   __netSave(url, path) -> id | -1            PNG or update VPK to <data folder>/<path>;
+//!                                              for `libretro/<name>.txt`, the file
+//!                                              names a thumbnail listing page links to
+//!   __netSaveIcon(url, path) -> id | -1        a PNG fitted whole into a 128 px
+//!                                              square, to `art/<name>.png`
 //!   __netState(id) -> "busy <received> <total>"
 //!                   | "done <http status> <received>"
 //!                   | "error <reason>"
@@ -39,6 +43,8 @@ const TEXT_MAX: usize = 512 * 1024;
 const FILE_MAX: usize = 8 * 1024 * 1024;
 /// Largest update package written. A release VPK is about 2.5 MB.
 const VPK_MAX: usize = 64 * 1024 * 1024;
+/// Largest thumbnail listing page read. The NES box art page is 4 MB.
+const INDEX_MAX: usize = 16 * 1024 * 1024;
 /// The one path an update package is saved to (src/updates.ts `UPDATE_FILE`).
 pub const UPDATE_VPK: &str = "update/pocket-shelf.vpk";
 /// Requests running or waiting to be read at once.
@@ -56,6 +62,23 @@ const USER_AGENT: &str = "PocketShelf/1.0 (PS Vita)";
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 /// A VPK is a ZIP file: its first local file header.
 const ZIP_SIGNATURE: [u8; 4] = [b'P', b'K', 3, 4];
+
+/// What a request does with its response.
+#[derive(Clone, Copy, PartialEq)]
+enum Kind {
+    /// Kept in memory as text.
+    Text,
+    /// A PNG written as it is.
+    File,
+    /// A PNG fitted whole into a square icon and written as a new PNG: a
+    /// RetroArch box art is 512 px wide and up to 700 KB; the icon is 128 px.
+    Icon,
+    /// The update package.
+    Package,
+    /// A thumbnail folder's listing page (libretro's thumbnail server): read
+    /// in memory, and the file names it links to written one per line.
+    Index,
+}
 
 enum Outcome {
     Busy,
@@ -92,7 +115,8 @@ fn tls_config() -> Option<Arc<ClientConfig>> {
 }
 
 /// A file a download may be written to: `art/<name>.png` or
-/// `backdrops/<name>.png` with a plain file name, or `UPDATE_VPK`.
+/// `backdrops/<name>.png` with a plain file name, `libretro/<name>.txt` for a
+/// listing's names, or `UPDATE_VPK`.
 fn valid_dest(path: &str) -> bool {
     if path == UPDATE_VPK {
         return true;
@@ -100,11 +124,12 @@ fn valid_dest(path: &str) -> bool {
     let Some((dir, name)) = path.split_once('/') else {
         return false;
     };
-    (dir == "art" || dir == "backdrops")
+    let extension = if dir == "libretro" { ".txt" } else { ".png" };
+    (dir == "art" || dir == "backdrops" || dir == "libretro")
         && name.len() >= 5
         && name.len() <= 64
         && !name.starts_with('.')
-        && name.ends_with(".png")
+        && name.ends_with(extension)
         && name
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
@@ -121,9 +146,10 @@ fn finish(id: i32, outcome: Outcome) {
 
 /// Start a GET. `auth` is the Authorization header's value ("" for none);
 /// `dest` is a path under the data folder for a file download, or None to keep
-/// the response as text. Returns the request id, or -1 when the request is
-/// refused: not an https URL, a bad path, no free slot, or no network stack.
-pub fn start(url: &str, auth: &str, dest: Option<&str>) -> i32 {
+/// the response as text; with `icon`, a picture is fitted into a square icon
+/// first. Returns the request id, or -1 when the request is refused: not an
+/// https URL, a bad path, no free slot, or no network stack.
+pub fn start(url: &str, auth: &str, dest: Option<&str>, icon: bool) -> i32 {
     let plain = |text: &str| !text.bytes().any(|byte| byte < 0x20 || byte == 0x7f);
     if url.len() > 1024 || auth.len() > 256 || !plain(url) || !plain(auth) || parse_url(url).is_none() {
         return -1;
@@ -154,13 +180,23 @@ pub fn start(url: &str, auth: &str, dest: Option<&str>) -> i32 {
     }
     let url = String::from(url);
     let auth = String::from(auth);
-    let package = dest == Some(UPDATE_VPK);
+    let kind = match dest {
+        None => Kind::Text,
+        Some(UPDATE_VPK) => Kind::Package,
+        Some(path) if path.starts_with("libretro/") => Kind::Index,
+        Some(path) if icon && path.starts_with("art/") => Kind::Icon,
+        Some(_) => Kind::File,
+    };
+    if icon && kind != Kind::Icon {
+        close(id);
+        return -1;
+    }
     let dest = dest.map(|path| format!("{}/{path}", crate::datafs::data_dir()));
     let spawned = std::thread::Builder::new()
         .name(String::from("pocket-http"))
         .stack_size(WORKER_STACK)
         .spawn(move || {
-            let outcome = match run(id, &url, &auth, dest.as_deref(), package, &cancel) {
+            let outcome = match run(id, &url, &auth, dest.as_deref(), kind, &cancel) {
                 Ok(status) => Outcome::Done { status },
                 Err(reason) => {
                     if let Some(path) = dest.as_deref() {
@@ -276,8 +312,7 @@ fn open(url: &str, auth: &str) -> Result<(BufReader<StreamOwned<ClientConnection
 }
 
 /// The request itself, on the worker thread. Returns the HTTP status.
-/// `package` marks the update VPK, which has its own size limit and signature.
-fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, package: bool, cancel: &AtomicBool) -> Result<i32, String> {
+fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &AtomicBool) -> Result<i32, String> {
     let mut url = String::from(url);
     let mut auth = String::from(auth);
     let mut redirects = 0;
@@ -312,14 +347,16 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, package: bool, cancel
     // Only a 200 is written to disk; any other reply is kept as text so the
     // app can report it.
     let saving = dest.filter(|_| status == 200);
-    let limit = match (saving, package) {
-        (None, _) => TEXT_MAX,
-        (Some(_), false) => FILE_MAX,
-        (Some(_), true) => VPK_MAX,
+    let limit = match (saving, kind) {
+        (None, _) | (_, Kind::Text) => TEXT_MAX,
+        (Some(_), Kind::File | Kind::Icon) => FILE_MAX,
+        (Some(_), Kind::Package) => VPK_MAX,
+        (Some(_), Kind::Index) => INDEX_MAX,
     };
-    let part = saving.map(|path| format!("{path}.part"));
+    // A listing page is read in memory; everything else saved goes to a file.
+    let part = saving.filter(|_| kind != Kind::Index).map(|path| format!("{path}.part"));
     let mut file = match (&part, saving) {
-        (Some(part), Some(path)) => {
+        (Some(part), Some(path)) if kind != Kind::Index => {
             if let Some((dir, _)) = path.rsplit_once('/') {
                 let _ = fs::create_dir_all(dir);
             }
@@ -392,19 +429,78 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, package: bool, cancel
             return Err(String::from("response cut short"));
         }
     }
+    if let (Kind::Index, Some(path)) = (kind, saving) {
+        let body = with_slot(id, |slot| core::mem::take(&mut slot.body)).unwrap_or_default();
+        let names = listing_names(&String::from_utf8_lossy(&body));
+        if names.is_empty() {
+            return Err(String::from("no names in the listing"));
+        }
+        write_atomic(path, (names.join("\n") + "\n").as_bytes())?;
+    }
     if let (Some(file), Some(part), Some(path)) = (file, part, saving) {
         drop(file);
-        if package {
+        if kind == Kind::Package {
             if head[..4] != ZIP_SIGNATURE {
                 return Err(String::from("not a vpk"));
             }
         } else if received < head.len() || head != PNG_SIGNATURE {
             return Err(String::from("not a png"));
         }
-        let _ = fs::remove_file(path);
-        fs::rename(&part, path).map_err(|_| String::from("file rename"))?;
+        if kind == Kind::Icon {
+            let icon = shrink_icon(&part);
+            let _ = fs::remove_file(&part);
+            write_atomic(path, &icon?)?;
+        } else {
+            let _ = fs::remove_file(path);
+            fs::rename(&part, path).map_err(|_| String::from("file rename"))?;
+        }
     }
     Ok(status)
+}
+
+#[cfg(feature = "installed-apps")]
+fn listing_names(html: &str) -> Vec<String> {
+    crate::retroarch::index_names(html)
+}
+
+/// Without RetroArch support there are no listings to read.
+#[cfg(not(feature = "installed-apps"))]
+fn listing_names(_html: &str) -> Vec<String> {
+    Vec::new()
+}
+
+/// Write `bytes` to `path` through a `.part` file, so a reader never sees half of it.
+fn write_atomic(path: &str, bytes: &[u8]) -> Result<(), String> {
+    if let Some((dir, _)) = path.rsplit_once('/') {
+        let _ = fs::create_dir_all(dir);
+    }
+    let part = format!("{path}.part");
+    fs::write(&part, bytes).map_err(|_| String::from("file write"))?;
+    let _ = fs::remove_file(path);
+    fs::rename(&part, path).map_err(|_| String::from("file rename"))
+}
+
+/// The PNG at `path` fitted whole into a 128 px square with clear bars
+/// (`pspemu::fit_png`, as a PSP icon), encoded as an RGBA PNG.
+#[cfg(feature = "installed-apps")]
+fn shrink_icon(path: &str) -> Result<Vec<u8>, String> {
+    let bytes = fs::read(path).map_err(|_| String::from("file read"))?;
+    let (width, height, rgba) = crate::pspemu::fit_png(&bytes).ok_or_else(|| String::from("not a png it can read"))?;
+    let mut out = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut out, width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().map_err(|_| String::from("png encode"))?;
+        writer.write_image_data(&rgba).map_err(|_| String::from("png encode"))?;
+    }
+    Ok(out)
+}
+
+/// Without the PNG decoder, the picture is kept as it is.
+#[cfg(not(feature = "installed-apps"))]
+fn shrink_icon(path: &str) -> Result<Vec<u8>, String> {
+    fs::read(path).map_err(|_| String::from("file read"))
 }
 
 /// One line describing a request; see the module comment.

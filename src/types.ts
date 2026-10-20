@@ -1,3 +1,5 @@
+import type { Platform } from "./categories.ts";
+
 export type ViewMode = "carousel" | "grid" | "list" | "cascade" | "home";
 /** Built-in ids are "games", "system" and "homebrew"; smart and custom categories have their own. */
 export type CategoryId = string;
@@ -26,6 +28,8 @@ export interface Game {
   tint: number;
   /** A PSP or PS1 title with no bubble, started through Adrenaline. */
   adrenaline?: boolean;
+  /** Where the title lives, as the host reports it (vita, psm, psp, psx or retro). */
+  platform?: Platform;
   /**
    * A RetroArch game: the console's database name from RetroArch's playlist
    * (`Nintendo - Game Boy`). Its `id` is the host's (`ra` and seven digits).

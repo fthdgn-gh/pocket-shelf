@@ -33,6 +33,14 @@ import { boxColors, type BoxColors } from "./accent.ts";
 import { enablePlugin, pluginState, type PluginState } from "./adrenaline.ts";
 import { pumpNet } from "./net.ts";
 import { createOnlineFlow } from "./online.ts";
+import {
+  DEFAULT_SCRAPE_SOURCE,
+  SCRAPE_SOURCES,
+  createListings,
+  scraperFor,
+  type ScrapeSource,
+  type ScraperId,
+} from "./scrapers.ts";
 import { KEY_MAX, fileBelongsTo } from "./steamgriddb.ts";
 import { TINT_COLORS, loadCatalog, scanProgress, startScan, type Catalog, type ScanProgress } from "./catalog.ts";
 import { consoleCategories } from "./consoles.ts";
@@ -89,6 +97,8 @@ const ICON_RETRY = 2;
 
 /** Rows in the per-title editor: favorite, category, title, box art, backdrop, SteamGridDB, reset. */
 export const EDITOR_ROWS = 7;
+/** The editor's "Find artwork" row. */
+export const FIND_ART_ROW = 5;
 
 /** Art picker rows visible at once. */
 export const PICKER_ROWS = 5;
@@ -300,6 +310,8 @@ export function createLauncherState(catalog: Catalog) {
   }
   // Where the selection was when the search opened; closing it goes back there.
   let beforeSearch: { category: CategoryId; title?: string } | undefined;
+  // Where artwork is found: Auto, SteamGridDB or libretro (scrapers.ts).
+  const [scraperChoice, setScraperChoice] = createSignal<ScrapeSource>(saved?.scraper ?? DEFAULT_SCRAPE_SOURCE);
   const persist = () => {
     const game = games()[selectedIndex()];
     // A search does not outlive the process: the selected result is saved
@@ -317,6 +329,7 @@ export function createLauncherState(catalog: Catalog) {
       clock: clockFormat(),
       batteryPercent: batteryPercentOn(),
       updates: updateChannel(),
+      scraper: scraperChoice(),
       category,
       title: game?.id,
     });
@@ -337,6 +350,7 @@ export function createLauncherState(catalog: Catalog) {
         clockFormat,
         batteryPercentOn,
         updateChannel,
+        scraperChoice,
       ],
       persist,
       { defer: true },
@@ -785,6 +799,10 @@ export function createLauncherState(catalog: Catalog) {
   const editorGame = createMemo(() => allGames().find((game) => game.id === editorId()));
   const editorOpen = () => editorId() !== null;
 
+  // The scraper the editor's "Find artwork" row uses for the edited title,
+  // under the user's choice. libretro for a title its server has no folder
+  // for says so when the search starts.
+  const editorScraper = (): ScraperId => scraperFor(scraperChoice(), editorGame() ?? {}) ?? "libretro";
   const openEditor = () => {
     const game = games()[selectedIndex()];
     if (!game) return;
@@ -794,6 +812,10 @@ export function createLauncherState(catalog: Catalog) {
     setEditorRow(0);
     setEditorNote("");
   };
+  /** Step the scraper choice (Auto, SteamGridDB, libretro); it is a setting, also Fetch artwork's source. */
+  const changeScraper = (delta: number) => setScraperChoice((choice) => cycle(SCRAPE_SOURCES, choice, delta));
+  // libretro's box art names per console, shared by the editor and Fetch artwork.
+  const listings = createListings();
   const closeEditor = () => {
     setEditorId(null);
     clampSelection();
@@ -1123,6 +1145,9 @@ export function createLauncherState(catalog: Catalog) {
   const online = createOnlineFlow({
     t,
     game: editorGame,
+    label: () => baseOf(editorId() ?? "")?.title ?? "",
+    scraper: editorScraper,
+    listings,
     askText: (target, text) => openKeyboard({ kind: target }, text),
     apply: (kind, file) => {
       const game = editorGame();
@@ -1157,6 +1182,10 @@ export function createLauncherState(catalog: Catalog) {
   const scrape = createScrapeFlow({
     t,
     scopes: scrapeScopes,
+    label: (titleId) => baseOf(titleId)?.title ?? "",
+    listings,
+    source: scraperChoice,
+    setSource: setScraperChoice,
     // Start on the current category when it is one of the choices.
     startScope: () => Math.max(0, scrapeScopes().findIndex((item) => item.id === categoryId())),
     askKey: () => openKeyboard({ kind: "apiKey" }, ""),
@@ -1435,6 +1464,7 @@ export function createLauncherState(catalog: Catalog) {
         if (dy !== 0) setEditorRow((row) => (row + dy + EDITOR_ROWS) % EDITOR_ROWS);
         else if (editorRow() === 0) toggleFavorite();
         else if (editorRow() === 1) changeGameCategory(dx);
+        else if (editorRow() === FIND_ART_ROW) changeScraper(dx);
         break;
       case "keyboard":
         keyboardMove(dx, dy);
@@ -1475,7 +1505,7 @@ export function createLauncherState(catalog: Catalog) {
         else if (row === 2) openKeyboard({ kind: "title" }, editorGame()?.title ?? "");
         else if (row === 3) openArtPicker("art");
         else if (row === 4) openArtPicker("backdrop");
-        else if (row === 5) online.start();
+        else if (row === FIND_ART_ROW) online.start();
         else resetGame();
         break;
       }
@@ -1608,6 +1638,8 @@ export function createLauncherState(catalog: Catalog) {
     editorOpen,
     editorGame,
     editorRow,
+    editorScraper,
+    scraperChoice,
     editorNote,
     keyboardText,
     keyRow,

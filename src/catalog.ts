@@ -200,6 +200,7 @@ export function loadCatalog(): Catalog {
       genre: GENRES[platform],
       category: database === undefined ? categoryOf(app.id, platform) : consoleCategory(database).id,
       tint: index % TINT_COUNT,
+      platform,
     };
     if (extra.adrenaline === true) game.adrenaline = true;
     if (database !== undefined) game.console = database;

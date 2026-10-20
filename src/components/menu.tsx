@@ -1,5 +1,6 @@
 import { For } from "solid-js";
 import { LANGUAGES } from "../i18n.ts";
+import { SCRAPER_NAMES } from "../scrapers.ts";
 import { BUILD, buildLabel } from "../updates.ts";
 import { MENU_VISIBLE, type LauncherState, type MenuItem } from "../state.ts";
 import { hints, Prompt, type IconName } from "./icons.tsx";
@@ -47,8 +48,11 @@ export function MenuOverlay(props: { state: LauncherState }) {
         return { label: t().batteryPercent, value: onOff(state.batteryPercentOn()), step: "both" };
       case "categories":
         return { label: t().categoriesRow, value: t().manage, step: "right" };
-      case "fetchArt":
-        return { label: t().fetchArt, value: "SteamGridDB", step: "right" };
+      case "fetchArt": {
+        // The scraper choice, the setting Fetch artwork's Source row shows.
+        const choice = state.scraperChoice();
+        return { label: t().fetchArt, value: choice === "auto" ? t().sourceAuto : SCRAPER_NAMES[choice], step: "right" };
+      }
       case "cleanArt":
         return { label: t().cleanArt, step: "right" };
       case "rescan":

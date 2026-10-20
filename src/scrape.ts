@@ -1,7 +1,17 @@
 import { batch, createSignal } from "solid-js";
 import { listArt, listBackdrops } from "./art-files.ts";
 import { fill, type Messages } from "./i18n.ts";
+import { libretroFolder, matchName } from "./libretro.ts";
 import { getText, netAvailable, saveFile } from "./net.ts";
+import {
+  SCRAPE_SOURCES,
+  downloadCandidate,
+  libretroCandidates,
+  scraperFor,
+  type Candidate,
+  type Listings,
+  type ScrapeSource,
+} from "./scrapers.ts";
 import {
   assetFile,
   assetPath,
@@ -36,8 +46,10 @@ export interface ScrapeScope {
   titles: Game[];
 }
 
-/** Rows of the setup step: the scope, missing pictures or all of them, then "Start". */
-const SETUP_ROWS = 3;
+/** Rows of the setup step: the scope, the source, missing pictures or all of them, then "Start". */
+const SETUP_ROWS = 4;
+export const SOURCE_ROW = 1;
+export const MODE_ROW = 2;
 export const START_ROW = SETUP_ROWS - 1;
 
 /** Frames to wait before asking again after SteamGridDB said it is busy (5 s at 60 per second). */
@@ -56,6 +68,13 @@ interface Deps {
   askKey: () => void;
   /** Use a downloaded file for a title. */
   apply: (titleId: string, kind: AssetKind, file: string) => void;
+  /** The name a title came with (a RetroArch game's playlist label), which libretro matches. */
+  label: (titleId: string) => string;
+  /** libretro's box art names per console. */
+  listings: Listings;
+  /** The user's choice of scraper, and setting it from the Source row. */
+  source: () => ScrapeSource;
+  setSource: (source: ScrapeSource) => void;
 }
 
 /** Which pictures a title has no file of its own for. */
@@ -69,11 +88,16 @@ export function missingArt(game: Game): AssetKind[] {
 
 /**
  * Fetching artwork for many titles (SELECT menu -> Fetch artwork). Each title
- * is searched on SteamGridDB by its name; the first game found gives its
- * first icon and first backdrop. One request runs at a time.
+ * goes to the scraper its source gives it (`scraperFor`). On SteamGridDB it is
+ * searched by its name, and the first game found gives its first icon and
+ * first backdrop. On libretro's server a RetroArch game's name is matched in
+ * its console's box art list (`matchName`), and the box art (else the title
+ * screen) becomes the icon and the screenshot (else the title screen) the
+ * backdrop. One request runs at a time.
  */
 export function createScrapeFlow(deps: Deps) {
   const t = deps.t;
+  const source = deps.source;
   const [open, setOpen] = createSignal(false);
   const [step, setStep] = createSignal<ScrapeStep>("setup");
   const [row, setRow] = createSignal(0);
@@ -90,8 +114,11 @@ export function createScrapeFlow(deps: Deps) {
   const scope = (): ScrapeScope | undefined => deps.scopes()[scopeIndex()];
   /** The pictures to fetch for a title: the ones it lacks, or both when replacing. */
   const kindsFor = (game: Game): AssetKind[] => (replace() ? ["icon", "backdrop"] : missingArt(game));
-  /** The titles of the chosen scope the run would fetch for. */
-  const wanted = (): Game[] => (scope()?.titles ?? []).filter((game) => kindsFor(game).length > 0);
+  /** The titles of the chosen scope the run would fetch for: those the source has a scraper for. */
+  const wanted = (): Game[] =>
+    (scope()?.titles ?? []).filter((game) => kindsFor(game).length > 0 && scraperFor(source(), game) !== null);
+  // Consoles libretro's server has no folder for, found during this run.
+  const unknownFolders = new Set<string>();
 
   // The request in flight is cancelled when the run stops. `turn` also lets a
   // late callback notice that it no longer belongs to the run.
@@ -141,7 +168,92 @@ export function createScrapeFlow(deps: Deps) {
       return;
     }
     setCurrent(game.title);
-    search(game);
+    if (scraperFor(source(), game) === "libretro") libretro(game);
+    else search(game);
+  };
+
+  /** libretro: match the game in its console's box art list, then fetch its pictures. */
+  const libretro = (game: Game) => {
+    const folder = libretroFolder(game) ?? "";
+    const notFound = () => {
+      setMissing((count) => count + 1);
+      finish();
+    };
+    if (unknownFolders.has(folder)) {
+      notFound();
+      return;
+    }
+    const mine = turn;
+    setStatus(t().gettingList);
+    cancel = deps.listings.load(folder, (listing, error) => {
+      if (mine !== turn) return;
+      if (!listing) {
+        // A server reply without a list (no such console there) skips the
+        // console; a network failure would repeat for every title.
+        if (error?.startsWith("HTTP")) {
+          unknownFolders.add(folder);
+          notFound();
+        } else halt(fill(t().unreachableLibretro, { error: error ?? "" }));
+        return;
+      }
+      const name = matchName(deps.label(game.id) || game.title, listing) ?? matchName(game.title, listing);
+      if (!name) {
+        notFound();
+        return;
+      }
+      const candidates = libretroCandidates(folder, name, game);
+      fetchCandidates(game, kindsFor(game).map((kind) => [kind, candidates[kind]] as const));
+    });
+  };
+
+  /**
+   * Fetch the first candidate of each kind the server has, trying the next one
+   * on a 404, then move to the next title.
+   */
+  const fetchCandidates = (game: Game, wanted: readonly (readonly [AssetKind, readonly Candidate[]])[]) => {
+    const [first, ...rest] = wanted;
+    if (!first) {
+      finish();
+      return;
+    }
+    const [kind, candidates] = first;
+    const [candidate, ...others] = candidates;
+    if (!candidate) {
+      fetchCandidates(game, rest);
+      return;
+    }
+    const mine = turn;
+    const use = () => {
+      deps.apply(game.id, kind, candidate.file);
+      setFound((counts) => ({ ...counts, [kind]: counts[kind] + 1 }));
+      fetchCandidates(game, rest);
+    };
+    if (onDisk[kind].has(candidate.file)) {
+      use();
+      return;
+    }
+    setStatus(t().downloading);
+    cancel = downloadCandidate(
+      kind,
+      candidate,
+      (saved) => {
+        if (mine !== turn) return;
+        if (!saved.ok) {
+          halt(fill(t().downloadFailed, { error: saved.error }));
+          return;
+        }
+        if (saved.status !== 200) {
+          fetchCandidates(game, [[kind, others], ...rest]);
+          return;
+        }
+        onDisk[kind].add(candidate.file);
+        use();
+      },
+      (received, size) => {
+        if (mine !== turn || size <= 0) return;
+        setStatus(fill(t().downloadingPercent, { percent: Math.round((received * 100) / size) }));
+      },
+    );
   };
 
   const finish = () => {
@@ -247,7 +359,8 @@ export function createScrapeFlow(deps: Deps) {
       setStatus(t().noNetwork);
       return;
     }
-    if (!loadKey()) {
+    // The key is asked for only when some title goes to SteamGridDB.
+    if (!loadKey() && titles.some((game) => scraperFor(source(), game) === "steamgriddb")) {
       batch(() => {
         setStep("key");
         setStatus("");
@@ -255,6 +368,7 @@ export function createScrapeFlow(deps: Deps) {
       return;
     }
     turn++;
+    unknownFolders.clear();
     queue = [...titles];
     busyReplies = 0;
     onDisk.icon = new Set(listArt());
@@ -290,7 +404,13 @@ export function createScrapeFlow(deps: Deps) {
         setScopeIndex((value) => (value + dx + count) % count);
         setStatus("");
       });
-    } else if (row() === 1) {
+    } else if (row() === SOURCE_ROW) {
+      const count = SCRAPE_SOURCES.length;
+      batch(() => {
+        deps.setSource(SCRAPE_SOURCES[(SCRAPE_SOURCES.indexOf(source()) + dx + count) % count]!);
+        setStatus("");
+      });
+    } else if (row() === MODE_ROW) {
       batch(() => {
         setReplace((on) => !on);
         setStatus("");
@@ -334,6 +454,7 @@ export function createScrapeFlow(deps: Deps) {
     row,
     scope,
     replace,
+    source,
     wanted,
     status,
     current,

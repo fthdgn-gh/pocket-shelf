@@ -663,6 +663,55 @@ cannot be driven. Evidence comes from its log and from files under
   (`withoutFiles`). "Delete" is pressed twice. A title that is no longer
   installed still counts as using its files.
 
+## libretro thumbnails (scraper for RetroArch games)
+
+Two scrapers since 2026-10-21 (`scrapers.ts`): SteamGridDB (any title, the
+user's API key) and libretro's thumbnail server (`libretro.ts`, RetroArch
+games only, no key), the one RetroArch's "Download Thumbnails" uses.
+
+- **The scraper is the user's choice**, one setting (`scraper` in
+  `settings.json`): Auto (the default: libretro for RetroArch games,
+  SteamGridDB for the rest), SteamGridDB, or libretro (`scraperFor`). The
+  title editor's "Find artwork" row (was "SteamGridDB") and Fetch
+  artwork's Source row both show and change it. libretro covers RetroArch
+  games and, by platform, PSX and PSP games (`libretroFolder`: the
+  `Sony - PlayStation` and `Sony - PlayStation Portable` folders, 9,339 and
+  1,752 box arts); the Vita's folder holds 9 pictures, so Vita, PSM and
+  homebrew titles have none: Fetch artwork leaves them out, and the editor's
+  search says so. The SteamGridDB key is asked for only when a title in the
+  run goes to SteamGridDB. A first version picked the scraper by the title's
+  kind with no choice; the user asked for the choice.
+- **Server:** `https://thumbnails.libretro.com/<console>/Named_Boxarts|Named_Snaps|Named_Titles/<name>.png`,
+  the console being the playlist's database name (`serverFolder`: MAME
+  versions share `MAME`, the user's "Neo Geo" playlist is `SNK - Neo Geo`),
+  the name No-Intro's with `&*/:`"<>?\|` as `_`.
+- **Matching** (`matchName`): the label itself, else a name with the same
+  base (`baseName`: before the first bracket, ", The" moved, accents
+  folded, & _ and "and" dropped, letters and digits only) in the label's
+  GoodTools region (`(U)` USA, `(J)` Japan, ...) or USA, World, Europe,
+  Japan; betas, protos, hacks and unlicensed only for a label that is one.
+  Measured on the user's 5,811 games (`src/tests/libretro.test.ts`, with
+  the listings saved in `.samples/libretro-listings`): 510 by the label,
+  4,042 (70%) with the matching; their NES, SNES and Mega Drive playlists
+  use GoodTools names. Most misses are hacks, pirate multicarts and
+  translations. In Vita3K against the live server, the first 88 SNES games
+  gave 83 icons, 80 backdrops, 6 not found, in 68 s.
+- **Listings:** a console's box art listing page (4 MB for NES) is fetched
+  with `__netSave` to `libretro/<console>.txt`; `http.rs` keeps only the
+  names it links to (`retroarch::index_names`, tested natively), one per
+  line (127 KB for SNES). A listing is kept; a picture added to the server
+  later is missed until the file is deleted. A console with no folder on
+  the server is skipped for the rest of the run, not an error.
+- **Pictures:** the icon is the box art, else the title screen, saved with
+  `__netSaveIcon`, which fits it whole into a 128 px square and writes an
+  RGBA PNG (`http.rs` `shrink_icon`, `pspemu::fit_png`): 25 to 35 KB where
+  the server's box art is 450 to 700 KB, so a whole library takes tens of
+  megabytes, not gigabytes. The backdrop is the screenshot, else the title
+  screen, kept as it is (about 16 KB). Files are `<title id>-lr-box.png`,
+  `-lr-title.png`, `-lr-snap.png`; SteamGridDB's are `<title id>-<number>.png`.
+- The preview fakes the server (`LIBRETRO_NAMES`; title screens answer 404)
+  in shots `s1` to `s12`.
+
 ## Updates
 
 SELECT ▸ Updates: **Channel** (Stable, Beta, Nightly, Off; setting `updates`)

@@ -1109,7 +1109,7 @@ unsafe extern "C" fn js_net_get(
     argv: *mut JSValue,
 ) -> JSValue {
     let id = with_str_arg(ctx, argc, argv, 0, -1, |url| {
-        with_str_arg(ctx, argc, argv, 1, -1, |auth| crate::http::start(url, auth, None))
+        with_str_arg(ctx, argc, argv, 1, -1, |auth| crate::http::start(url, auth, None, false))
     });
     JS_NewInt32(ctx, id)
 }
@@ -1124,7 +1124,23 @@ unsafe extern "C" fn js_net_save(
     argv: *mut JSValue,
 ) -> JSValue {
     let id = with_str_arg(ctx, argc, argv, 0, -1, |url| {
-        with_str_arg(ctx, argc, argv, 1, -1, |path| crate::http::start(url, "", Some(path)))
+        with_str_arg(ctx, argc, argv, 1, -1, |path| crate::http::start(url, "", Some(path), false))
+    });
+    JS_NewInt32(ctx, id)
+}
+
+/// ui.__netSaveIcon(url, path) -> request id | -1. Downloads a PNG and saves
+/// it fitted whole into a 128 px square, to `art/<name>.png` under the data
+/// folder: RetroArch box art, 512 px wide, as a tile's icon.
+#[cfg(feature = "http")]
+unsafe extern "C" fn js_net_save_icon(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    argc: i32,
+    argv: *mut JSValue,
+) -> JSValue {
+    let id = with_str_arg(ctx, argc, argv, 0, -1, |url| {
+        with_str_arg(ctx, argc, argv, 1, -1, |path| crate::http::start(url, "", Some(path), true))
     });
     JS_NewInt32(ctx, id)
 }
@@ -1393,6 +1409,7 @@ pub unsafe fn register(
     {
         add_fn(ctx, ui_obj, b"__netGet\0", js_net_get, 2);
         add_fn(ctx, ui_obj, b"__netSave\0", js_net_save, 2);
+        add_fn(ctx, ui_obj, b"__netSaveIcon\0", js_net_save_icon, 2);
         add_fn(ctx, ui_obj, b"__netState\0", js_net_state, 1);
         add_fn(ctx, ui_obj, b"__netText\0", js_net_text, 1);
         add_fn(ctx, ui_obj, b"__netClose\0", js_net_close, 1);

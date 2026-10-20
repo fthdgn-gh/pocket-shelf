@@ -4,6 +4,7 @@ import { THEMES, type ThemeId } from "./themes.ts";
 import { DETAIL_LEVELS, VIEW_MODES } from "./navigation.ts";
 import type { ClockFormat, ConfirmMode, DetailLevel, ViewMode } from "./types.ts";
 import { UPDATE_CHANNELS, type UpdateChannel } from "./updates.ts";
+import { SCRAPE_SOURCES, type ScrapeSource } from "./scrapers.ts";
 
 export interface Settings {
   language: Language;
@@ -22,6 +23,8 @@ export interface Settings {
   batteryPercent: boolean;
   /** Which releases the app checks GitHub for (src/updates.ts). */
   updates: UpdateChannel;
+  /** Where artwork is found (src/scrapers.ts): Auto, SteamGridDB or libretro. */
+  scraper: ScrapeSource;
   /** Category and title that were selected when the settings were last saved. */
   category?: string;
   title?: string;
@@ -52,6 +55,7 @@ export function loadSettings(): Partial<Settings> | null {
     if (CLOCK_FORMATS.includes(raw.clock as ClockFormat)) result.clock = raw.clock;
     if (typeof raw.batteryPercent === "boolean") result.batteryPercent = raw.batteryPercent;
     if (UPDATE_CHANNELS.includes(raw.updates as UpdateChannel)) result.updates = raw.updates;
+    if (SCRAPE_SOURCES.includes(raw.scraper as ScrapeSource)) result.scraper = raw.scraper;
     if (typeof raw.category === "string") result.category = raw.category;
     if (typeof raw.title === "string") result.title = raw.title;
     return result;

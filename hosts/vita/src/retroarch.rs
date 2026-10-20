@@ -507,6 +507,55 @@ pub fn thumbnail_paths(thumbnails: &str, console: &str, label: &str, kinds: &[&s
     paths
 }
 
+/// The file names, without `.png`, that a thumbnail folder's listing page
+/// links to (`<a href="Battleship%20(USA).png">`), percent-decoded, in page
+/// order. The page of a console's box art is up to a few megabytes; the names
+/// are kept as a short list instead (`http.rs`, `libretro/<console>.txt`).
+pub fn index_names(html: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut rest = html;
+    while let Some(at) = rest.find("href=\"") {
+        rest = &rest[at + 6..];
+        let Some(end) = rest.find('"') else {
+            break;
+        };
+        let link = &rest[..end];
+        rest = &rest[end..];
+        let Some(name) = link.strip_suffix(".png") else {
+            continue;
+        };
+        if name.contains('/') || name.starts_with('?') {
+            continue;
+        }
+        if let Some(name) = percent_decode(name) {
+            if !name.is_empty() && !name.contains(['\n', '\r']) {
+                names.push(name);
+            }
+        }
+    }
+    names
+}
+
+/// `%XX` escapes decoded as UTF-8; None when the result is not UTF-8.
+fn percent_decode(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            let hex = |byte: u8| (byte as char).to_digit(16);
+            if let (Some(high), Some(low)) = (hex(bytes[index + 1]), hex(bytes[index + 2])) {
+                out.push((high * 16 + low) as u8);
+                index += 3;
+                continue;
+            }
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8(out).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -724,6 +773,33 @@ mod tests {
             count += 1;
         }
         assert!(count > 0);
+    }
+
+    #[test]
+    fn reads_names_from_a_listing_page() {
+        let html = r#"<html><body><a href="../">../</a>
+<a href="007%20Shitou%20-%20The%20Duel%20(Japan).png">007 Shitou</a>
+<a href="Pok%C3%A9mon%20-%20Red%20(USA).png">x</a>
+<a href="?C=N;O=D">Name</a><a href="notes.txt">t</a>
+<a href="Battleship%20(USA).png">Battleship (USA).png</a></body></html>"#;
+        assert_eq!(
+            index_names(html),
+            vec!["007 Shitou - The Duel (Japan)", "Pokémon - Red (USA)", "Battleship (USA)"]
+        );
+        assert_eq!(percent_decode("100%").as_deref(), Some("100%"));
+        assert_eq!(percent_decode("a%2"), Some(String::from("a%2")));
+    }
+
+    /// The listing of a console in `RETROARCH_INDEX` (set by
+    /// retroarch-test.sh to an index page downloaded beforehand) reads.
+    #[test]
+    fn reads_a_real_listing_page() {
+        let Ok(path) = std::env::var("RETROARCH_INDEX") else {
+            return;
+        };
+        let names = index_names(&fs::read_to_string(path).unwrap());
+        assert!(names.len() > 1000, "{}", names.len());
+        assert!(names.iter().any(|name| name == "Battleship (USA)"));
     }
 
     #[test]

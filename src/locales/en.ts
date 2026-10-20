@@ -174,6 +174,17 @@ export const en = {
   scrapeStopped: "Stopped.",
   scrapeNothing: "Every title here already has its artwork.",
   scrapeWaiting: "SteamGridDB is busy. Waiting...",
+  findArt: "Find artwork",
+  scrapeSource: "Source",
+  sourceAuto: "Auto",
+  gettingList: "Getting the list of pictures...",
+  notRetroArch: "libretro has pictures for RetroArch, PlayStation and PSP games only.",
+  notOnServer: "libretro has no picture of this kind for this game.",
+  unreachableLibretro: "Could not reach libretro's server ({error}).",
+  scrapeHelpAuto: "RetroArch games are looked up on libretro's thumbnail server, the others on SteamGridDB, for an icon and a backdrop. Titles that already have their own are skipped.",
+  scrapeHelpAutoAll: "RetroArch games are looked up on libretro's thumbnail server, the others on SteamGridDB; their icons and backdrops are replaced, including pictures you chose.",
+  scrapeHelpLibretro: "Looks up each RetroArch, PlayStation and PSP game on libretro's thumbnail server: its box art as the icon, a screenshot as the backdrop. Titles that already have their own are skipped; other titles are left out.",
+  scrapeHelpLibretroAll: "Looks up each RetroArch, PlayStation and PSP game on libretro's thumbnail server and replaces its icon and backdrop, including pictures you chose. Other titles are left out.",
 
   // Clean up artwork
   cleanArt: "Clean up artwork",
