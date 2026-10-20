@@ -833,7 +833,11 @@ and `components/menu.tsx` draws each row by name.
   counts. The names slide so the current one is centered between L and R
   at every press. A first version slid only when the current name left the
   view; on hardware the user saw the names "jumping back and forth". A name
-  that does not fit whole fades out (a class change, so it is animated).
+  an end of the bar cuts shows in part, faint (`CUT_OPACITY`, 0.5, times the
+  part in view), tweened with `animate` as the names slide, so the next
+  categories can be glimpsed. The engine has no blur; a gradient over the
+  ends in the theme's color was tried and showed as blocks, since the bar
+  sits over the title's backdrop and the theme's wash, not over a flat color.
 - **Five views.** Home is the default since 2026-10-21 (`DEFAULT_VIEW` in
   `navigation.ts`; a view saved in `settings.json` is kept). Carousel
   (`views/carousel.tsx`) is the shelf as before and was the default until
