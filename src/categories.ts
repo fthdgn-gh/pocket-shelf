@@ -14,6 +14,8 @@ export interface Category {
   custom?: boolean;
   /** True for a category the launcher fills itself; a title cannot be moved into it. */
   smart?: boolean;
+  /** True for a console's category of RetroArch games (`consoles.ts`), made from the title list. */
+  console?: boolean;
 }
 
 // The ids carry a prefix so they cannot match one made from a label the user
@@ -50,8 +52,11 @@ export const PSM_ID = "builtin-psm";
 export const PSP_ID = "builtin-psp";
 export const PSX_ID = "builtin-psx";
 
-/** Where a title lives, as the host reports it: the Vita's own titles, PSM, PSP or PSX (PS1 games). */
-export type Platform = "vita" | "psm" | "psp" | "psx";
+/**
+ * Where a title lives, as the host reports it: the Vita's own titles, PSM,
+ * PSP, PSX (PS1 games) or a RetroArch playlist.
+ */
+export type Platform = "vita" | "psm" | "psp" | "psx" | "retro";
 
 /** The default tab order: the system applications last. */
 export const BUILTIN_CATEGORIES: readonly Category[] = [

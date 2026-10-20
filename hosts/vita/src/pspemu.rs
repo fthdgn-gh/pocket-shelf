@@ -154,9 +154,24 @@ pub fn icon(files: &Files) -> Option<(u32, u32, Vec<u8>)> {
         Files::Pbp(title_id) => pbp_section(&eboot_path(title_id), SECTION_ICON0, PNG_MAX)?,
         Files::Image(path) => crate::iso::picture(&on_stick(path), "ICON0.PNG")?,
     };
-    let mut decoder = png::Decoder::new(&bytes[..]);
+    fit_png(&bytes)
+}
+
+/// Pictures over this many pixels are not fitted into an icon: the decoded
+/// image is held whole while it is scaled.
+const FIT_PIXELS_MAX: u64 = 4 * 1024 * 1024;
+
+/// A PNG fitted whole into a square icon texture with clear bars, as RGBA:
+/// a PSP icon, or a RetroArch box art (`retroarch.rs`). Callable from any
+/// thread.
+pub(crate) fn fit_png(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let mut decoder = png::Decoder::new(bytes);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;
+    let header = reader.info();
+    if header.width as u64 * header.height as u64 > FIT_PIXELS_MAX {
+        return None;
+    }
     let mut buffer = vec![0u8; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buffer).ok()?;
     let channels = match info.color_type {

@@ -185,6 +185,7 @@ export const es: Messages = {
     psm: "PlayStation Mobile",
     psp: "Juegos de PSP y PSX",
     images: "Imágenes de disco",
+    retro: "Listas de RetroArch",
   },
   scanDone: "{count} títulos encontrados en {seconds} s.",
 

@@ -17,6 +17,7 @@
 //! again when the guest asks. A title installed or removed since the last
 //! scan is not noticed until then.
 
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::fs;
@@ -36,17 +37,49 @@ struct Title {
     /// A game in a disc image: the image's path under Adrenaline's memory
     /// stick (`ISO/<name>.cso`).
     image: Option<String>,
+    /// A game from a RetroArch playlist (`retroarch.rs`), platform `retro`.
+    retro: Option<Retro>,
+}
+
+/// How RetroArch starts a game.
+struct Retro {
+    /// The console's database name, which the guest groups games by.
+    console: String,
+    /// The core's file name in RetroArch's app folder.
+    core: String,
+    /// The content path RetroArch opens.
+    path: String,
 }
 
 /// A platform name from the list file, as the `'static` the table uses.
 fn platform_named(name: &str) -> Option<&'static str> {
-    ["vita", "psm", "psp", "psx"].into_iter().find(|known| *known == name)
+    ["vita", "psm", "psp", "psx", "retro"].into_iter().find(|known| *known == name)
 }
 
 static mut CACHE: Option<Vec<Title>> = None;
+/// Each title id's position in `CACHE`, rebuilt with it (`set_cache`). The
+/// guest asks for icons and backdrops by id every few frames while it
+/// scrolls; with thousands of RetroArch games a walk through the list per
+/// request took a visible share of each frame.
+static mut INDEX: Option<HashMap<String, usize>> = None;
 /// Icon texture handle per title id (-1 = no usable icon). Handles belong to
 /// the process-lifetime `Ui` of a single-app VPK.
-static mut ICONS: Vec<(String, i32)> = Vec::new();
+static mut ICONS: Option<HashMap<String, i32>> = None;
+
+/// Replace the list in memory and its index.
+unsafe fn set_cache(list: Option<Vec<Title>>) {
+    INDEX = list
+        .as_ref()
+        .map(|titles| titles.iter().enumerate().map(|(index, item)| (item.title_id.clone(), index)).collect());
+    CACHE = list;
+}
+
+/// The listed title with this id, reading the list first when needed.
+unsafe fn find(title_id: &str) -> Option<&'static Title> {
+    let titles = titles();
+    let index = *INDEX.as_ref()?.get(title_id)?;
+    titles.get(index)
+}
 
 /// Title id of this VPK, when the build supplied one. It is omitted from the
 /// list so the library never offers to launch itself.
@@ -144,7 +177,7 @@ static SCAN_DONE: AtomicU32 = AtomicU32::new(0);
 static SCAN_TOTAL: AtomicU32 = AtomicU32::new(0);
 static SCAN_PHASE: AtomicU32 = AtomicU32::new(0);
 /// What the scan is reading, as `scan_state` names it.
-const SCAN_PHASES: [&str; 5] = ["apps", "system", "psm", "psp", "images"];
+const SCAN_PHASES: [&str; 6] = ["apps", "system", "psm", "psp", "images", "retro"];
 
 /// One item of the scan is read.
 pub(crate) fn scan_step() {
@@ -165,7 +198,11 @@ fn entry_count(root: &str) -> u32 {
 fn scan() -> Vec<Title> {
     SCAN_DONE.store(0, Ordering::Relaxed);
     SCAN_TOTAL.store(
-        entry_count(APP_ROOT) + entry_count(SYSTEM_ROOT) + 1 + crate::pspemu::item_count(),
+        entry_count(APP_ROOT)
+            + entry_count(SYSTEM_ROOT)
+            + 1
+            + crate::pspemu::item_count()
+            + crate::retroarch::item_count(&crate::retroarch::Roots::vita()),
         Ordering::Relaxed,
     );
     let mut titles = Vec::new();
@@ -182,7 +219,7 @@ fn scan() -> Vec<Title> {
     }
     for (title_id, title) in unsafe { crate::psm::scan(rows.as_deref()) } {
         if title_id != SELF_TITLE_ID && !titles.iter().any(|item| item.title_id == title_id) {
-            titles.push(Title { title_id, title, platform: "psm", adrenaline: false, image: None });
+            titles.push(Title { title_id, title, platform: "psm", adrenaline: false, image: None, retro: None });
         }
     }
     scan_step();
@@ -194,6 +231,23 @@ fn scan() -> Vec<Title> {
             platform: item.platform,
             adrenaline: !item.bubble,
             image: item.image,
+            retro: None,
+        });
+    }
+    // RetroArch's playlists, read last: one step per playlist file.
+    scan_phase("retro");
+    let found = crate::retroarch::scan(&crate::retroarch::Roots::vita(), &mut scan_step);
+    unsafe {
+        RETRO_REPORT = found.report;
+    }
+    for game in found.games {
+        titles.push(Title {
+            title_id: game.id,
+            title: game.title,
+            platform: "retro",
+            adrenaline: false,
+            image: None,
+            retro: Some(Retro { console: game.console, core: game.core, path: game.path }),
         });
     }
     titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
@@ -241,6 +295,7 @@ fn scan_root(root: &str, titles: &mut Vec<Title>) {
             platform: "vita",
             adrenaline: false,
             image: None,
+            retro: None,
         });
     }
 }
@@ -250,12 +305,21 @@ fn is_system(title_id: &str) -> bool {
     title_id.starts_with("NPXS")
 }
 
+/// What the last scan found in RetroArch's playlists; empty before a scan.
+static mut RETRO_REPORT: String = String::new();
+
+/// What the last scan found in RetroArch's playlists (`retroarch::scan`).
+pub unsafe fn retro_report() -> String {
+    RETRO_REPORT.clone()
+}
+
 /// First line of the list file. A file that starts otherwise is scanned over.
 /// Version 2 added PSM titles, version 3 PSP and PS1 titles and the platform
-/// column, version 4 the launch column, version 5 the image column; an older
-/// list is scanned over.
+/// column, version 4 the launch column, version 5 the image column, version 6
+/// RetroArch games (the `retroarch` launch and the console and core columns);
+/// an older list is scanned over.
 #[cfg(feature = "data-fs")]
-const LIST_HEADER: &str = "pocket-shelf titles 5";
+const LIST_HEADER: &str = "pocket-shelf titles 6";
 
 #[cfg(feature = "data-fs")]
 fn list_path() -> String {
@@ -263,9 +327,11 @@ fn list_path() -> String {
 }
 
 /// The saved list: the header, then one
-/// `<title id><TAB><platform><TAB><launch><TAB><image><TAB><title>` line per
-/// title in scan order, where launch is `uri` or `adrenaline` and image is a
-/// disc image's path under the memory stick, or empty. None when there is no usable file.
+/// `<title id><TAB><platform><TAB><launch><TAB><path><TAB><console><TAB><core><TAB><title>`
+/// line per title in scan order. Launch is `uri`, `adrenaline` or `retroarch`.
+/// Path is a disc image's path under the memory stick, or a RetroArch game's
+/// content path, else empty. Console and core are a RetroArch game's, else
+/// empty. None when there is no usable file.
 #[cfg(feature = "data-fs")]
 fn load_list() -> Option<Vec<Title>> {
     let text = fs::read_to_string(list_path()).ok()?;
@@ -275,24 +341,32 @@ fn load_list() -> Option<Vec<Title>> {
     }
     let mut titles = Vec::new();
     for line in lines {
-        let mut fields = line.splitn(5, '\t');
-        let (id, platform) = (fields.next()?, platform_named(fields.next()?)?);
-        let adrenaline = match fields.next()? {
-            "uri" => false,
-            "adrenaline" => true,
-            _ => return None,
-        };
-        let image = Some(fields.next()?).filter(|path| !path.is_empty()).map(String::from);
-        let title = fields.next()?;
+        let mut fields = line.splitn(7, '\t');
+        let (id, platform, launch) = (fields.next()?, platform_named(fields.next()?)?, fields.next()?);
+        let path = Some(fields.next()?).filter(|path| !path.is_empty()).map(String::from);
+        let (console, core, title) = (fields.next()?, fields.next()?, fields.next()?);
         if !valid_title_id(id) || title.is_empty() {
             return None;
         }
+        let (adrenaline, image, retro) = match launch {
+            "uri" => (false, path, None),
+            "adrenaline" => (true, path, None),
+            "retroarch" => {
+                let path = path?;
+                if console.is_empty() || core.is_empty() {
+                    return None;
+                }
+                (false, None, Some(Retro { console: String::from(console), core: String::from(core), path }))
+            }
+            _ => return None,
+        };
         titles.push(Title {
             title_id: String::from(id),
             title: String::from(title),
             platform,
             adrenaline,
             image,
+            retro,
         });
     }
     // An empty list is what a failed scan leaves; scan again.
@@ -309,10 +383,15 @@ fn save_list(titles: &[Title]) {
         text.push('\t');
         text.push_str(item.platform);
         text.push('\t');
-        text.push_str(if item.adrenaline { "adrenaline" } else { "uri" });
-        text.push('\t');
-        text.push_str(item.image.as_deref().unwrap_or(""));
-        text.push('\t');
+        let (launch, path, console, core) = match (&item.retro, item.adrenaline) {
+            (Some(retro), _) => ("retroarch", retro.path.as_str(), retro.console.as_str(), retro.core.as_str()),
+            (None, true) => ("adrenaline", item.image.as_deref().unwrap_or(""), "", ""),
+            (None, false) => ("uri", item.image.as_deref().unwrap_or(""), "", ""),
+        };
+        for field in [launch, path, console, core] {
+            text.push_str(field);
+            text.push('\t');
+        }
         text.push_str(&item.title);
         text.push('\n');
     }
@@ -335,11 +414,11 @@ unsafe fn titles() -> &'static [Title] {
         // The first call of this process: a boot request still here never
         // reached Adrenaline.
         crate::pspemu::forget_request();
-        CACHE = Some(load_list().unwrap_or_else(|| {
+        set_cache(Some(load_list().unwrap_or_else(|| {
             let found = scan();
             save_list(&found);
             found
-        }));
+        })));
     }
     CACHE.as_deref().unwrap_or(&[])
 }
@@ -352,7 +431,7 @@ pub unsafe fn titles_ready() -> bool {
         // The first call of this process: a boot request still here never
         // reached Adrenaline.
         crate::pspemu::forget_request();
-        CACHE = load_list();
+        set_cache(load_list());
     }
     CACHE.is_some()
 }
@@ -420,7 +499,7 @@ pub unsafe fn scan_state() -> String {
             unreachable!();
         };
         let count = found.len();
-        CACHE = Some(found);
+        set_cache(Some(found));
         *job = ScanJob::Taken(count, ms);
     }
     match &*job {
@@ -509,13 +588,13 @@ pub unsafe fn with_decrypted<R>(title_id: &str, read: impl FnOnce(&[String]) -> 
 
 /// Whether the scan found a title with this id.
 pub unsafe fn listed(title_id: &str) -> bool {
-    titles().iter().any(|item| item.title_id == title_id)
+    find(title_id).is_some()
 }
 
 /// Where a PSP or PS1 title with no bubble keeps its icon and picture (its
 /// `EBOOT.PBP` or its disc image, read by `pspemu.rs`); None for other titles.
 pub unsafe fn classic_files(title_id: &str) -> Option<crate::pspemu::Files> {
-    let item = titles().iter().find(|item| item.title_id == title_id && item.adrenaline)?;
+    let item = find(title_id).filter(|item| item.adrenaline)?;
     Some(match &item.image {
         Some(path) => crate::pspemu::Files::Image(path.clone()),
         None => crate::pspemu::Files::Pbp(String::from(title_id)),
@@ -542,7 +621,9 @@ fn push_json_str(output: &mut String, value: &str) {
 }
 
 /// spec op 39 (native flavour): `{ kind, apps: [{output, id, title, installed}],
-/// current, resume }`. `output` and `id` are both the title id.
+/// current, resume }`. `output` and `id` are both the title id. Each app also
+/// has its `platform`, `adrenaline: true` when started through Adrenaline, and
+/// a RetroArch game its `console` (the database name).
 pub unsafe fn table_json() -> String {
     let mut output = String::from("{\"kind\":\"native\",\"apps\":[");
     for (index, item) in titles().iter().enumerate() {
@@ -559,6 +640,10 @@ pub unsafe fn table_json() -> String {
         push_json_str(&mut output, item.platform);
         if item.adrenaline {
             output.push_str(",\"adrenaline\":true");
+        }
+        if let Some(retro) = &item.retro {
+            output.push_str(",\"console\":");
+            push_json_str(&mut output, &retro.console);
         }
         output.push_str(",\"installed\":true}");
     }
@@ -577,6 +662,10 @@ struct Launch {
     /// Adrenaline started for a title without a bubble: its boot request
     /// (`pspemu::request_boot`) is deleted when the system refuses the launch.
     adrenaline: bool,
+    /// RetroArch started with a game: a RetroArch still running is closed
+    /// first, since a running app is brought back as it was and does not read
+    /// the new request's parameters.
+    retroarch: bool,
 }
 
 static mut LAUNCHED: Option<Launch> = None;
@@ -586,17 +675,26 @@ static mut LAUNCHED: Option<Launch> = None;
 /// from guest-controlled text. Returns whether the id was accepted; the system
 /// gets the request in `finish_launch`.
 pub unsafe fn launch(title_id: &str) -> bool {
-    if !valid_title_id(title_id) || !titles().iter().any(|item| item.title_id == title_id) {
+    if !valid_title_id(title_id) {
         return false;
     }
-    let pbp = titles().iter().find(|item| item.title_id == title_id && item.adrenaline);
+    let Some(listed) = find(title_id) else {
+        return false;
+    };
+    let pbp = Some(listed).filter(|item| item.adrenaline);
     let adrenaline = pbp.is_some();
     if let Some(item) = pbp {
         if !crate::pspemu::request_boot(title_id, item.platform, item.image.as_deref()) {
             return false;
         }
     }
-    let (uri, flags, repeat) = if adrenaline {
+    let retro = listed.retro.as_ref();
+    let (uri, flags, repeat) = if let Some(retro) = retro {
+        if !crate::retroarch::Roots::vita().installed() {
+            return false;
+        }
+        (crate::retroarch::launch_uri(&retro.core, &retro.path), LAUNCH_FLAGS, true)
+    } else if adrenaline {
         (format!("psgm:play?titleid={}", crate::pspemu::ADRENALINE_ID), LAUNCH_FLAGS, true)
     } else if is_system(title_id) {
         match SYSTEM_URIS.iter().find(|(id, _)| *id == title_id) {
@@ -609,7 +707,7 @@ pub unsafe fn launch(title_id: &str) -> bool {
     let Ok(uri) = CString::new(uri) else {
         return false;
     };
-    LAUNCHED = Some(Launch { uri, flags, repeat, adrenaline });
+    LAUNCHED = Some(Launch { uri, flags, repeat, adrenaline, retroarch: retro.is_some() });
     true
 }
 
@@ -621,7 +719,7 @@ pub(crate) unsafe fn launch_unlisted(title_id: &str) -> bool {
     let Ok(uri) = CString::new(format!("psgm:play?titleid={title_id}")) else {
         return false;
     };
-    LAUNCHED = Some(Launch { uri, flags: LAUNCH_FLAGS, repeat: true, adrenaline: false });
+    LAUNCHED = Some(Launch { uri, flags: LAUNCH_FLAGS, repeat: true, adrenaline: false, retroarch: false });
     true
 }
 
@@ -640,6 +738,9 @@ pub unsafe fn finish_launch() {
     let Some(launch) = LAUNCHED.take() else {
         return;
     };
+    if launch.retroarch {
+        close_retroarch();
+    }
     let code = vitasdk_sys::sceAppMgrLaunchAppByUri(launch.flags, launch.uri.as_ptr());
     if code < 0 {
         crate::vita_log(format_args!(
@@ -657,6 +758,72 @@ pub unsafe fn finish_launch() {
         vitasdk_sys::sceAppMgrLaunchAppByUri(launch.flags, launch.uri.as_ptr());
     }
     vitasdk_sys::sceKernelExitProcess(0);
+}
+
+/// Close RetroArch when it is running, and wait up to a second for it to be
+/// gone. Called right before a request that starts it with a game.
+unsafe fn close_retroarch() {
+    let name = c"RETROVITA";
+    let mut pid: vitasdk_sys::SceUID = 0;
+    if vitasdk_sys::sceAppMgrGetIdByName(&mut pid, name.as_ptr()) < 0 {
+        return;
+    }
+    let code = vitasdk_sys::sceAppMgrDestroyAppByName(name.as_ptr());
+    crate::vita_log(format_args!("[PocketJS installed] RetroArch was running; close: {:#x}", code as u32));
+    for _ in 0..100 {
+        if vitasdk_sys::sceAppMgrGetIdByName(&mut pid, name.as_ptr()) < 0 {
+            return;
+        }
+        vitasdk_sys::sceKernelDelayThread(10_000);
+    }
+}
+
+/// A RetroArch game's thumbnails of the given kinds that exist, in order.
+fn retro_thumbnails(item: &Title, kinds: &[&str]) -> Vec<String> {
+    let Some(retro) = &item.retro else {
+        return Vec::new();
+    };
+    static DIR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let dir = DIR.get_or_init(|| crate::retroarch::thumbnail_dir(&crate::retroarch::Roots::vita()));
+    let mut paths = crate::retroarch::thumbnail_paths(dir, &retro.console, &item.title, kinds);
+    paths.retain(|path| path.rsplit_once('/').is_some_and(|(folder, _)| folder_exists(folder)));
+    paths
+}
+
+/// Whether a thumbnail folder exists, asked of the memory card once per
+/// folder. Without thumbnails for a console, its games then get no picture
+/// at once, with no file checks per game.
+fn folder_exists(folder: &str) -> bool {
+    static FOLDERS: std::sync::Mutex<Option<HashMap<String, bool>>> = std::sync::Mutex::new(None);
+    let Ok(mut folders) = FOLDERS.lock() else {
+        return false;
+    };
+    let folders = folders.get_or_insert_with(HashMap::new);
+    if let Some(known) = folders.get(folder) {
+        return *known;
+    }
+    let exists = fs::metadata(folder).is_ok_and(|meta| meta.is_dir());
+    folders.insert(String::from(folder), exists);
+    exists
+}
+
+/// A RetroArch game's box art (else its title screen) fitted into a square
+/// icon. Callable from any thread.
+fn retro_icon(paths: &[String]) -> Option<(u32, u32, Vec<u8>)> {
+    paths.iter().find_map(|path| {
+        if fs::metadata(path).ok()?.len() as usize > ICON_MAX {
+            return None;
+        }
+        crate::pspemu::fit_png(&fs::read(path).ok()?)
+    })
+}
+
+/// The pictures a RetroArch game may show behind the list, in order: its
+/// screenshot, else its title screen, from folders that exist. None for
+/// other titles.
+pub unsafe fn retro_backdrops(title_id: &str) -> Option<Vec<String>> {
+    let item = find(title_id).filter(|item| item.retro.is_some())?;
+    Some(retro_thumbnails(item, &["Named_Snaps", "Named_Titles"]))
 }
 
 /// The title's `icon0.png` as tightly packed RGBA: from the first folder of
@@ -747,18 +914,26 @@ fn decode_icon_exact(path: &str) -> Option<(u32, u32, Vec<u8>)> {
 /// is being decoded on a worker thread (`jobs`); the guest asks again on a
 /// later frame. Once decoded, the handle is cached per title.
 pub unsafe fn icon(ui: &mut pocketjs_core::Ui, title_id: &str) -> i32 {
-    if !titles().iter().any(|item| item.title_id == title_id) {
+    let Some(item) = find(title_id) else {
         return -1;
-    }
-    if let Some((_, handle)) = ICONS.iter().find(|(id, _)| id == title_id) {
+    };
+    let icons = ICONS.get_or_insert_with(HashMap::new);
+    if let Some(handle) = icons.get(title_id) {
         return *handle;
     }
     let title = String::from(title_id);
     let classic = classic_files(title_id);
+    let retro = item.retro.as_ref().map(|_| retro_thumbnails(item, &["Named_Boxarts", "Named_Titles"]));
+    // A RetroArch game with no thumbnail folders: no picture, and no job.
+    if retro.as_ref().is_some_and(|paths| paths.is_empty()) {
+        icons.insert(String::from(title_id), -1);
+        return -1;
+    }
     let poll = crate::jobs::poll(&format!("icon:{title_id}"), move || unsafe {
-        match &classic {
-            Some(files) => crate::pspemu::icon(files),
-            None => decode_icon(&title),
+        match (&classic, &retro) {
+            (_, Some(paths)) => retro_icon(paths),
+            (Some(files), None) => crate::pspemu::icon(files),
+            (None, None) => decode_icon(&title),
         }
     });
     let pixels = match poll {
@@ -782,6 +957,6 @@ pub unsafe fn icon(ui: &mut pocketjs_core::Ui, title_id: &str) -> i32 {
     if handle >= 0 {
         crate::graphics::register_texture(ui, handle);
     }
-    ICONS.push((String::from(title_id), handle));
+    ICONS.get_or_insert_with(HashMap::new).insert(String::from(title_id), handle);
     handle
 }

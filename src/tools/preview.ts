@@ -29,7 +29,7 @@ const SCALE = 2;
 
 // Sample library. Ids follow the Vita prefixes the app sorts by: PCS* retail
 // games, NPXS* system apps, NP?A* PlayStation Mobile, anything else homebrew.
-const TITLES: [id: string, title: string, platform?: string][] = [
+const TITLES: [id: string, title: string, platform?: string, console?: string][] = [
   ["PCSA00069", "Gravity Daze"],
   ["PCSB00245", "Neon Drift"],
   ["PCSE00317", "Castle Siege Tactics"],
@@ -65,6 +65,15 @@ const TITLES: [id: string, title: string, platform?: string][] = [
   ["ULUS10041", "Velocity Run", "psp"],
   ["SCUS94163", "Crystal Quest", "psx"],
   ["NPUJ00662", "Cave Raiders", "psx"],
+  // RetroArch games, as retroarch.rs lists them from RetroArch's playlists:
+  // two SNES cores' games in one tab, FBNeo and MAME in Arcade, and a
+  // PlayStation game in the PSX tab.
+  ["ra0snes01", "Star Knight Saga (USA)", "retro", "Nintendo - Super Nintendo Entertainment System"],
+  ["ra0snes02", "Pixel Quest", "retro", "Nintendo - Super Nintendo Entertainment System"],
+  ["ra0md0001", "Turbo Hedgehog (World)", "retro", "Sega - Mega Drive - Genesis"],
+  ["ra0arc001", "Slug Brigade", "retro", "FBNeo - Arcade Games"],
+  ["ra0arc002", "Maze Muncher", "retro", "MAME 2003-Plus"],
+  ["ra0psx001", "Monkey Escape", "retro", "Sony - PlayStation"],
   // A large category, to check that a long list scrolls like a short one.
   ...Array.from({ length: 120 }, (_, index): [string, string] => [
     `HBREW${String(index).padStart(4, "0")}`,
@@ -314,12 +323,13 @@ function installHost(ops: Record<string, unknown>): void {
   ops.appTable = () =>
     JSON.stringify({
       kind: "native",
-      apps: TITLES.map(([id, title, platform]) => ({
+      apps: TITLES.map(([id, title, platform, console]) => ({
         output: id,
         id,
         title,
         installed: true,
         platform,
+        ...(console ? { console } : {}),
         ...(NO_BUBBLE.has(id) ? { adrenaline: true } : {}),
       })),
       current: "POCKTSHLF",
@@ -328,7 +338,7 @@ function installHost(ops: Record<string, unknown>): void {
   // A fixed reading, so shots do not change with the time they are taken.
   ops.__status = (): string => statusLine;
   ops.__scanReport = (): string =>
-    "PSM folders=4,PSM source=app.db,PSM bubbles=3,PSM appmetaIcons=3,PSP stick=ux0:/pspemu,PSP folders=5,PSP titles=4,PSP psx=2,PSP psp=2,PSP noBubble=2,PSP firstNoBubble=SCUS94163,ISO files=2,ISO titles=2,ISO skipped=1,ISO skip=ISO/Other.zso format zso";
+    "PSM folders=4,PSM source=app.db,PSM bubbles=3,PSM appmetaIcons=3,PSP stick=ux0:/pspemu,PSP folders=5,PSP titles=4,PSP psx=2,PSP psp=2,PSP noBubble=2,PSP firstNoBubble=SCUS94163,ISO files=2,ISO titles=2,ISO skipped=1,ISO skip=ISO/Other.zso format zso,RetroArch playlists=4,RetroArch titles=6,RetroArch skipped=1,RetroArch skip=Tom & Jerry pathChars";
   ops.__bootLog = (): string =>
     [
       "age=4s path=ms0:/PSP/GAME/SCUS94163/EBOOT.PBP boot psx",
@@ -442,6 +452,9 @@ function tabTo(id: string): Step[] {
   return tap(BTN.RTRIGGER, index);
 }
 
+/** R presses to the `n`th console tab of RetroArch games, which follow the built-ins. */
+const tabToConsole = (n: number): Step[] => tap(BTN.RTRIGGER, BUILTIN_CATEGORIES.length + n);
+
 /**
  * SELECT, then the presses that highlight `item`: down to each group on the
  * way and right into it, then down to the row. Assumes the main page opens on
@@ -516,9 +529,11 @@ const SHOTS: Shot[] = [
     pluginLocked: true,
     steps: [...tabTo(PSP_ID), [0, 20], BTN.RIGHT, BTN.CIRCLE, BTN.CIRCLE],
   },
-  { name: "92-psm-diagnostics", steps: [...menuTo("diagnostics"), BTN.CIRCLE, ...tap(BTN.DOWN, 24)] },
+  // The top of the screen: frame timing since the screen was last opened.
+  { name: "92a-frames", steps: [...menuTo("diagnostics"), BTN.CIRCLE] },
+  { name: "92-psm-diagnostics", steps: [...menuTo("diagnostics"), BTN.CIRCLE, ...tap(BTN.DOWN, 27)] },
   // The end of the screen: the image scan and the boot plugin's log.
-  { name: "92b-boot-log", steps: [...menuTo("diagnostics"), BTN.CIRCLE, ...tap(BTN.DOWN, 40)] },
+  { name: "92b-boot-log", steps: [...menuTo("diagnostics"), BTN.CIRCLE, ...tap(BTN.DOWN, 43)] },
   // The main page; back from Status bar to Appearance, then to the main page.
   { name: "88-menu-main", steps: [BTN.SELECT] },
   { name: "89-menu-back", steps: [...menuTo("clock"), BTN.CROSS] },
@@ -687,6 +702,15 @@ const SHOTS: Shot[] = [
   },
   { name: "c5-cascade-long", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, ...tabTo("homebrew"), [BTN.RIGHT, 300], [0, 30]] },
   { name: "c6-cascade-wrap", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, BTN.LEFT, [0, 30]] },
+  // RetroArch games: one tab per console after the built-ins (SNES, Mega
+  // Drive, Arcade), and a PlayStation game in the PSX tab.
+  { name: "r1-retro-snes", steps: tabToConsole(0) },
+  { name: "r2-retro-arcade", steps: tabToConsole(2) },
+  {
+    name: "r3-retro-detailed",
+    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tabToConsole(0)],
+  },
+  { name: "r4-retro-psx", steps: [...tabTo(PSX_ID), ...tap(BTN.RIGHT, 2)] },
   // After fetching for a category: the box art picker lists the title's own
   // file and shows the highlighted one beside the drawer.
   {

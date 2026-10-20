@@ -45,7 +45,7 @@ const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 /// Loaded textures, by picture.
 static mut CACHE: Vec<(String, i32)> = Vec::new();
 /// Titles found to have no usable picture, so their files are read once.
-static mut MISSING: Vec<String> = Vec::new();
+static mut MISSING: Option<std::collections::HashSet<String>> = None;
 
 /// File name of the LiveArea background, from the `<image>` inside
 /// `<livearea-background>` of the template under `base`.
@@ -207,7 +207,7 @@ pub unsafe fn texture(ui: &mut pocketjs_core::Ui, title_id: &str, file: &str) ->
     if file.is_empty() && !crate::installed::listed(title_id) {
         return -1;
     }
-    if MISSING.iter().any(|id| *id == key) {
+    if MISSING.as_ref().is_some_and(|missing| missing.contains(&key)) {
         return -1;
     }
     if let Some((_, handle)) = CACHE.iter().find(|(id, _)| *id == key) {
@@ -222,10 +222,19 @@ pub unsafe fn texture(ui: &mut pocketjs_core::Ui, title_id: &str, file: &str) ->
     }
     let title = String::from(title_id);
     let classic = if file.is_empty() { crate::installed::classic_files(title_id) } else { None };
+    // A RetroArch game's screenshot from RetroArch's thumbnails; none, with no
+    // job, when its console has no thumbnail folders.
+    let retro = if file.is_empty() { crate::installed::retro_backdrops(title_id) } else { None };
+    if retro.as_ref().is_some_and(|paths| paths.is_empty()) {
+        MISSING.get_or_insert_with(Default::default).insert(key);
+        return -1;
+    }
+    let retro = retro.unwrap_or_default();
     let poll = jobs::poll(&format!("backdrop:{key}"), move || {
         let bytes = match (path, &classic) {
             (Some(path), _) => read_png(&path),
             (None, Some(files)) => crate::pspemu::picture(files),
+            (None, None) if !retro.is_empty() => retro.iter().find_map(|path| read_png(path)),
             (None, None) => read_title(&title),
         };
         bytes.and_then(|bytes| decode(&bytes))
@@ -238,7 +247,7 @@ pub unsafe fn texture(ui: &mut pocketjs_core::Ui, title_id: &str, file: &str) ->
         // A title's own files do not change while the launcher runs. A file in
         // the data folder can appear later (a download), so it is tried again.
         if file.is_empty() {
-            MISSING.push(key);
+            MISSING.get_or_insert_with(Default::default).insert(key);
         }
         return -1;
     };

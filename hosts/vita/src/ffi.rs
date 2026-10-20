@@ -932,7 +932,8 @@ unsafe extern "C" fn js_startup_marks(
 }
 
 /// ui.__scanReport() -> what the last title scan found among PSM, PSP and PS1
-/// titles (`report` in psm.rs and pspemu.rs): `Label=value` pairs separated
+/// titles and RetroArch's playlists (`report` in psm.rs and pspemu.rs,
+/// `installed::retro_report`): `Label=value` pairs separated
 /// by commas. Host extra, for the diagnostics screen.
 #[cfg(feature = "installed-apps")]
 unsafe extern "C" fn js_scan_report(
@@ -941,7 +942,7 @@ unsafe extern "C" fn js_scan_report(
     _argc: i32,
     _argv: *mut JSValue,
 ) -> JSValue {
-    let parts = [crate::psm::report(), crate::pspemu::report()];
+    let parts = [crate::psm::report(), crate::pspemu::report(), crate::installed::retro_report()];
     let joined: Vec<&str> = parts.iter().map(String::as_str).filter(|part| !part.is_empty()).collect();
     new_js_string(ctx, &joined.join(","))
 }
@@ -982,6 +983,35 @@ unsafe extern "C" fn js_adr_plugin_enable(
     _argv: *mut JSValue,
 ) -> JSValue {
     JS_NewInt32(ctx, crate::pspemu::enable_plugin() as i32)
+}
+
+/// ui.__frameStats() -> where frame time went since the last call
+/// (`frame_stats::take`), then the QuickJS heap: `Label=value` pairs
+/// separated by commas. Host extra, for the diagnostics screen. The heap
+/// count walks every object, so it is read only when the screen opens.
+#[cfg(feature = "installed-apps")]
+unsafe extern "C" fn js_frame_stats(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    _argc: i32,
+    _argv: *mut JSValue,
+) -> JSValue {
+    // The Vita build of libquickjs-sys does not bind these; the C library
+    // has them. `JSMemoryUsage` in quickjs.h is 26 `int64_t` fields:
+    // `malloc_size` is the first and `obj_count` the tenth.
+    extern "C" {
+        fn JS_GetRuntime(ctx: *mut JSContext) -> *mut JSRuntime;
+        fn JS_ComputeMemoryUsage(rt: *mut JSRuntime, usage: *mut [i64; 26]);
+    }
+    let mut usage = [0i64; 26];
+    JS_ComputeMemoryUsage(JS_GetRuntime(ctx), &mut usage);
+    let text = format!(
+        "{},JS heap={} KB,JS objects={}",
+        crate::frame_stats::take(),
+        usage[0] / 1024,
+        usage[9]
+    );
+    new_js_string(ctx, &text)
 }
 
 /// ui.__processMs() -> milliseconds since the process started. Host extra:
@@ -1349,6 +1379,7 @@ pub unsafe fn register(
         add_fn(ctx, ui_obj, b"__scanState\0", js_scan_state, 0);
         add_fn(ctx, ui_obj, b"__startupMarks\0", js_startup_marks, 0);
         add_fn(ctx, ui_obj, b"__processMs\0", js_process_ms, 0);
+        add_fn(ctx, ui_obj, b"__frameStats\0", js_frame_stats, 0);
         add_fn(ctx, ui_obj, b"__scanReport\0", js_scan_report, 0);
         add_fn(ctx, ui_obj, b"__adrPlugin\0", js_adr_plugin, 0);
         add_fn(ctx, ui_obj, b"__bootLog\0", js_boot_log, 0);

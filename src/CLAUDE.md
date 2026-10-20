@@ -45,6 +45,7 @@ PocketJS framework and builds from the root `pocket.json`.
 
 The Rust tests in `hosts/vita/src/accent.rs`, `dds.rs` and `seplugins.rs` run
 natively: `rustc --edition 2021 --test hosts/vita/src/accent.rs -o /tmp/t && /tmp/t`.
+`retroarch.rs` needs `serde_json`: `sh src/tools/retroarch-test.sh`.
 
 ## Seeing the app
 
@@ -379,6 +380,140 @@ cannot be driven. Evidence comes from its log and from files under
   read the list file. In Vita3K, with a hand-made `app.db` and two folders:
   one listed under its database name, one left out, icon found. The list
   file's header is version 2 since this; a version 1 file is scanned over.
+- **RetroArch games** (`retroarch.rs`, tests: `sh src/tools/retroarch-test.sh`,
+  a throwaway crate with `serde_json`). The scan's last phase (`retro`, one
+  step per playlist file) lists every entry of RetroArch's playlists as a
+  title: platform `retro`, id `ra` plus seven lowercase base-36 digits of the
+  FNV-1a hash of the content path (lowercase, so it cannot be a system id;
+  the same file keeps its id and the user's changes to it).
+  - **Where:** RetroArch is `RETROVITA`, installed when
+    `ux0:/app/RETROVITA/eboot.bin` exists. Data in `ux0:/data/retroarch`;
+    `retroarch.cfg`'s `playlist_directory` and `thumbnails_directory` are
+    read (`default` or unset: `playlists/`, `thumbnails/`; `app0:` and `:`
+    mean RetroArch's app folder). History and favorites (`content_*.lpl`)
+    are not read.
+  - **Format:** JSON playlists (`default_core_path`, `items[]` with `path`,
+    `label`, `core_path`, `db_name`), and the six-line format from before
+    RetroArch 1.7.6 (path, label, core path, core name, CRC, database).
+    **With "Compress Playlists" on (the user's setup) each file is RZIP**
+    (`decode_rzip`, from RetroArch's `rzip_stream.c`): `#RZIPv`, version,
+    `#`, chunk size (u32 LE), text size (u64 LE), then chunks of a u32 LE
+    length and one whole zlib stream each, inflated with `miniz_oxide`.
+    Version 2 (zstd, newer RetroArch) is reported as `rzipZstd`, not read.
+    The first build read plain text only, and the user's Vita reported all
+    nine playlists unreadable. A playlist that cannot be read shows as
+    `RetroArch unreadable=<n>,RetroArch firstUnreadable=<file> <reason>`.
+    The user's playlists (not in git) are in `.samples/retroarch-playlists/`;
+    `retroarch-test.sh` reads them when the folder is there.
+  - **Console** is the entry's `db_name` less `.lpl`, else the playlist's
+    file name (RetroArch does the same for thumbnails). `consoles.ts` gives
+    each console a tab after the built-ins (`retro-snes`, label "SNES"); every
+    MAME and FBNeo database shares `retro-arcade`; `Sony - PlayStation` and
+    `Sony - PlayStation Portable` go to the PSX and PSP tabs; an unknown
+    console gets `retro-<slug>` and the part of its name after the maker.
+    These ids are saved (tab order, a title moved into one) and must not
+    change. A custom category with the same id keeps it.
+  - **Core:** the entry's `core_path`, else the playlist's
+    `default_core_path` (an entry's `DETECT` means none), else the first
+    installed core by file name whose `info/<core>.info` `database` list names
+    the console. Only cores in RetroArch's app folder that exist count:
+    `app0:/x_libretro.self` or the same file by its `ux0:` path.
+  - **Launch:** `psgm:play?titleid=RETROVITA&param=app0:/<core>&param2=<path>`,
+    sent twice like a game's. RetroArch's `eboot.bin` is its "salamander"
+    stub (`dist-scripts/dist-cores.sh`), which reads both parameters
+    (`frontend_psp_exec` in `frontend/drivers/platform_psp.c`), cuts each at
+    the next `&`, and runs the core with the content. Without `param` it opens
+    the last core and no game. So an entry is left out when its path holds `&`
+    (`pathChars`), when no core is found (`noCore`), when the URI passes 1000
+    bytes (`long`; the system's limit is not known), or when an earlier
+    playlist listed the same file (`duplicate`). `finish_launch` first closes
+    a running RetroArch (`sceAppMgrGetIdByName`, `sceAppMgrDestroyAppByName`,
+    up to 1 s), since a running app comes back as it was and does not read
+    the new parameters. One game-category app runs at a time, so RetroArch is
+    likely closed already when Pocket Shelf runs. **Not yet seen on
+    hardware.** In Vita3K (2026-10-20, a stand-in install: empty `eboot.bin`
+    and core files, two playlists, one box art): the first start scanned and
+    listed three games with the playlist's default core and the info-file
+    core, left out a path with `&`, and read the box art; the second start
+    read `titles.tsv` and no playlist. Launching cannot be tried there.
+  - **Pictures:** the icon is the game's box art from RetroArch's
+    thumbnails (`<thumbnails>/<console>/Named_Boxarts/<label>.png`, else
+    `Named_Titles`), fitted whole into 128 px like a PSP icon
+    (`pspemu::fit_png`, at most 4 megapixels); the backdrop is
+    `Named_Snaps`, else `Named_Titles`. RetroArch's file name is the label
+    with `&*/:`"<>?\|` replaced by `_`; the label up to its first ` (` is
+    tried too. A MAME game's thumbnails are in `MAME`.
+  - Diagnostics lines: `RetroArch playlists`, `titles`, `skipped`, up to six
+    `RetroArch skip=<title> <reason>`, `unreadable`, or
+    `RetroArch=notInstalled`. The "Detailed" views show "RetroArch" in place
+    of the id. `titles.tsv` is header version 6 since this (columns: id,
+    platform, launch `uri`/`adrenaline`/`retroarch`, path, console, core,
+    title); a version 5 file is scanned over once.
+  - **Scale (the user's playlists, Vita3K, 2026-10-20):** 5,811 entries in
+    nine playlists, 102 left out for `&`, 5,709 listed. The scan took about
+    0.2 s; `titles.tsv` is 958 KB. A start from the list: `catalog` 123 ms,
+    building the titles 80 ms, `state` 300 ms, first frame at 0.9 s, then 60
+    frames a second. Hardware not measured. Most entries are `DETECT` and
+    take the playlist's default core; a game the user started once carries
+    its own core. `Neo Geo.lpl` is a playlist the user named; its console
+    "Neo Geo" is mapped to `retro-neogeo`.
+  - **Stutter with thousands of titles (user, hardware, 2026-10-20):**
+    scrolling a big tab and switching tabs stuttered; none of the user's
+    games has box art. Changed, not yet measured on hardware: the host
+    finds a title by id through an index (`installed::find`, rebuilt with
+    the list) instead of walking every title for each icon and backdrop
+    request, which the app repeats every few frames; a RetroArch game whose
+    console has no thumbnail folder gets no picture at once (each folder is
+    checked once, `folder_exists`), where it used to start a job that
+    checked four missing files; the app groups titles by category once
+    (`byCategory`), looks base titles up in a map (`catalogById`; the Fetch
+    artwork list was quadratic), and does not copy the icon and box tables
+    for a title with no icon.
+  - **Frame timing** is the top of the Diagnostics screen: frames, frames
+    over 20 ms, and the longest frame, since the screen was last opened
+    (`frameTick` in `state.frame`), then the host's split of the same frames
+    (`frame_stats.rs`: JS, Layout, Draw, Present, average and longest) and
+    the QuickJS heap (`JS heap`, `JS objects`). Open it, close it, do the
+    thing that stutters, open it again.
+  - **First hardware reading** (user, after the changes above, scrolling
+    NES and switching tabs): 2448 frames, 1672 over 20 ms, longest 729 ms;
+    JS 28.2/717.2 ms, Layout 0.7/9.7, Draw 3.0/13.7, Present 3.4/12.2; heap
+    16053 KB, 83965 objects. JavaScript is the cost; the GPU is not.
+  - **The Dynamic theme was most of it.** Profiled in Vita3K with a
+    temporary per-phase timer and a stack trace on every Solid signal
+    write (both removed): the blend wrote `dynamicColor` on most frames,
+    and each write rebuilds `theme()`, which every node with a theme color
+    reads. Per-frame JS while scrolling: Dynamic 3.8 ms, Midnight 1.0 ms.
+    Now the blend waits until the selection has rested 10 frames and steps
+    every 2 frames, two fifths of the way: Dynamic 1.0 ms. Tab switches:
+    1.9 ms before, 1.2 ms after.
+  - **Long frames (hundreds of ms) are likely QuickJS's garbage
+    collection**, which walks every object; it runs when the heap passes
+    1.5 times its size after the last collection (`js_trigger_gc`). A title
+    with no changes and no art file is no longer copied in `allGames`.
+  - **Second hardware reading** (after the Dynamic change): JS 4.2/632.3
+    ms, longest frame 645 ms. The average fits the frame; the pauses stay.
+  - **Garbage collection is paced by the host** (`Runtime::collect_when_idle`
+    in `lib.rs`, called after each present): a collection runs once the
+    buttons have rested 60 frames after use, or after 30 s of use without
+    such a rest, and QuickJS's own trigger is moved 24 MB past the live size
+    it measures (`JS_SetGCThreshold`), so it only fires for a heap growing
+    faster than expected. The first trigger is 48 MB, set when the runtime
+    is made, so startup no longer collects. The C heap is 128 MB (newlib's
+    `_get_vita_heap_size`, read in Vita3K). Diagnostics shows
+    `Idle GC count/max`. In Vita3K a faked press ran one idle collection:
+    11 ms, 7.3 MB and 20,860 objects live after it.
+  - **Third hardware reading** (idle collection): JS 8.7/226.1 ms, longest
+    frame 237 ms, idle GC 2/234.5 ms. The longest frame is the idle
+    collection. The JS maximum was the frame that opened Diagnostics: the
+    heap count walks every object. `frame_stats` now leaves the frame that
+    calls `take` out, as `takeFrameEntries` already did on the app side.
+  - **Vita3K restarts the app by itself** about three seconds into the first
+    run after `-r <id>` or an install: "Game closed" is followed straight
+    away by `Idle -> Launching`, with no error before it. That is not a
+    crash.
+  - **Next:** custom categories that point at a ROM folder, with a core
+    chosen per category, launched the same way.
 - **Retail games' files are encrypted.** For an icon or backdrop the host
   tries, in order: `ux0:/app/<id>/sce_sys` (plain for homebrew),
   `ur0:appmeta/<id>/` (exists only after the home screen opened that game's

@@ -21,6 +21,7 @@ mod dev_delivery;
 pub mod dev_protocol;
 pub mod devmenu;
 pub mod ffi;
+pub mod frame_stats;
 pub mod graphics;
 #[cfg(feature = "http")]
 pub mod http;
@@ -46,6 +47,8 @@ pub mod adrenaline_config;
 pub mod iso;
 #[cfg(feature = "installed-apps")]
 pub mod pspemu;
+#[cfg(feature = "installed-apps")]
+pub mod retroarch;
 #[cfg(feature = "installed-apps")]
 pub mod seplugins;
 pub mod input;
@@ -185,7 +188,27 @@ pub struct Runtime {
     frame_fn: JSValue,
     owned_pak: Option<std::sync::Arc<[u8]>>,
     deadline: Box<std::time::Instant>,
+    /// Frames since the last button input.
+    idle_frames: u32,
+    /// Frames since the first input after the last idle collection; 0 when
+    /// there was none.
+    used_frames: u32,
 }
+
+/// Garbage collection pacing. QuickJS collects cycles when its heap passes
+/// 1.5 times its size after the last collection (`js_trigger_gc`), wherever
+/// that falls; a collection walks every object, about 0.6 s with 84,000
+/// objects on hardware, which showed as a freeze while scrolling. The host
+/// collects instead once the buttons have rested `GC_IDLE_FRAMES` after use,
+/// or after `GC_USED_MAX_FRAMES` of use without such a rest, and moves
+/// QuickJS's own trigger `GC_MARGIN` past the live size, where it only
+/// catches a heap growing faster than expected. The C heap is 128 MB.
+const GC_IDLE_FRAMES: u32 = 60;
+const GC_USED_MAX_FRAMES: u32 = 30 * 60;
+const GC_MARGIN: usize = 24 * 1024 * 1024;
+/// QuickJS's trigger after the guest's code first ran, before any collection
+/// measured the live size.
+const GC_FIRST_THRESHOLD: usize = 48 * 1024 * 1024;
 
 impl Runtime {
     /// Initialize process-level Vita services (once), then create one fresh
@@ -222,6 +245,9 @@ impl Runtime {
             reset_guest_state();
             return Err(String::from("JS_NewRuntime failed"));
         }
+        // Startup builds most of the heap; QuickJS's default trigger
+        // (256 KB, then 1.5 times the size) collected repeatedly while it did.
+        JS_SetGCThreshold(rt, GC_FIRST_THRESHOLD);
         let ctx = JS_NewContext(rt);
         if ctx.is_null() {
             JS_FreeRuntime(rt);
@@ -251,7 +277,47 @@ impl Runtime {
             frame_fn: JS_UNDEFINED,
             owned_pak: None,
             deadline,
+            idle_frames: 0,
+            used_frames: 0,
         })
+    }
+
+    /// Call once per frame after it is presented, with the buttons held:
+    /// collects garbage when the guest has rested after use (see
+    /// `GC_IDLE_FRAMES`), so the pause falls where nothing moves.
+    ///
+    /// # Safety
+    ///
+    /// Call only on the runtime's owning thread.
+    pub unsafe fn collect_when_idle(&mut self, buttons: i32) {
+        if self.rt.is_null() {
+            return;
+        }
+        if buttons != 0 {
+            self.idle_frames = 0;
+            self.used_frames = self.used_frames.max(1);
+        } else {
+            self.idle_frames = self.idle_frames.saturating_add(1);
+        }
+        if self.used_frames == 0 {
+            return;
+        }
+        self.used_frames = self.used_frames.saturating_add(1);
+        if self.idle_frames < GC_IDLE_FRAMES && self.used_frames < GC_USED_MAX_FRAMES {
+            return;
+        }
+        self.used_frames = 0;
+        let started = frame_stats::now_us();
+        JS_RunGC(self.rt);
+        // libquickjs-sys does not bind this on the Vita; `JSMemoryUsage` is
+        // 26 `int64_t` fields and `malloc_size` the first.
+        extern "C" {
+            fn JS_ComputeMemoryUsage(rt: *mut JSRuntime, usage: *mut [i64; 26]);
+        }
+        let mut usage = [0i64; 26];
+        JS_ComputeMemoryUsage(self.rt, &mut usage);
+        JS_SetGCThreshold(self.rt, usage[0].max(0) as usize + GC_MARGIN);
+        frame_stats::record_gc(frame_stats::now_us().saturating_sub(started));
     }
 
     /// Own a hot-updated PAK until QuickJS and native resources are retired.

@@ -165,7 +165,16 @@ unsafe fn run_guest(app_index: usize, dev: &mut dev::Host) -> usize {
     #[cfg(feature = "capture")]
     let last_capture = wanted.iter().copied().max().unwrap_or(0);
 
+    // The previous frame's start and part ends, finished at this frame's start
+    // (`frame_stats`): its last part runs from the end of drawing to here.
+    let mut timing: Option<(u64, [u64; 4])> = None;
     loop {
+        let frame_start = pocketjs_vita::frame_stats::now_us();
+        if let Some((start, mut marks)) = timing.take() {
+            marks[3] = frame_start;
+            pocketjs_vita::frame_stats::record(start, marks);
+        }
+        let mut marks = [0u64; 4];
         let current_frame = GLOBAL_FRAME;
         #[cfg(feature = "bench")]
         benchmark.begin();
@@ -225,14 +234,22 @@ unsafe fn run_guest(app_index: usize, dev: &mut dev::Host) -> usize {
                 dev.menu.visible = true;
             }
         }
+        marks[0] = pocketjs_vita::frame_stats::now_us();
         if let Some(guest) = runtime.as_mut() {
             guest.tick();
+            marks[1] = pocketjs_vita::frame_stats::now_us();
             guest.render();
         } else {
+            marks[1] = pocketjs_vita::frame_stats::now_us();
             graphics::begin_frame(0xff1c_1410);
         }
         dev.overlay();
+        marks[2] = pocketjs_vita::frame_stats::now_us();
+        timing = Some((frame_start, marks));
         graphics::present();
+        if let Some(guest) = runtime.as_mut() {
+            guest.collect_when_idle(buttons);
+        }
         pocketjs_vita::startup_mark("frame");
         if pending.is_some() {
             vita2d_sys::vita2d_wait_rendering_done();

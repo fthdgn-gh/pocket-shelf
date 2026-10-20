@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Show, untrack } from "solid-js";
 import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
-import { fitTitle } from "../catalog.ts";
+import { fitTitle, shownId } from "../catalog.ts";
 import { TitleArt } from "../components/art.tsx";
 import { LIST_GAP, LIST_ROW_H, listRows } from "../layout.ts";
 import type { LauncherState } from "../state.ts";
@@ -33,11 +33,11 @@ function ListRow(props: { game: Game; state: LauncherState; selected: boolean; i
       <Text class={props.state.text()[role()]} style={{ textColor: props.selected ? theme().text : theme().dim }}>
         {fitTitle(props.game.title, TITLE_W, fontSlot(props.state.font(), role()))}
       </Text>
-      {/* "Detailed" adds the title id at the end of the row. */}
+      {/* "Detailed" adds the title id (or "RetroArch") at the end of the row. */}
       <Show when={props.state.detail() === "detailed"}>
         <View class="grow" />
         <Text class={props.state.text().small} style={{ textColor: props.selected ? theme().dim : theme().faint }}>
-          {props.game.id}
+          {shownId(props.game)}
         </Text>
       </Show>
     </View>

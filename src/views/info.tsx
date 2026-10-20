@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 import { Text, View } from "@pocketjs/framework/components";
-import { fitTitle } from "../catalog.ts";
+import { fitTitle, shownId } from "../catalog.ts";
 import type { LauncherState } from "../state.ts";
 import { fontSlot, type TextRole } from "../text.ts";
 import type { Game } from "../types.ts";
@@ -27,7 +27,7 @@ export function SelectedInfo(props: {
           </Text>
           <Show when={state.detail() === "detailed"}>
             <Text class={state.text().small} style={{ textColor: state.theme().dim }}>
-              {`${game().id}  ·  ${state.categoryLabel(game().category)}`}
+              {`${shownId(game())}  ·  ${state.categoryLabel(game().category)}`}
             </Text>
           </Show>
         </View>

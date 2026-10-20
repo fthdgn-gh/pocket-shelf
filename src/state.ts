@@ -34,7 +34,8 @@ import { pumpNet } from "./net.ts";
 import { createOnlineFlow } from "./online.ts";
 import { KEY_MAX, fileBelongsTo } from "./steamgriddb.ts";
 import { TINT_COLORS, loadCatalog, scanProgress, startScan, type Catalog, type ScanProgress } from "./catalog.ts";
-import { timed } from "./diagnostics.ts";
+import { consoleCategories } from "./consoles.ts";
+import { frameTick, timed } from "./diagnostics.ts";
 import { DEFAULT_LANGUAGE, LANGUAGES, MESSAGES, fill, type Language } from "./i18n.ts";
 import { KEY_PAGES, LETTER_ROWS, SYMBOL_ROWS, accentRows, mapColumn, type KeyPage } from "./keyboard.ts";
 import {
@@ -117,6 +118,14 @@ type KeyboardTarget =
   | { kind: "apiKey" }
   | { kind: "library" };
 
+/** Frames the selection rests before the Dynamic theme starts blending to its color. */
+const DYNAMIC_SETTLE_FRAMES = 10;
+/** Frames between the Dynamic theme's blend steps. */
+const DYNAMIC_STEP_FRAMES = 2;
+
+/** The titles of a category with none, one array so lists compare equal. */
+const NO_GAMES: Game[] = [];
+
 function cycle<T>(list: readonly T[], current: T, delta: number): T {
   const index = list.indexOf(current);
   return list[(index + delta + list.length) % list.length];
@@ -136,7 +145,9 @@ export function createLauncherState(catalog: Catalog) {
   // The user's changes per title id, saved to titles.json.
   const [overrides, setOverrides] = createSignal<Overrides>(timed("changes", loadOverrides));
   createEffect(on(overrides, saveOverrides, { defer: true }));
-  const baseOf = (id: string) => catalogGames().find((game) => game.id === id);
+  // Each title as the host reported it, by id.
+  const catalogById = createMemo(() => new Map(catalogGames().map((game) => [game.id, game])));
+  const baseOf = (id: string) => catalogById().get(id);
 
   // Art files matched by name: `<title id>.png`, then `<title>.png`, ignoring
   // case. A file the user picked in the editor wins over a match.
@@ -155,11 +166,18 @@ export function createLauncherState(catalog: Catalog) {
   const [customCategories, setCustomCategories] = createSignal<Category[]>(savedCategories.custom);
   const [categoryOrder, setCategoryOrder] = createSignal<string[]>(savedCategories.order);
   const [hiddenCategories, setHiddenCategories] = createSignal<string[]>(savedCategories.hidden);
+  // A category per console of the RetroArch games (`consoles.ts`). A
+  // category the user made with the same id keeps it.
+  const retroCategories = createMemo<Category[]>(() => {
+    const custom = new Set(customCategories().map((item) => item.id));
+    const consoles = catalogGames().flatMap((game) => (game.console === undefined ? [] : [game.console]));
+    return consoleCategories(consoles).filter((item) => !custom.has(item.id));
+  });
   // Every category in tab order. Of the ids missing from the saved order, the
   // smart ones go first and the others (new ones) follow at the end,
-  // built-ins before custom.
+  // built-ins before consoles before custom.
   const allCategories = createMemo<Category[]>(() => {
-    const base = [...SMART_CATEGORIES, ...BUILTIN_CATEGORIES, ...customCategories()];
+    const base = [...SMART_CATEGORIES, ...BUILTIN_CATEGORIES, ...retroCategories(), ...customCategories()];
     const position = (item: Category) => {
       const index = categoryOrder().indexOf(item.id);
       if (index >= 0) return index;
@@ -188,6 +206,10 @@ export function createLauncherState(catalog: Catalog) {
       const chosen = change?.art;
       const forceIcon = chosen === USE_ICON;
       const art = forceIcon ? undefined : (chosen ?? findArt(game.id, game.title, title));
+      // A title with no changes and no art file is the host's entry as it is:
+      // with thousands of RetroArch games, a copy of each was thousands of
+      // objects more for QuickJS's garbage collector to walk.
+      if (!change && art === undefined) return game;
       // A category that was deleted falls back to the title's own.
       const wanted = change?.category;
       const category = wanted && allCategories().some((item) => item.id === wanted) ? wanted : game.category;
@@ -219,6 +241,17 @@ export function createLauncherState(catalog: Catalog) {
   const [recent, setRecent] = createSignal<string[]>(timed("recent", loadRecent));
   // The term of the open search (square button); empty when no search is open.
   const [searchTerm, setSearchTerm] = createSignal("");
+  // The titles of each category, grouped once per change of the titles, so a
+  // tab switch or a tab count does not go through every title again.
+  const byCategory = createMemo(() => {
+    const groups = new Map<CategoryId, Game[]>();
+    for (const game of allGames()) {
+      const group = groups.get(game.category);
+      if (group) group.push(game);
+      else groups.set(game.category, [game]);
+    }
+    return groups;
+  });
   /** The titles a category lists. A title that was uninstalled drops out of "Last Played". */
   const titlesOf = (id: CategoryId): Game[] => {
     if (id === SEARCH_ID) return searchTitles(allGames(), searchTerm());
@@ -227,7 +260,7 @@ export function createLauncherState(catalog: Catalog) {
       return recent().flatMap((titleId) => byId.get(titleId) ?? []);
     }
     if (id === FAVORITES_ID) return allGames().filter((game) => game.favorite);
-    return allGames().filter((game) => game.category === id);
+    return byCategory().get(id) ?? NO_GAMES;
   };
 
   // Categories in the tab bar, and the titles of the current one. An open
@@ -354,16 +387,20 @@ export function createLauncherState(catalog: Catalog) {
       return;
     }
     loadedSource.set(game.id, source);
+    // Each change below copies the whole table and redraws every tile, so
+    // a title with no icon (most RetroArch games) changes nothing.
     if (handle < 0) {
-      setIcons(({ [game.id]: _removed, ...rest }) => rest);
-      setBoxes(({ [game.id]: _removed, ...rest }) => rest);
+      if (game.id in icons()) setIcons(({ [game.id]: _removed, ...rest }) => rest);
+      if (game.id in boxes()) setBoxes(({ [game.id]: _removed, ...rest }) => rest);
       iconColors.delete(game.id);
       return;
     }
     const accent = artAccent(handle);
     iconColors.set(game.id, accent < 0 ? undefined : accent & 0xffffff);
     const colors = boxColors(accent);
-    setBoxes(({ [game.id]: _previous, ...rest }) => (colors ? { ...rest, [game.id]: colors } : rest));
+    if (colors || game.id in boxes()) {
+      setBoxes(({ [game.id]: _previous, ...rest }) => (colors ? { ...rest, [game.id]: colors } : rest));
+    }
     if (!registeredKeys.has(key)) {
       registeredKeys.add(key);
       registerTexture(key, handle);
@@ -506,8 +543,13 @@ export function createLauncherState(catalog: Catalog) {
 
   // The Dynamic theme takes its colors from the selected title: its icon's
   // color, or its tint when it has no icon. `dynamicColor` moves toward that
-  // color a little each frame, so the screen blends from one title to the next.
+  // color in a few steps, so the screen blends from one title to the next.
+  // Each step recolors every node that uses the theme, which took most of a
+  // frame on hardware, so the blend waits until the selection has rested
+  // (`DYNAMIC_SETTLE_FRAMES`) and steps every `DYNAMIC_STEP_FRAMES` frames.
   const [dynamicColor, setDynamicColor] = createSignal<[number, number, number] | undefined>(undefined);
+  let dynamicGoal: number | undefined;
+  let dynamicRest = 0;
   const titleColor = (): number | undefined => {
     const game = games()[selectedIndex()];
     if (!game) return undefined;
@@ -517,6 +559,10 @@ export function createLauncherState(catalog: Catalog) {
     if (themeId() !== "dynamic") return;
     const target = titleColor();
     if (target === undefined) return;
+    if (target !== dynamicGoal) {
+      dynamicGoal = target;
+      dynamicRest = 0;
+    }
     const goal = [(target >> 16) & 255, (target >> 8) & 255, target & 255];
     const now = dynamicColor();
     if (!now) {
@@ -524,10 +570,13 @@ export function createLauncherState(catalog: Catalog) {
       return;
     }
     if (now.every((value, index) => value === goal[index])) return;
-    // A quarter of the way each frame, then snap once it is within a step.
+    dynamicRest++;
+    if (dynamicRest < DYNAMIC_SETTLE_FRAMES || (dynamicRest - DYNAMIC_SETTLE_FRAMES) % DYNAMIC_STEP_FRAMES !== 0) return;
+    // Two fifths of the way each step, then snap once it is within a step:
+    // about five steps from one title's color to the next.
     const next = now.map((value, index) => {
       const gap = goal[index] - value;
-      return Math.abs(gap) < 3 ? goal[index] : value + gap * 0.25;
+      return Math.abs(gap) < 8 ? goal[index] : value + gap * 0.4;
     });
     setDynamicColor([next[0], next[1], next[2]]);
   };
@@ -618,6 +667,7 @@ export function createLauncherState(catalog: Catalog) {
   };
   /** Call once per frame. */
   const frame = () => {
+    frameTick();
     pumpNet();
     pumpBackdrops();
     online.frame();
