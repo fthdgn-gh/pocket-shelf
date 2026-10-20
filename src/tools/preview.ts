@@ -13,7 +13,10 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ACCENT_HAS_ALPHA } from "../accent.ts";
-import { BUILTIN_CATEGORIES, PSM_ID, PSP_ID, PSX_ID, SYSTEM_ID } from "../categories.ts";
+import { BUILTIN_CATEGORIES, PSM_ID, PSP_ID, PSX_ID, SYSTEM_ID, orderCategories } from "../categories.ts";
+import { consoleCategories } from "../consoles.ts";
+import { DEFAULT_VIEW, VIEW_MODES } from "../navigation.ts";
+import type { ViewMode } from "../types.ts";
 import { MENU, menuPath, type MenuItem } from "../menu-items.ts";
 import { BTN, IMG_FLAG_LINEAR, PSM } from "../../contracts/spec/spec.ts";
 import { createSimFsHost } from "../../hosts/sim/fs.ts";
@@ -446,14 +449,26 @@ const tap = (button: number, times = 1): Step[] => Array<Step>(times).fill(butto
  * order, so a change of order does not shift the shots. Assumes no smart tab
  * (Last Played, Favorites) shows yet.
  */
+/** The default tab order with the fake title table: built-ins, the consoles, System last. */
+const DEFAULT_TABS = orderCategories(
+  [...BUILTIN_CATEGORIES, ...consoleCategories(TITLES.flatMap(([, , , console]) => (console ? [console] : [])))],
+  [],
+).map((item) => item.id);
+
 function tabTo(id: string): Step[] {
-  const index = BUILTIN_CATEGORIES.findIndex((item) => item.id === id);
+  const index = DEFAULT_TABS.indexOf(id);
   if (index < 0) throw new Error(`tabTo: no category ${id}`);
   return tap(BTN.RTRIGGER, index);
 }
 
-/** R presses to the `n`th console tab of RetroArch games, which follow the built-ins. */
-const tabToConsole = (n: number): Step[] => tap(BTN.RTRIGGER, BUILTIN_CATEGORIES.length + n);
+/** RIGHT presses on the View row from the default view to `mode`. */
+function viewTo(mode: ViewMode): Step[] {
+  const count = VIEW_MODES.length;
+  return tap(BTN.RIGHT, (VIEW_MODES.indexOf(mode) - VIEW_MODES.indexOf(DEFAULT_VIEW) + count) % count);
+}
+
+/** R presses to the `n`th console tab of RetroArch games, after the built-ins and before System. */
+const tabToConsole = (n: number): Step[] => tap(BTN.RTRIGGER, DEFAULT_TABS.indexOf(SYSTEM_ID) - 3 + n);
 
 /**
  * SELECT, then the presses that highlight `item`: down to each group on the
@@ -503,8 +518,8 @@ const SHOTS: Shot[] = [
   { name: "03-shelf-apps", steps: [...tabTo(SYSTEM_ID), BTN.RIGHT] },
   { name: "04-menu", steps: [...tap(BTN.RIGHT, 2), ...menuTo("view")] },
   // SELECT, down to "View", right once: grid.
-  { name: "05-grid", steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.DOWN] },
-  { name: "06-list", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.DOWN, 2)] },
+  { name: "05-grid", steps: [...menuTo("view"), ...viewTo("grid"), BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.DOWN] },
+  { name: "06-list", steps: [...menuTo("view"), ...viewTo("list"), BTN.SELECT, ...tap(BTN.DOWN, 2)] },
   { name: "07-editor", steps: [BTN.RIGHT, BTN.TRIANGLE] },
   { name: "08-keyboard", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, BTN.RIGHT, BTN.DOWN] },
   { name: "09-art-picker", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE] },
@@ -545,12 +560,12 @@ const SHOTS: Shot[] = [
   { name: "17-detailed", steps: [...menuTo("details"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4)] },
   {
     name: "18-detailed-grid",
-    steps: [...menuTo("view"), BTN.RIGHT, BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 6)],
+    steps: [...menuTo("view"), ...viewTo("grid"), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 6)],
   },
   { name: "19-basic", steps: [...menuTo("details"), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4)] },
   {
     name: "21-list-detailed",
-    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 4)],
+    steps: [...menuTo("view"), ...viewTo("list"), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 4)],
   },
   // Title editor, down to "SteamGridDB": no API key saved yet.
   { name: "22-online-key", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE] },
@@ -587,11 +602,11 @@ const SHOTS: Shot[] = [
   { name: "35-long-shelf", steps: [...tabTo("homebrew"), [BTN.RIGHT, 420], [0, 30]] },
   {
     name: "36-long-grid",
-    steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tabTo("homebrew"), [BTN.DOWN, 150], BTN.RIGHT, [0, 30]],
+    steps: [...menuTo("view"), ...viewTo("grid"), BTN.SELECT, ...tabTo("homebrew"), [BTN.DOWN, 150], BTN.RIGHT, [0, 30]],
   },
   {
     name: "37-long-list",
-    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tabTo("homebrew"), [BTN.DOWN, 300], BTN.UP, [0, 30]],
+    steps: [...menuTo("view"), ...viewTo("list"), BTN.SELECT, ...tabTo("homebrew"), [BTN.DOWN, 300], BTN.UP, [0, 30]],
   },
   // Holding RIGHT for a second repeats the move.
   { name: "12-hold-repeat", steps: [[BTN.RIGHT, 60]] },
@@ -675,42 +690,48 @@ const SHOTS: Shot[] = [
   // A press past an end of the list continues at the other end, in each view.
   { name: "57-wrap-shelf", steps: [BTN.LEFT, [0, 30]] },
   { name: "58-wrap-shelf-back", steps: [BTN.LEFT, [0, 30], BTN.RIGHT, [0, 30]] },
-  { name: "59-wrap-grid", steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2), BTN.UP, [0, 30]] },
-  { name: "61-wrap-list", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.UP, [0, 30]] },
+  { name: "59-wrap-grid", steps: [...menuTo("view"), ...viewTo("grid"), BTN.SELECT, ...tap(BTN.RIGHT, 2), BTN.UP, [0, 30]] },
+  { name: "61-wrap-list", steps: [...menuTo("view"), ...viewTo("list"), BTN.SELECT, BTN.UP, [0, 30]] },
   // A held direction stops at the end.
   { name: "62-hold-stops", steps: [...tabTo(SYSTEM_ID), [BTN.RIGHT, 120], [0, 30]] },
   // The cascade: SELECT, down to "View", right three times.
-  { name: "c1-cascade", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
-  { name: "c2-cascade-first", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT] },
+  { name: "c1-cascade", steps: [...menuTo("view"), ...viewTo("cascade"), BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
+  { name: "c2-cascade-first", steps: [...menuTo("view"), ...viewTo("cascade"), BTN.SELECT] },
   {
     name: "c3-cascade-detailed",
-    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2)],
+    steps: [...menuTo("view"), ...viewTo("cascade"), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 2)],
   },
   {
     name: "c4-cascade-basic",
-    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.DOWN, ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.RIGHT],
+    steps: [...menuTo("view"), ...viewTo("cascade"), BTN.DOWN, ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.RIGHT],
   },
-  { name: "c5-cascade-long", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, ...tabTo("homebrew"), [BTN.RIGHT, 300], [0, 30]] },
-  { name: "c6-cascade-wrap", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, BTN.LEFT, [0, 30]] },
-  // Home, the fifth view: SELECT, down to "View", right four times.
-  { name: "h1-home", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
-  { name: "h2-home-first", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.SELECT] },
+  { name: "c5-cascade-long", steps: [...menuTo("view"), ...viewTo("cascade"), BTN.SELECT, ...tabTo("homebrew"), [BTN.RIGHT, 300], [0, 30]] },
+  { name: "c6-cascade-wrap", steps: [...menuTo("view"), ...viewTo("cascade"), BTN.SELECT, BTN.LEFT, [0, 30]] },
+  // Carousel, the default view until 2026-10-21.
+  { name: "k1-carousel", steps: [...menuTo("view"), ...viewTo("carousel"), BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
+  {
+    name: "k2-carousel-detailed",
+    steps: [...menuTo("view"), ...viewTo("carousel"), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4)],
+  },
+  // Home, the default view.
+  { name: "h1-home", steps: [...menuTo("view"), ...viewTo("home"), BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
+  { name: "h2-home-first", steps: [...menuTo("view"), ...viewTo("home"), BTN.SELECT] },
   {
     name: "h3-home-detailed",
-    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4)],
+    steps: [...menuTo("view"), ...viewTo("home"), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4)],
   },
   {
     name: "h4-home-basic",
-    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.DOWN, ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.RIGHT],
+    steps: [...menuTo("view"), ...viewTo("home"), BTN.DOWN, ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.RIGHT],
   },
-  { name: "h5-home-retro", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.SELECT, ...tabToConsole(0)] },
+  { name: "h5-home-retro", steps: [...menuTo("view"), ...viewTo("home"), BTN.SELECT, ...tabToConsole(0)] },
   // RetroArch games: one tab per console after the built-ins (SNES, Mega
   // Drive, Arcade), and a PlayStation game in the PSX tab.
   { name: "r1-retro-snes", steps: tabToConsole(0) },
   { name: "r2-retro-arcade", steps: tabToConsole(2) },
   {
     name: "r3-retro-detailed",
-    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tabToConsole(0)],
+    steps: [...menuTo("view"), ...viewTo("cascade"), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tabToConsole(0)],
   },
   { name: "r4-retro-psx", steps: [...tabTo(PSX_ID), ...tap(BTN.RIGHT, 2)] },
   // After fetching for a category: the box art picker lists the title's own

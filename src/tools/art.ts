@@ -18,8 +18,8 @@
 //
 //   bun run shelf:art
 //
-// The artwork repeats the app's own shelf: square tiles standing on a lit
-// edge, the middle one selected. The Vita accepts these files as indexed
+// The artwork repeats the app's own Home view in small (`MARK`): a selected
+// tile with the white selection ring and smaller tiles after it. The Vita accepts these files as indexed
 // 8-bit PNG only (tools/vita-package.ts checks it), so each drawing is
 // reduced to at most 256 colors before it is written. The PNG files are
 // committed; a build does not run this script.
@@ -38,19 +38,28 @@ const ABOUT = (await Bun.file(join(SRC, "about.json")).json()) as { author?: str
 
 GlobalFonts.registerFromPath(join(SRC, "fonts/Figtree-Bold.ttf"), "Shelf Bold");
 
-const BG_TOP = "#14204a";
+// The Midnight theme (src/themes.ts), the app's default.
+const BG_TOP = "#101a36";
 const BG_BOTTOM = "#02040c";
-const ACCENT = "#22d3ee";
 
-/** Tile fills, top and bottom of a vertical gradient. */
-const TILES: [string, string][] = [
-  ["#fbbf24", "#dc2626"],
-  ["#34d399", "#0f766e"],
-  ["#a78bfa", "#5b21b6"],
-  ["#38bdf8", "#4338ca"],
-  ["#f472b6", "#be123c"],
-  ["#67e8f9", "#1d4ed8"],
-];
+/**
+ * The mark, in the app's logical pixels (the screen is 480x272, drawn at 2x):
+ * the Home view in small. A selected tile with the white selection ring, and
+ * two smaller tiles after it, aligned at the top. `components/scan-page.tsx`
+ * draws the same mark with views; keep the two in step.
+ */
+const MARK = {
+  width: 110,
+  height: 48,
+  ring: 2,
+  /** The selected tile: its left, top and side; the ring is 2 px clear of it. */
+  tile: { x: 4, y: 4, side: 40, colors: ["#a78bfa", "#5b21b6"] as [string, string] },
+  small: [
+    { x: 52, y: 4, side: 26, colors: ["#fbbf24", "#dc2626"] as [string, string] },
+    { x: 84, y: 4, side: 26, colors: ["#34d399", "#0f766e"] as [string, string] },
+  ],
+  smallOpacity: 0.8,
+};
 
 function background(ctx: SKRSContext2D, width: number, height: number): void {
   const fill = ctx.createLinearGradient(0, 0, 0, height);
@@ -60,86 +69,89 @@ function background(ctx: SKRSContext2D, width: number, height: number): void {
   ctx.fillRect(0, 0, width, height);
 }
 
-/** One square tile standing on `floor`, centered on `centerX`. */
-function tile(
-  ctx: SKRSContext2D,
-  centerX: number,
-  floor: number,
-  size: number,
-  colors: [string, string],
-  opacity: number,
-  ring = 0,
-): void {
-  const x = Math.round(centerX - size / 2);
-  const y = Math.round(floor - size);
+/** A soft round glow of `color`, strongest at the center. */
+function glow(ctx: SKRSContext2D, x: number, y: number, radius: number, color: string, strength: number): void {
+  const light = ctx.createRadialGradient(x, y, 0, x, y, radius);
+  const alpha = (value: number) =>
+    Math.round(value * 255)
+      .toString(16)
+      .padStart(2, "0");
+  light.addColorStop(0, `${color}${alpha(strength)}`);
+  light.addColorStop(1, `${color}00`);
+  ctx.fillStyle = light;
+  ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+}
+
+function roundedRect(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** One tile: a vertical gradient, and a lighter wedge across its top corner. */
+function tile(ctx: SKRSContext2D, x: number, y: number, side: number, colors: [string, string], opacity: number): void {
   ctx.globalAlpha = opacity;
-  const fill = ctx.createLinearGradient(0, y, 0, y + size);
+  const fill = ctx.createLinearGradient(0, y, 0, y + side);
   fill.addColorStop(0, colors[0]);
   fill.addColorStop(1, colors[1]);
   ctx.fillStyle = fill;
-  ctx.fillRect(x, y, size, size);
-  // A lighter wedge across the top corner, the way light falls on a cover.
+  roundedRect(ctx, x, y, side, side, side * 0.08);
+  ctx.fill();
+  ctx.save();
+  roundedRect(ctx, x, y, side, side, side * 0.08);
+  ctx.clip();
   ctx.fillStyle = "#ffffff";
   ctx.globalAlpha = opacity * 0.16;
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.lineTo(x + size, y);
-  ctx.lineTo(x, y + size * 0.7);
+  ctx.lineTo(x + side, y);
+  ctx.lineTo(x, y + side * 0.7);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
   ctx.globalAlpha = 1;
-  if (ring > 0) {
-    const gap = Math.max(1, Math.round(ring / 2));
-    ctx.strokeStyle = ACCENT;
-    ctx.lineWidth = ring;
-    const offset = gap + ring / 2;
-    ctx.strokeRect(x - offset, y - offset, size + offset * 2, size + offset * 2);
-  }
-}
-
-/** The lit edge the tiles stand on, and its glow on the surface below. */
-function shelf(ctx: SKRSContext2D, width: number, y: number, thickness: number, glow: number): void {
-  const light = ctx.createLinearGradient(0, y, 0, y + glow);
-  light.addColorStop(0, "#22d3ee55");
-  light.addColorStop(1, "#22d3ee00");
-  ctx.fillStyle = light;
-  ctx.fillRect(0, y, width, glow);
-  ctx.fillStyle = ACCENT;
-  ctx.fillRect(0, y, width, thickness);
 }
 
 /**
- * A row of tiles around a selected one. `pitch` is the distance between tile
- * centers, `count` the number of tiles on each side of the middle.
+ * The mark with its top left at (`left`, `top`), each logical pixel `scale`
+ * picture pixels. `extra` more small tiles continue the row to the right,
+ * fading out, for pictures where it runs off the edge.
  */
-function row(
-  ctx: SKRSContext2D,
-  centerX: number,
-  floor: number,
-  size: number,
-  pitch: number,
-  count: number,
-  ring: number,
-  dim: number,
-): void {
-  for (let step = count; step >= 1; step--) {
-    for (const side of [-1, 1]) {
-      const index = (2 + side * step + TILES.length * 4) % TILES.length;
-      tile(ctx, centerX + side * step * pitch, floor, size, TILES[index], dim);
-    }
+function mark(ctx: SKRSContext2D, left: number, top: number, scale: number, extra = 0): void {
+  const at = (value: number) => value * scale;
+  const { tile: big, small, ring } = MARK;
+  glow(ctx, left + at(big.x + big.side / 2), top + at(big.y + big.side / 2), at(big.side * 1.6), "#8b5cf6", 0.35);
+  const smalls = [...small];
+  for (let step = 0; step < extra; step++) {
+    const last = smalls[smalls.length - 1]!;
+    const next = MARK.small[(smalls.length) % MARK.small.length]!;
+    smalls.push({ ...next, x: last.x + last.side + 6 });
   }
-  tile(ctx, centerX, floor, Math.round(size * 1.36), TILES[2], 1, ring);
+  for (const [index, item] of smalls.entries()) {
+    const fade = index < small.length ? 1 : Math.max(0.25, 1 - (index - small.length + 1) * 0.3);
+    tile(ctx, left + at(item.x), top + at(item.y), at(item.side), item.colors, MARK.smallOpacity * fade);
+  }
+  tile(ctx, left + at(big.x), top + at(big.y), at(big.side), big.colors, 1);
+  // The ring: 2 px wide, 2 px clear of the tile, slightly rounded, as `SelectedFrame` draws it.
+  const inset = at(ring / 2);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = at(ring);
+  roundedRect(ctx, left + inset, top + inset, at(big.side + 8) - inset * 2, at(big.side + 8) - inset * 2, at(3));
+  ctx.stroke();
 }
 
 function icon(): Uint8ClampedArray {
   const canvas = createCanvas(128, 128);
   const ctx = canvas.getContext("2d");
   background(ctx, 128, 128);
-  // The home screen crops the icon to a circle, so the row runs off both
-  // sides and the selected tile sits in the middle.
-  const floor = 88;
-  shelf(ctx, 128, floor + 5, 3, 34);
-  row(ctx, 64, floor, 40, 54, 2, 3, 0.7);
+  // The home screen crops the icon to a circle. The selected tile sits just
+  // left of the middle and the row runs off the right edge, as in the app.
+  const scale = 1.3;
+  mark(ctx, 64 - (MARK.tile.x + MARK.tile.side / 2) * scale - 10, 64 - (MARK.height / 2) * scale, scale, 1);
   return ctx.getImageData(0, 0, 128, 128).data;
 }
 
@@ -147,38 +159,37 @@ function liveAreaBackground(): Uint8ClampedArray {
   const canvas = createCanvas(840, 500);
   const ctx = canvas.getContext("2d");
   background(ctx, 840, 500);
-  // The gate image covers the middle of the LiveArea, so the row sits low
-  // and stays dim behind it.
-  const floor = 404;
-  shelf(ctx, 840, floor + 12, 4, 84);
-  row(ctx, 420, floor, 96, 132, 4, 5, 0.42);
-  // Darken the whole picture a little so the system's text stays readable.
-  ctx.fillStyle = "#02040c66";
+  // Large soft glows in the tiles' colors, and the row faint along the
+  // bottom. The gate covers the middle and the system writes the name over
+  // the left, so the picture stays dark there.
+  glow(ctx, 700, 90, 320, "#8b5cf6", 0.28);
+  glow(ctx, 120, 440, 300, "#06b6d4", 0.18);
+  ctx.globalAlpha = 0.35;
+  mark(ctx, 470, 360, 2.4, 3);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#02040c55";
   ctx.fillRect(0, 0, 840, 500);
   return ctx.getImageData(0, 0, 840, 500).data;
 }
 
 /**
  * The splash. It leads into the app's first screen: the Midnight theme's
- * background (the default), the name where the scan page of a first start
- * puts it, and the shelf row low and dim as on the LiveArea.
+ * background, and the mark and the name where the scan page of a first start
+ * puts them (`SPLASH_MARK_TOP`, `SPLASH_TITLE_Y`, measured in the preview).
  */
+const SPLASH_MARK_TOP = 56;
+const SPLASH_TITLE_Y = 138;
+
 function splash(): Uint8ClampedArray {
   const canvas = createCanvas(960, 544);
   const ctx = canvas.getContext("2d");
-  const fill = ctx.createLinearGradient(0, 0, 0, 544);
-  fill.addColorStop(0, "#101a36");
-  fill.addColorStop(1, "#02040c");
-  ctx.fillStyle = fill;
-  ctx.fillRect(0, 0, 960, 544);
-  const floor = 470;
-  shelf(ctx, 960, floor + 12, 4, 84);
-  row(ctx, 480, floor, 96, 132, 4, 5, 0.3);
+  background(ctx, 960, 544);
+  mark(ctx, 480 - MARK.width, SPLASH_MARK_TOP * 2, 2);
   ctx.fillStyle = "#ffffff";
-  ctx.font = '48px "Shelf Bold"';
+  ctx.font = '40px "Shelf Bold"';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(MANIFEST.title, 480, 206);
+  ctx.fillText(MANIFEST.title, 480, SPLASH_TITLE_Y * 2);
   return ctx.getImageData(0, 0, 960, 544).data;
 }
 
@@ -187,10 +198,9 @@ function startup(): Uint8ClampedArray {
   const ctx = canvas.getContext("2d");
   background(ctx, 280, 158);
   // No text: the system's "Start" label covers the bottom of the gate. The
-  // row sits a little above the middle, clear of that label.
-  const floor = 100;
-  shelf(ctx, 280, floor + 7, 2, 44);
-  row(ctx, 140, floor, 46, 64, 2, 3, 0.6);
+  // mark sits above the middle, clear of that label.
+  const scale = 1.2;
+  mark(ctx, 140 - (MARK.width * scale) / 2, 26, scale);
   return ctx.getImageData(0, 0, 280, 158).data;
 }
 
@@ -333,6 +343,9 @@ function chunk(type: string, data: Uint8Array): Buffer {
   return Buffer.concat([head, body, tail]);
 }
 
+/** The most rounding error a pixel carries from its neighbors, per channel. */
+const ERROR_CAP = 12;
+
 /** Encode opaque RGBA pixels as an indexed, non-interlaced 8-bit PNG. */
 function indexedPng(rgba: Uint8ClampedArray, width: number, height: number): Buffer {
   const pixels = new Uint32Array(width * height);
@@ -362,10 +375,39 @@ function indexedPng(rgba: Uint8ClampedArray, width: number, height: number): Buf
     nearest.set(color, found);
     return found;
   };
+  // Floyd-Steinberg dithering: each pixel's rounding error goes to the
+  // pixels right of and below it. Without it, 256 colors showed the
+  // backgrounds' gradients and glows as bands and blotches.
   const scanlines = Buffer.alloc((width + 1) * height);
+  const error = new Float32Array(width * height * 3);
   for (let y = 0; y < height; y++) {
     scanlines[y * (width + 1)] = 0; // filter: none
-    for (let x = 0; x < width; x++) scanlines[y * (width + 1) + 1 + x] = lookup(pixels[y * width + x]);
+    for (let x = 0; x < width; x++) {
+      const at = y * width + x;
+      const wanted = [0, 1, 2].map((channel) => {
+        // The carried error is capped: uncapped, it built up in the dark
+        // lower half of the splash into stray reddish dots.
+        const carried = Math.max(-ERROR_CAP, Math.min(ERROR_CAP, error[at * 3 + channel]));
+        const value = ((pixels[at] >> (16 - channel * 8)) & 255) + carried;
+        return Math.max(0, Math.min(255, Math.round(value)));
+      });
+      const index = lookup((wanted[0] << 16) | (wanted[1] << 8) | wanted[2]);
+      scanlines[y * (width + 1) + 1 + x] = index;
+      const chosen = colors[index];
+      for (let channel = 0; channel < 3; channel++) {
+        const miss = wanted[channel] - ((chosen >> (16 - channel * 8)) & 255);
+        const spread = (dx: number, dy: number, share: number) => {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= width || ny >= height) return;
+          error[(ny * width + nx) * 3 + channel] += miss * share;
+        };
+        spread(1, 0, 7 / 16);
+        spread(-1, 1, 3 / 16);
+        spread(0, 1, 5 / 16);
+        spread(1, 1, 1 / 16);
+      }
+    }
   }
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);

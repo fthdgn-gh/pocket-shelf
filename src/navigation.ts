@@ -2,7 +2,12 @@ import type { FocusDirection } from "@pocketjs/framework/input";
 import { CASCADE_DEPTH, GRID_COLUMNS, GRID_ROWS, HOME_AFTER, LIST_ROWS, listRows } from "./layout.ts";
 import type { DetailLevel, ViewMode } from "./types.ts";
 
-export const VIEW_MODES: readonly ViewMode[] = ["carousel", "grid", "list", "cascade", "home"];
+export const VIEW_MODES: readonly ViewMode[] = ["home", "carousel", "grid", "list", "cascade"];
+/**
+ * The view of a new install, and of anyone who never chose one. Carousel
+ * until 2026-10-21; a view saved in settings.json is kept.
+ */
+export const DEFAULT_VIEW: ViewMode = "home";
 export const DETAIL_LEVELS: readonly DetailLevel[] = ["basic", "normal", "detailed"];
 
 /** Items the L and R triggers jump over in each view. The list shows a row less under the status bar. */

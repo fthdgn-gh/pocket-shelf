@@ -41,6 +41,8 @@ export function ScanPage(props: { onDone: () => void }) {
       class="relative flex-col w-full h-full items-center justify-center gap-[10] bg-gradient-to-b from-black to-black"
       style={{ gradFrom: theme.bgTop, gradTo: theme.bgBottom }}
     >
+      <Mark text={theme.text} />
+      <View class="h-[2] shrink-0" />
       <Text class={text.heading} style={{ textColor: theme.text }}>
         Pocket Shelf
       </Text>
@@ -60,6 +62,22 @@ export function ScanPage(props: { onDone: () => void }) {
           </Text>
         )}
       </Show>
+    </View>
+  );
+}
+
+/**
+ * The app's mark: the Home view in small, a selected tile in its ring and two
+ * smaller tiles after it. `src/tools/art.ts` draws the same mark (`MARK`) on
+ * the splash and the LiveArea pictures; keep the two in step.
+ */
+function Mark(props: { text: string }) {
+  return (
+    <View class="relative w-[110] h-[48] shrink-0">
+      <View class="absolute left-[52] top-[4] w-[26] h-[26] rounded-[2] opacity-80 bg-gradient-to-b from-amber-400 to-red-600" />
+      <View class="absolute left-[84] top-[4] w-[26] h-[26] rounded-[2] opacity-80 bg-gradient-to-b from-emerald-400 to-teal-700" />
+      <View class="absolute left-[4] top-[4] w-[40] h-[40] rounded-[3] bg-gradient-to-b from-violet-400 to-violet-800" />
+      <View class="absolute left-0 top-0 w-[48] h-[48] rounded-[3] border-2" style={{ borderColor: props.text }} />
     </View>
   );
 }

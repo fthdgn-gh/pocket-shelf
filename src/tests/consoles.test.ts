@@ -2,7 +2,7 @@
 // `bun run shelf:test`.
 
 import { describe, expect, test } from "bun:test";
-import { CATEGORY_ID_PATTERN, CATEGORY_LABEL_MAX, PSP_ID, PSX_ID } from "../categories.ts";
+import { BUILTIN_CATEGORIES, CATEGORY_ID_PATTERN, CATEGORY_LABEL_MAX, PSP_ID, PSX_ID, SMART_CATEGORIES, SYSTEM_ID, orderCategories } from "../categories.ts";
 import { consoleCategories, consoleCategory } from "../consoles.ts";
 
 describe("consoleCategory", () => {
@@ -51,5 +51,35 @@ describe("consoleCategories", () => {
     ]);
     expect(list.map((item) => item.id)).toEqual(["retro-gb", "retro-arcade"]);
     expect(list.every((item) => item.console === true)).toBe(true);
+  });
+});
+
+describe("orderCategories", () => {
+  const consoles = consoleCategories(["Nintendo - Super Nintendo Entertainment System", "Sega - Mega Drive - Genesis"]);
+  const custom = [{ id: "emulators", label: "Emulators", custom: true }];
+  const all = [...SMART_CATEGORIES, ...BUILTIN_CATEGORIES, ...consoles, ...custom];
+  const ids = (saved: string[]) => orderCategories(all, saved).map((item) => item.id);
+
+  test("with nothing saved, System is last, after the consoles and the user's categories", () => {
+    const order = ids([]);
+    expect(order.at(-1)).toBe(SYSTEM_ID);
+    expect(order.indexOf("retro-snes")).toBeGreaterThan(order.indexOf("builtin-psx"));
+    expect(order.indexOf("emulators")).toBeGreaterThan(order.indexOf("retro-md"));
+    expect(order.slice(0, 2)).toEqual(SMART_CATEGORIES.map((item) => item.id));
+  });
+
+  test("a console that appears later goes before System while System is last", () => {
+    const saved = ids([]).filter((id) => id !== "retro-md");
+    const order = ids(saved);
+    expect(order.at(-1)).toBe(SYSTEM_ID);
+    expect(order.at(-2)).toBe("retro-md");
+  });
+
+  test("System moved by the user keeps its place; new ones go at the end", () => {
+    const saved = ids([]).filter((id) => id !== "retro-md" && id !== SYSTEM_ID);
+    saved.splice(2, 0, SYSTEM_ID);
+    const order = ids(saved);
+    expect(order[2]).toBe(SYSTEM_ID);
+    expect(order.at(-1)).toBe("retro-md");
   });
 });
