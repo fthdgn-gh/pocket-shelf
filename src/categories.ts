@@ -97,6 +97,32 @@ export function isPsmId(titleId: string): boolean {
   return /^NP[NOPQ]A\d{5}$/.test(titleId);
 }
 
+/**
+ * Categories in tab order. A category in the saved order keeps its place; of
+ * the others, the smart ones go first and the rest follow in the order given,
+ * except System, which goes last. While System is the last saved category, a
+ * new category (a console's first RetroArch game, one the user made) goes
+ * before it, so System stays last; once the user has moved System elsewhere,
+ * new ones go at the end.
+ */
+export function orderCategories(items: readonly Category[], saved: readonly string[]): Category[] {
+  const base = [...items.filter((item) => item.id !== SYSTEM_ID), ...items.filter((item) => item.id === SYSTEM_ID)];
+  const present = new Set(base.map((item) => item.id));
+  const systemAt = saved.indexOf(SYSTEM_ID);
+  const systemLast = systemAt >= 0 && saved.slice(systemAt + 1).every((id) => !present.has(id));
+  const position = (item: Category) => {
+    const index = saved.indexOf(item.id);
+    if (index >= 0) return index;
+    if (item.smart) return -1;
+    if (item.id === SYSTEM_ID) return Number.MAX_SAFE_INTEGER;
+    return systemLast ? systemAt - 0.5 : Number.MAX_SAFE_INTEGER - 1;
+  };
+  return base
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => position(a.item) - position(b.item) || a.index - b.index)
+    .map(({ item }) => item);
+}
+
 export function cycleCategory(list: readonly CategoryId[], current: CategoryId, delta: number): CategoryId {
   if (list.length === 0) return current;
   const index = list.indexOf(current);

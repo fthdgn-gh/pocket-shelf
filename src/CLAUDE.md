@@ -190,8 +190,19 @@ cannot be driven. Evidence comes from its log and from files under
   `60-<lang>-first-start`). Not yet seen on hardware.
 - **Splash** (`sce_sys/pic0.png`, 960x544, indexed): the system shows it
   while the app loads. Drawn by `src/tools/art.ts` in the Midnight theme's
-  colors, with the name where the scan page puts it, so a first start reads
-  as one screen.
+  colors, with the mark and the name where the scan page puts them
+  (`SPLASH_MARK_TOP`, `SPLASH_TITLE_Y`, measured from preview shot `72b`),
+  so a first start reads as one screen.
+- **The mark** (2026-10-20): the Home view in small, a selected tile in the
+  white ring and two smaller tiles after it (`MARK` in `art.ts`, `Mark` in
+  `components/scan-page.tsx`; keep them in step). It is the bubble icon (the
+  home screen crops it to a circle, so the row runs off the edge), the
+  splash, the gate image, and faint on the LiveArea background. It replaced
+  the old Carousel scene with its cyan frame and lit shelf.
+- **The LiveArea PNGs are dithered** (Floyd-Steinberg, carried error capped
+  at 12 per channel, `indexedPng` in `art.ts`). Reduced to 256 colors
+  without it, the gradients and glows showed bands and blotches; uncapped,
+  the error left reddish dots in the splash's dark half.
 - **The home screen's database** (`appdb.rs`): `ur0:shell/db/app.db`,
   table `tbl_appinfo_icon` (`titleId`, `title`, `iconPath`), one row per
   bubble. Read once per scan with the system's SQLite module and shared by
@@ -754,9 +765,14 @@ above and below the picture.
 
 ## Category order
 
-The default tab order is `BUILTIN_CATEGORIES` in `categories.ts`: Games,
-Homebrew, PS Mobile, PSP, PSX, System. Preview shots reach a tab with
-`tabTo(id)`, read from that order.
+The default tab order (`orderCategories` in `categories.ts`): the smart
+tabs, the built-ins (`BUILTIN_CATEGORIES`: Games, Homebrew, PS Mobile, PSP,
+PSX), the RetroArch consoles, the user's own categories, and System last. A
+category not yet in the saved order goes before System while System is the
+last saved one, so System stays last when a console or a category is added;
+once the user moves System elsewhere, new ones go at the end. Until
+2026-10-20 the consoles came after System. Preview shots reach a tab with
+`tabTo(id)` and `tabToConsole(n)`, read from that order.
 
 ## Smart categories
 
@@ -818,8 +834,12 @@ and `components/menu.tsx` draws each row by name.
   at every press. A first version slid only when the current name left the
   view; on hardware the user saw the names "jumping back and forth". A name
   that does not fit whole fades out (a class change, so it is animated).
-- **Five views.** Carousel (`views/carousel.tsx`, the default) is the shelf
-  as before. **Home** (`views/home.tsx`, id `home`), after the PS5 home
+- **Five views.** Home is the default since 2026-10-21 (`DEFAULT_VIEW` in
+  `navigation.ts`; a view saved in `settings.json` is kept). Carousel
+  (`views/carousel.tsx`) is the shelf as before and was the default until
+  then. Home is also first in `VIEW_MODES`, the View row's order: Home,
+  Carousel, Grid, List, Cascade. Preview shots pick a view with
+  `viewTo(mode)`, counted from the default, and shots with no view show Home. **Home** (`views/home.tsx`, id `home`), after the PS5 home
   screen, came after it: the selected tile at `HOME_LEFT` at full size with
   ring and shadow, the next ones at `small` after it, aligned at the top,
   at 80% opacity (`homeSlot`, `HOME` in `layout.ts`), tweened with

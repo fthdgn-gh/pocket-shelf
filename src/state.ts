@@ -15,6 +15,7 @@ import {
   cycleCategory,
   loadCategoryConfig,
   makeCategoryId,
+  orderCategories,
   saveCategoryConfig,
   type Category,
 } from "./categories.ts";
@@ -56,7 +57,7 @@ import { createUpdateFlow } from "./update-flow.ts";
 import { DEFAULT_CHANNEL, UPDATE_CHANNELS, type UpdateChannel } from "./updates.ts";
 import { searchTitles } from "./search.ts";
 import { CLOCK_FORMATS, loadSettings, saveSettings } from "./settings.ts";
-import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
+import { DEFAULT_VIEW, DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
 import { DEFAULT_FONT, textClasses } from "./text.ts";
 import { MENU, isMenuPage, menuPath, parentPage, type MenuItem, type MenuPage } from "./menu-items.ts";
 import { readStatus, sameStatus, type Status } from "./status.ts";
@@ -173,21 +174,14 @@ export function createLauncherState(catalog: Catalog) {
     const consoles = catalogGames().flatMap((game) => (game.console === undefined ? [] : [game.console]));
     return consoleCategories(consoles).filter((item) => !custom.has(item.id));
   });
-  // Every category in tab order. Of the ids missing from the saved order, the
-  // smart ones go first and the others (new ones) follow at the end,
-  // built-ins before consoles before custom.
-  const allCategories = createMemo<Category[]>(() => {
-    const base = [...SMART_CATEGORIES, ...BUILTIN_CATEGORIES, ...retroCategories(), ...customCategories()];
-    const position = (item: Category) => {
-      const index = categoryOrder().indexOf(item.id);
-      if (index >= 0) return index;
-      return item.smart ? -1 : Number.MAX_SAFE_INTEGER;
-    };
-    return base
-      .map((item, index) => ({ item, index }))
-      .sort((a, b) => position(a.item) - position(b.item) || a.index - b.index)
-      .map(({ item }) => (item.name ? { ...item, label: t().categories[item.name] } : item));
-  });
+  // Every category in tab order (`orderCategories`): built-ins before
+  // consoles before custom, and System last.
+  const allCategories = createMemo<Category[]>(() =>
+    orderCategories(
+      [...SMART_CATEGORIES, ...BUILTIN_CATEGORIES, ...retroCategories(), ...customCategories()],
+      categoryOrder(),
+    ).map((item) => (item.name ? { ...item, label: t().categories[item.name] } : item)),
+  );
   const isHidden = (id: string) => hiddenCategories().includes(id);
   createEffect(
     on(
@@ -288,7 +282,7 @@ export function createLauncherState(catalog: Catalog) {
   // One font since the Font setting was removed; read through a function as before.
   const font = () => DEFAULT_FONT;
   const [detail, setDetail] = createSignal<DetailLevel>(saved?.detail ?? "normal");
-  const [view, setViewMode] = createSignal<ViewMode>(saved?.view ?? "carousel");
+  const [view, setViewMode] = createSignal<ViewMode>(saved?.view ?? DEFAULT_VIEW);
   const [confirmMode, setConfirmMode] = createSignal<ConfirmMode>(saved?.confirm ?? "circle");
   const [backdropOn, setBackdropOn] = createSignal(saved?.backdrop ?? true);
   const [iconBoxOn, setIconBoxOn] = createSignal(saved?.iconBox ?? true);
