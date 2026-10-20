@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, untrack } from "solid-js";
+import { createEffect, createMemo, For, on, Show, untrack } from "solid-js";
 import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
 import { getOps, hostViewport } from "@pocketjs/framework/host";
@@ -14,8 +14,14 @@ import { StatusItems } from "./status-bar.tsx";
  * The top bar: the L and R buttons around the category names, the current
  * one in bold over a short accent bar, then the status items at the right.
  * The names slide so the current one sits in the middle between L and R, the
- * same way at every press; a name that does not fit whole fades out.
+ * same way at every press. A name an end of the bar cuts shows in part and
+ * faint, so the next ones can be glimpsed. A gradient over the ends could not
+ * match what is behind the bar (a title's backdrop under the theme's wash)
+ * and showed as dark blocks.
  */
+/** The most a cut name shows at: half of it in view shows at half of this. */
+const CUT_OPACITY = 0.5;
+
 export function Header(props: { state: LauncherState }) {
   const { state } = props;
   let stripRef: NodeMirror | undefined;
@@ -45,11 +51,6 @@ export function Header(props: { state: LauncherState }) {
     if (stripRef) animate(stripRef, "translateX", x, { dur: 220, easing: "out" });
   });
 
-  const shown = (index: number) => {
-    const left = (lefts()[index] ?? 0) - scroll();
-    return left >= 0 && left + (widths()[index] ?? 0) <= room();
-  };
-
   const many = () => state.categories().length > 1;
 
   return (
@@ -70,15 +71,32 @@ export function Header(props: { state: LauncherState }) {
           <For each={state.categories()}>
             {(item, index) => {
               const active = () => state.categoryId() === item.id;
+              let nameRef: NodeMirror | undefined;
+              // A name cut by an end of the bar shows faint, fainter the less of
+              // it shows; a whole one at full strength. Tweened with the slide.
+              const opacity = () => {
+                const left = (lefts()[index()] ?? 0) - scroll();
+                const width = widths()[index()] ?? 1;
+                const seen = Math.min(left + width, room()) - Math.max(left, 0);
+                const part = Math.max(0, Math.min(1, seen / width));
+                return part >= 1 ? 1 : part * CUT_OPACITY;
+              };
+              createEffect(
+                on(
+                  opacity,
+                  (next) => {
+                    if (nameRef) animate(nameRef, "opacity", next, { dur: 220, easing: "out" });
+                  },
+                  { defer: true },
+                ),
+              );
               return (
-                // A class change, not a style change, so the fade is animated.
                 <View
-                  class={
-                    shown(index())
-                      ? "absolute top-0 h-[30] flex-col items-center justify-center gap-[3] opacity-100 transition-opacity duration-200"
-                      : "absolute top-0 h-[30] flex-col items-center justify-center gap-[3] opacity-0 transition-opacity duration-200"
-                  }
-                  style={{ insetL: lefts()[index()] ?? 0, width: widths()[index()] ?? 0 }}
+                  ref={(el) => {
+                    nameRef = el;
+                  }}
+                  class="absolute top-0 h-[30] flex-col items-center justify-center gap-[3]"
+                  style={{ insetL: lefts()[index()] ?? 0, width: widths()[index()] ?? 0, opacity: untrack(opacity) }}
                 >
                   <Text
                     class={active() ? state.text().bodyBold : state.text().body}
