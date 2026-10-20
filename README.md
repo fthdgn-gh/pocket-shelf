@@ -2,8 +2,8 @@
 
 A launcher for the PS Vita. It lists the titles installed on the console
 (Vita games, homebrew, PlayStation Mobile, PSP and PS1 games, and system
-applications) in tabs. Each title gets an icon and a backdrop, and it starts
-with one button press.
+applications) and the games in your RetroArch playlists, in tabs. Each title
+gets an icon and a backdrop, and it starts with one button press.
 
 Pocket Shelf is written in TypeScript with Solid and runs on
 [PocketJS](https://github.com/pocket-stack/pocketjs). This repository is a fork
@@ -23,20 +23,29 @@ and its Vita host.
 
 ## Features
 
-- **Tabs per kind of title:** Games, Homebrew, PS Mobile, PSP, PSX and System,
-  with a title count on each. You can add your own categories, and rename,
-  reorder or hide any of them. "Last Played" and "Favorites" fill themselves.
-- **Four views:** a carousel, a five-column grid, a list, and a cascade after
-  the Xbox 360 dashboard: the selected title at the left and the next ones
-  shrinking to the right. Each has three detail levels: Basic, Normal and
-  Detailed.
+- **Tabs per kind of title:** Games, Homebrew, PS Mobile, PSP, PSX, one tab
+  per RetroArch console, and System last. You can add your own categories,
+  and rename, reorder or hide any of them. "Last Played" and "Favorites" fill
+  themselves.
+- **Five views:** Home (the default), after the PS5 home screen: the selected
+  title large at the left, its name and a Launch button below; a carousel; a
+  five-column grid; a list; and a cascade after the Xbox 360 dashboard. Each
+  has three detail levels: Basic, Normal and Detailed.
+- **RetroArch games** from RetroArch's own playlists, one tab per console.
+  Each game starts straight into the core its playlist names, without
+  RetroArch's menu (see [RetroArch](#retroarch)).
 - **PSP and PS1 games through Adrenaline.** This covers EBOOTs in
   `PSP/GAME` and ISO and CSO images in `ISO`. Pocket Shelf boots the game with
   its own small VSH plugin, so you don't have to pick it in the XMB. Before it
   installs or turns on the plugin, Pocket Shelf asks you.
-- **Artwork from [SteamGridDB](https://www.steamgriddb.com/).** You can pick an
-  icon and a backdrop for one title, or fetch artwork for a whole category at
-  once. This needs your own API key.
+- **Artwork from [SteamGridDB](https://www.steamgriddb.com/) or libretro's
+  thumbnail server.** You can pick an icon and a backdrop for one title, or
+  fetch artwork for a whole category at once. Choose the source: Auto
+  (libretro for RetroArch games, SteamGridDB for the rest), SteamGridDB, or
+  libretro (RetroArch, PS1 and PSP games, no key). SteamGridDB needs your own
+  API key.
+- **Long lists:** holding a direction speeds up, from one title at a time to
+  twenty, so a tab of thousands of games can be crossed in seconds.
 - **Search** across every tab with the on-screen keyboard.
 - **Per-title changes:** name, category, icon, backdrop and favorite.
 - **Six themes:** Midnight, Aurora, Sakura, Ember, Daylight, and Dynamic, which
@@ -53,8 +62,8 @@ and its Vita host.
    [![Newest release](https://img.shields.io/github/v/release/fthdgn-gh/pocket-shelf?include_prereleases&sort=semver&label=newest%20release)](https://github.com/fthdgn-gh/pocket-shelf/releases)
 
    There is no stable release yet. The current one is the beta
-   [`shelf-v0.1.0-beta.2`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.1.0-beta.2)
-   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.1.0-beta.2/pocket-shelf.vpk)).
+   [`shelf-v0.1.0-beta.3`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.1.0-beta.3)
+   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.1.0-beta.3/pocket-shelf.vpk)).
    GitHub marks betas as pre-releases, so its "Latest" label does not point to
    them. Releases come in three channels:
    - **Stable:** tested on hardware.
@@ -80,6 +89,19 @@ only TheOfficialFloW's has been tested on hardware. The first time you start a
 PSP or PS1 game, Pocket Shelf offers to add its plugin to Adrenaline's plugin
 list. Nothing changes until you confirm. Adrenaline's own files and settings
 are never modified.
+
+### RetroArch
+
+Install RetroArch for the Vita (`RETROVITA`) and scan your games into
+playlists in RetroArch (Import Content). Pocket Shelf reads those playlists,
+compressed or not, from `ux0:/data/retroarch/playlists`, or the folder
+`retroarch.cfg` names. Each game starts with the core its playlist entry names,
+else the playlist's default core, else an installed core for its console.
+
+- After you add games to a playlist, run **Rescan titles**.
+- Games whose file path holds `&` are left out: RetroArch cuts its launch
+  parameter there. Rename the file to bring the game in.
+- RetroArch's PlayStation and PSP games join the PSX and PSP tabs.
 
 ### SteamGridDB API key
 
