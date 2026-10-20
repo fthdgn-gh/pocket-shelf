@@ -274,7 +274,7 @@ directory in `hosts/`:
 | `macos-widget` | 3       | macos / widget    | 420×560 default, 240×180…4096×4096       | 2       | `input.buttons`, `input.ime`, `input.pointer`, `input.text`, `host.clipboard`, `display.viewport.live`, `text.glyphs.baked`, `text.glyphs.runtime` |
 | `macos-app`    | 4       | macos / window    | 720×480 default, 240×180…4096×4096, accepts fixed | 2 | `input.buttons`, `display.viewport.live`, `text.glyphs.baked`, `text.layout.native`; systemUI role adds `ui.compositor-surfaces` |
 | `linux-app`    | 4       | linux / window    | 800×600 default, 240×180…4096×4096, accepts fixed | 1 | same as `macos-app` |
-| `web-app`      | 4       | web / window      | 800×600 default, 320×240…4096×4096, accepts fixed | 1 | `input.buttons`, `display.viewport.live`, `text.glyphs.baked`; systemUI role adds `ui.compositor-surfaces` |
+| `web-app`      | 4       | web / window      | 800×600 default, 320×240…4096×4096, accepts fixed | 1 | `input.buttons`, `display.viewport.live`, `text.glyphs.baked`, `text.glyphs.runtime`; systemUI role adds `ui.compositor-surfaces` |
 
 `roleCapabilities.systemUI` is the one conditional column: those APIs reach a
 package only when it resolves in the System-UI role. `ui.compositor-surfaces`
@@ -338,6 +338,8 @@ under `tools/`, builds through its own command, and stays out of
 | `symbian-e7-dev`         | `bun run symbian`            | the E7 host has not passed the hardware acceptance suite |
 | `meizu-m8-dev`           | `bun run meizu-m8`           | the Windows CE 6 acceptance receipt has not passed |
 | `blackberry-qnx-dev`     | `bun run blackberry-qnx`     | a private exact-device profile (Classic SQC100, Core Native) |
+| `moto-g-play-dev`        | `bun run moto-g-play`        | a private exact-device profile (Android 14, arm64) |
+| `redmi-1s-dev`           | `bun run redmi-1s`           | a private exact-device profile (Android 4.3; one APK with ARMv7 and arm64 libraries) |
 
 Each module builds its own `definePlatformContractRegistry` and passes it to
 `validateAndResolveBuildPlan`, so the resolver, compiler, and plan format are
@@ -424,7 +426,8 @@ of keeping a per-demo target table.
 
 ## Consumers and backend dispatch
 
-`bun pocket build` reads the plan and indexes one table of native backends:
+`bun pocket build` reads the plan and indexes one table of native backends by
+catalog id ([CLI › Targets](/docs/cli/#targets)):
 
 ```ts
 // tools/pocket.ts
@@ -432,19 +435,29 @@ const targetBackends = {
   psp: async ({ planPath, projectRoot, outdir, args }) => { /* tools/psp.ts */ },
   vita: async ({ planPath, projectRoot, outdir, args }) => { /* tools/vita.ts */ },
   pocketbook: async ({ outdir }) => { /* bundle only; the host ELF is cross-compiled */ },
-};
+  "web-app": async ({ plan, outdir }) => compiledBundle(/* hosts/web */),
+  "macos-app": async ({ plan, outdir }) => compiledBundle(/* hosts/desktop */),
+  "linux-app": async ({ plan, outdir }) => compiledBundle(/* hosts/desktop */),
+  "macos-widget": async ({ plan, outdir }) => compiledBundle(/* note-widget */),
+} satisfies Partial<Record<string, TargetBackend>>;
 
-await targetBackends[target as PocketTargetId](context);
+const backend = targetBackends[catalogId];
+if (!backend) usage(`target ${catalogId} has no build backend in tools/pocket.ts yet; …`);
+await backend(context);
 ```
 
-**That table holds three of the seven registered targets.** The desktop targets
-build through their own tools instead — `macos-app` through `tools/macos.ts`,
-`macos-widget` through `tools/note.ts` and `tools/widget.ts` — and `linux-app`
-and `web-app` have no `pocket build` path today: the plan resolves and then the
-index throws a TypeError on an undefined backend. The table carries a
-`satisfies Record<PocketTargetId, TargetBackend>` annotation it does not meet,
-and `tools/` sits outside the `tsconfig.json` include list, so no typecheck
-reports the gap.
+**The table has one entry per registered target, seven in all; device targets
+of the catalog resolve and compile through it and build through their own
+scripts.** `psp` and
+`vita` are the two backends that package a platform binary. The `pocketbook`,
+`web-app`, `macos-app`, `linux-app` and `macos-widget` hosts load
+`<output>.js` and `<output>.pak` from a filesystem, so their entries print the
+bundle `compile` wrote and the host that loads it. The native desktop hosts
+build through their own tools — `macos-app` through `tools/macos.ts`,
+`macos-widget` through `tools/note.ts`, which builds
+`engine/pocket3d/examples/note-widget`. A catalog id
+without an entry stops with a usage error naming the files `compile` wrote. [CLI](/docs/cli/#check-compile-build) lists
+the `build` output of each target.
 
 After dispatch, a backend reads resolved fields; it does not recalculate
 physical dimensions or output names from the target id. The serialized plan

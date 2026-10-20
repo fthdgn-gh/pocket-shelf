@@ -15,6 +15,11 @@
 //!     `ui_render_incremental[_scaled]()` retains the same RGBA8 framebuffer
 //!     and repaints only changed regions. The returned pointer stays valid
 //!     until the next render or init call on this instance.
+//!   - `ui_render_premultiplied_scaled(scale)` rasterizes the same DrawList
+//!     into a buffer of its own that keeps coverage: premultiplied R,G,B and
+//!     the alpha the ops accumulated, for a host that lays the interface over
+//!     a scene it drew itself. It leaves the opaque framebuffer and the
+//!     incremental tracker as they are.
 //!   - Single-threaded by construction (one wasm instance per Ui).
 
 #![allow(static_mut_refs)]
@@ -32,6 +37,9 @@ static mut UI: Option<Ui> = None;
 static mut FRAMEBUFFER: Vec<u8> = Vec::new();
 use pocketjs_core::compositor::CompositorRaster;
 static mut AUXILIARY_FRAMEBUFFER: Vec<u8> = Vec::new();
+/// The primary surface with coverage (`ui_render_premultiplied_scaled`). It is
+/// separate from FRAMEBUFFER: the incremental tracker describes that buffer.
+static mut PREMULTIPLIED_FRAMEBUFFER: Vec<u8> = Vec::new();
 
 /// Browser System hosts upload visible child AppInstance framebuffers here.
 /// Values are arbitrary-size RGBA rasters indexed by the shell's compositor
@@ -79,6 +87,7 @@ pub extern "C" fn ui_init(raster_density: u32) {
         UI = Some(Ui::new_with_raster_density(raster_density.max(1)));
         FRAMEBUFFER.clear();
         AUXILIARY_FRAMEBUFFER.clear();
+        PREMULTIPLIED_FRAMEBUFFER.clear();
         COMPOSITOR_RASTERS.clear();
         COMPOSITOR_FRAMES.clear();
         DAMAGE_TRACKER = DamageTracker::new();
@@ -186,6 +195,30 @@ pub extern "C" fn ui_node_children_len(id: i32) -> usize {
 #[no_mangle]
 pub extern "C" fn ui_node_display(id: i32) -> i32 {
     ui().resolved_style(id).map_or(-1, |style| i32::from(style.display))
+}
+
+/// Rounded rect (x, y, w, h, relative to the parent) then the unrounded solver
+/// output (NaN without a solver node) into eight f32 at `out`. Returns 0 for
+/// a stale id. The MicroTS compiler's build-time layout evaluation reads it.
+#[no_mangle]
+pub extern "C" fn ui_node_layout(id: i32, out: *mut f32) -> i32 {
+    let Some((x, y, w, h)) = ui().layout_of(id) else {
+        return 0;
+    };
+    let (ux, uy, uw, uh) = ui().layout_unrounded_of(id).unwrap_or((f32::NAN, f32::NAN, f32::NAN, f32::NAN));
+    let values = [x, y, w, h, ux, uy, uw, uh];
+    for (index, value) in values.into_iter().enumerate() {
+        // SAFETY: the caller passes an `ui_alloc` buffer of at least 32 bytes.
+        unsafe { out.add(index).write(value) };
+    }
+    1
+}
+
+/// `Ui::set_layout_mode`: pocketjs_core::tree::LAYOUT_LIVE, LAYOUT_STATIC
+/// (with the rect) or LAYOUT_FORMULA.
+#[no_mangle]
+pub extern "C" fn ui_set_layout_mode(id: i32, mode: i32, x: f32, y: f32, w: f32, h: f32) {
+    ui().set_layout_mode(id, mode as u8, x, y, w, h);
 }
 
 #[no_mangle]
@@ -506,6 +539,15 @@ pub extern "C" fn ui_draw_hash() -> u64 {
     draw_hash(&ui().draw().words)
 }
 
+/// The same hash for the auxiliary surface's DrawList, so a host with a second
+/// screen redraws it when its content changes. Returns 0 when the instance has
+/// no auxiliary surface.
+#[no_mangle]
+pub extern "C" fn ui_draw_hash_auxiliary() -> u64 {
+    ui().draw_auxiliary()
+        .map_or(0, |draw| draw_hash(&draw.words))
+}
+
 fn draw_hash(words: &[u32]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for word in words {
@@ -685,6 +727,45 @@ pub extern "C" fn ui_render_scaled(scale: u32) -> *const u8 {
     render_at_scale(scale)
 }
 
+/// Rasterize the primary DrawList at an integer physical scale into RGBA8 that
+/// keeps coverage: the buffer starts transparent, and each pixel ends as
+/// premultiplied R,G,B with the alpha its ops accumulated. The R,G,B bytes
+/// equal [`ui_render_scaled`]'s. The pointer has that export's size and stays
+/// valid until the next premultiplied render or init call. Returns null for an
+/// unsupported scale.
+#[no_mangle]
+pub extern "C" fn ui_render_premultiplied_scaled(scale: u32) -> *const u8 {
+    if !(1..=raster::MAX_RENDER_SCALE).contains(&scale) {
+        return core::ptr::null();
+    }
+    let u = ui();
+    let (viewport_w, viewport_h) = u.viewport();
+    let Some(bytes) = (viewport_w as usize)
+        .checked_mul(scale as usize)
+        .and_then(|width| {
+            (viewport_h as usize)
+                .checked_mul(scale as usize)
+                .and_then(|height| width.checked_mul(height))
+        })
+        .and_then(|pixels| pixels.checked_mul(4))
+    else {
+        return core::ptr::null();
+    };
+    // (the borrows are render_at_scale's: see the note there)
+    let dl: *const pocketjs_core::DrawList = u.draw();
+    let u_ref: &Ui = unsafe { &*(u as *const Ui) };
+    unsafe {
+        PREMULTIPLIED_FRAMEBUFFER.resize(bytes, 0);
+        raster::render_scaled_premultiplied(
+            u_ref,
+            &(*dl).words,
+            &mut PREMULTIPLIED_FRAMEBUFFER,
+            scale,
+        );
+        PREMULTIPLIED_FRAMEBUFFER.as_ptr()
+    }
+}
+
 /// Rasterize the shell with retained child AppInstance framebuffers inserted
 /// at SURFACE_QUAD painter positions.
 #[no_mangle]
@@ -812,6 +893,24 @@ mod tests {
             &[0, 0, 255, 255]
         );
     }
+}
+
+static mut CAPTURED_TEXTS: String = String::new();
+#[no_mangle]
+pub extern "C" fn ui_capture_texts(surface: u32, root: i32) -> i32 {
+    ui().capture_texts(surface, root) as i32
+}
+/// Stage the last capture; returns its byte length (ui_captured_texts_ptr).
+#[no_mangle]
+pub extern "C" fn ui_captured_texts(surface: u32) -> usize {
+    unsafe {
+        CAPTURED_TEXTS = ui().captured_texts(surface);
+        (&*core::ptr::addr_of!(CAPTURED_TEXTS)).len()
+    }
+}
+#[no_mangle]
+pub extern "C" fn ui_captured_texts_ptr() -> *const u8 {
+    unsafe { (&*core::ptr::addr_of!(CAPTURED_TEXTS)).as_ptr() }
 }
 
 // One bounded JSON staging buffer; callers copy before the next stream query.

@@ -7,19 +7,10 @@
 #
 #   POCKETJS_TARGET          target id to publish as ui.__host
 #   POCKETJS_HOST_ABI        ABI number to publish as ui.__hostAbi
-#   POCKETJS_LOGICAL_WIDTH   guest viewport, baked into the host
-#   POCKETJS_LOGICAL_HEIGHT
-#   POCKETJS_AUX_LOGICAL_WIDTH
-#   POCKETJS_AUX_LOGICAL_HEIGHT
-#   POCKETJS_AUX_PHYSICAL_WIDTH
-#   POCKETJS_AUX_PHYSICAL_HEIGHT
-#   POCKETJS_AUX_PRESENTATION
-#   POCKETJS_AUX_RASTER_DENSITY
-#   POCKETJS_RASTER_DENSITY  raster samples per logical pixel
 #   POCKETJS_CORE_LIB        libpocketjs_3ds_core.a
 #   POCKETJS_QUICKJS_DIR     directory holding quickjs.h and libquickjs.a
-#   POCKETJS_APP_POCKET      target-thinned guest package to embed as recovery
-#   POCKETJS_RUNTIME_SLOT    app-id-derived state directory below runtime/apps
+#   POCKETJS_APP_POCKET      target-thinned guest package to embed as recovery;
+#                            empty builds the runtime alone, with no RomFS
 #   POCKETJS_BUILD_DIR       scratch for objects, the .shbin, the .elf, romfs
 #   POCKETJS_OUT_3DSX        the .3dsx to write
 #   POCKETJS_SMDH_TITLE      SMDH metadata
@@ -35,6 +26,11 @@
 #   POCKETJS_CIA_TITLE       exheader process name (8 bytes)
 #   POCKETJS_CIA_PRODUCT     CTR-P-XXXX product code
 #   POCKETJS_CIA_UNIQUE_ID   title id unique part, e.g. 0xFF3D0
+#
+# The guest's surfaces and its state directory on the SD card are not here:
+# the host reads them at boot from the plan and the identity of the package in
+# RomFS, so the code segments are the same for every game (the generic runtime
+# tools/runtime/3ds.ts builds, which tools/repack/3ds.ts pairs with a game).
 #
 # The tape and the capture window travel INSIDE the binary: a capture run never
 # reads the emulator's filesystem for its input. Nothing is written outside
@@ -77,13 +73,7 @@ ARCH := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 CFLAGS := -Wall -Wextra -O2 -g -std=gnu11 -mword-relocations -ffunction-sections -fdata-sections \
   $(ARCH) -D__3DS__ -DJS_NO_NAN_BOXING \
   -DPOCKETJS_TARGET_ID='"$(POCKETJS_TARGET)"' \
-  -DPOCKETJS_RUNTIME_SLOT='"$(POCKETJS_RUNTIME_SLOT)"' \
   -DPOCKETJS_HOST_ABI=$(POCKETJS_HOST_ABI) \
-  -DPOCKETJS_VIEW_W=$(POCKETJS_LOGICAL_WIDTH) \
-  -DPOCKETJS_VIEW_H=$(POCKETJS_LOGICAL_HEIGHT) \
-  -DPOCKETJS_AUX_VIEW_W=$(POCKETJS_AUX_LOGICAL_WIDTH) \
-  -DPOCKETJS_AUX_VIEW_H=$(POCKETJS_AUX_LOGICAL_HEIGHT) \
-  -DPOCKETJS_RASTER_DENSITY=$(POCKETJS_RASTER_DENSITY) \
   -I$(INCLUDE_DIR) -I$(POCKETJS_PICA_INCLUDE) -I$(BUILD) -I$(POCKETJS_QUICKJS_DIR) \
   -I$(DEVKITPRO)/libctru/include
 
@@ -107,7 +97,11 @@ LDFLAGS := -specs=3dsx.specs $(ARCH) -Wl,--gc-sections -Wl,-Map,$(BUILD)/pocketj
 LIBPATHS := -L$(DEVKITPRO)/libctru/lib
 LIBS := -lcitro3d -lctru -lm
 
-OBJECTS := $(BUILD)/main.o $(BUILD)/media.o $(BUILD)/offload.o $(BUILD)/soc.o $(BUILD)/svcwire.o $(BUILD)/runtime.o $(BUILD)/dev_protocol.o $(BUILD)/devserver.o $(BUILD)/devmenu.o $(BUILD)/native.o $(BUILD)/hbldr.o $(BUILD)/gfx.o $(BUILD)/qjs.o $(BUILD)/input.o $(BUILD)/vshader_shbin.o
+# quirc (vendored, ISC; src/quirc/VENDORED.txt) decodes QR codes for camera.c.
+QUIRC_OBJECTS := $(BUILD)/quirc/quirc.o $(BUILD)/quirc/decode.o $(BUILD)/quirc/identify.o $(BUILD)/quirc/version_db.o
+OBJECTS := $(BUILD)/main.o $(BUILD)/media.o $(BUILD)/offload.o $(BUILD)/soc.o $(BUILD)/svcwire.o $(BUILD)/runtime.o $(BUILD)/dev_protocol.o $(BUILD)/devserver.o $(BUILD)/devmenu.o $(BUILD)/native.o $(BUILD)/hbldr.o $(BUILD)/gfx.o $(BUILD)/qjs.o $(BUILD)/input.o \
+  $(BUILD)/sha256.o $(BUILD)/jscan.o $(BUILD)/link_proto.o $(BUILD)/link.o $(BUILD)/launcher.o $(BUILD)/wifi.o $(BUILD)/camera.o \
+  $(BUILD)/stage.o $(BUILD)/agent.o $(QUIRC_OBJECTS) $(BUILD)/vshader_shbin.o $(BUILD)/stage_shbin.o
 ELF := $(BUILD)/pocketjs-3ds.elf
 SMDH := $(BUILD)/pocketjs-3ds.smdh
 
@@ -134,6 +128,16 @@ $(BUILD)/vshader_shbin.s $(BUILD)/vshader_shbin.h &: $(BUILD)/vshader.shbin
 $(BUILD)/vshader_shbin.o: $(BUILD)/vshader_shbin.s
 	$(CC) $(ARCH) -c $< -o $@
 
+# The agent stage's shader (stage.c): the mascot's room on the top screen.
+$(BUILD)/stage.shbin: $(SOURCE)/stage.v.pica | $(BUILD)
+	$(PICASSO) -o $@ $<
+
+$(BUILD)/stage_shbin.s $(BUILD)/stage_shbin.h &: $(BUILD)/stage.shbin
+	cd $(BUILD) && $(BIN2S) -a 4 -H stage_shbin.h stage.shbin > stage_shbin.s
+
+$(BUILD)/stage_shbin.o: $(BUILD)/stage_shbin.s
+	$(CC) $(ARCH) -c $< -o $@
+
 # The capture window, the input tape and the viewport reach the C sources as -D
 # defines, so a rebuild driven by source mtimes alone would keep a previous
 # run's values — a stale tape or a short capture window produces a plausible
@@ -148,10 +152,21 @@ $(FLAGS_STAMP).probe: | $(BUILD)
 	@rm -f $(FLAGS_STAMP).new
 $(FLAGS_STAMP): $(FLAGS_STAMP).probe ;
 
-$(BUILD)/%.o: $(SOURCE)/%.c $(wildcard $(POCKETJS_PICA_INCLUDE)/*.h) $(BUILD)/vshader_shbin.h $(FLAGS_STAMP) | $(BUILD)
+$(BUILD)/%.o: $(SOURCE)/%.c $(wildcard $(POCKETJS_PICA_INCLUDE)/*.h) $(BUILD)/vshader_shbin.h $(BUILD)/stage_shbin.h $(FLAGS_STAMP) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Third-party code keeps its own warnings out of the host's build log.
+$(BUILD)/quirc/%.o: $(SOURCE)/quirc/%.c $(wildcard $(SOURCE)/quirc/*.h) $(FLAGS_STAMP) | $(BUILD)
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -w -c $< -o $@
+
 $(BUILD)/offload.o: $(SOURCE)/offload.h $(SOURCE)/offload_queue.h
+$(BUILD)/link.o $(BUILD)/link_proto.o $(BUILD)/launcher.o $(BUILD)/qjs.o $(BUILD)/main.o $(BUILD)/devmenu.o: \
+  $(SOURCE)/link.h $(SOURCE)/link_proto.h $(SOURCE)/launcher.h $(SOURCE)/jscan.h $(SOURCE)/sha256.h $(SOURCE)/runtime.h
+$(BUILD)/camera.o $(BUILD)/gfx.o $(BUILD)/qjs.o $(BUILD)/main.o: $(SOURCE)/camera.h
+$(BUILD)/wifi.o $(BUILD)/qjs.o $(BUILD)/main.o: $(SOURCE)/wifi.h
+$(BUILD)/stage.o $(BUILD)/agent.o $(BUILD)/qjs.o $(BUILD)/main.o $(BUILD)/link.o: $(SOURCE)/stage.h $(SOURCE)/agent.h
+$(BUILD)/runtime.o: $(SOURCE)/runtime.h
 $(BUILD)/qjs.o: $(SOURCE)/offload.h $(SOURCE)/offload_coverage.h
 $(BUILD)/media.o: $(SOURCE)/media.h $(SOURCE)/media_wire.h $(SOURCE)/media_adpcm.h
 $(BUILD)/main.o $(BUILD)/qjs.o $(BUILD)/gfx.o: $(SOURCE)/media.h
@@ -200,9 +215,17 @@ $(SMDH): $(ICON) $(SMALL_ICON) $(SMDH_STAMP) | $(BUILD)
 	$(SMDHTOOL) --create "$$POCKETJS_SMDH_TITLE" "$$POCKETJS_SMDH_DESC" \
 	  "$$POCKETJS_SMDH_AUTHOR" $(ICON) $@ $(SMALL_ICON)
 
+ifneq ($(POCKETJS_APP_POCKET),)
 $(OUT): $(ELF) $(SMDH) $(ROMFS)/app.pocket $(ROMFS_LAYOUT_STAMP)
 	mkdir -p $(dir $(OUT))
 	$(THREEDSXTOOL) $(ELF) $@ --romfs=$(ROMFS) --smdh=$(SMDH)
+else
+# The generic runtime: an SMDH and no RomFS. Started as it is, it says on the
+# bottom screen that it carries no game; tools/repack/3ds.ts gives it one.
+$(OUT): $(ELF) $(SMDH)
+	mkdir -p $(dir $(OUT))
+	$(THREEDSXTOOL) $(ELF) $@ --smdh=$(SMDH)
+endif
 
 ifneq ($(CIA),)
 # The CIA's identity arrives as -D substitutions, not in a file, and make cannot

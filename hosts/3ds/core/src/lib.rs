@@ -28,6 +28,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use pocketjs_core::package::{select_guest, GuestError, PackageError};
+use pocketjs_core::plan_facts::{plan_facts, PlanFactsError};
+use pocketjs_core::sha256::sha256_hex_prefix;
 use pocketjs_core::spec;
 use pocketjs_core::Ui;
 
@@ -64,7 +66,29 @@ pub struct PocketGuestPackage {
     pub plan_length: usize,
     pub package_hash: u64,
     pub variant_hash: u64,
+    /// What the runtime takes from the variant's plan at boot instead of
+    /// having it compiled in: the primary and auxiliary surfaces (auxiliary
+    /// width and height are 0 when the plan has none) and
+    /// POCKET_GUEST_FEATURE_* bits.
+    pub view_width: u32,
+    pub view_height: u32,
+    pub raster_density: u32,
+    pub aux_width: u32,
+    pub aux_height: u32,
+    pub aux_raster_density: u32,
+    pub features: u32,
+    /// The application's state directory name below runtime/apps: the first
+    /// 16 hex digits of SHA-256(app id), NUL-terminated (tools/3ds.ts
+    /// `runtimeSlot`).
+    pub slot: [u8; 17],
 }
+
+/// `features.io.offload` is true in the plan.
+pub const POCKET_GUEST_FEATURE_OFFLOAD: u32 = 1;
+/// `features.media.playback` is true in the plan.
+pub const POCKET_GUEST_FEATURE_MEDIA: u32 = 2;
+/// `features.system.agent` is true in the plan: the top screen is the agent stage.
+pub const POCKET_GUEST_FEATURE_AGENT: u32 = 4;
 
 struct PakSprite {
     name: String,
@@ -147,7 +171,8 @@ fn package_error_code(error: GuestError) -> i32 {
 
 /// Verify a complete `.pocket` and select one exact target/ABI variant.
 /// Returns 0 on success; non-zero codes are stable for the C runtime's status
-/// and recovery files (12 is a bad pointer or non-UTF-8 target argument).
+/// and recovery files (12 is a bad pointer or non-UTF-8 target argument;
+/// 13-15 a plan whose JSON, viewport or auxiliary surface cannot be read).
 #[no_mangle]
 pub unsafe extern "C" fn pocket_package_open(
     ptr: *const u8,
@@ -164,22 +189,43 @@ pub unsafe extern "C" fn pocket_package_open(
         Ok(value) if !value.is_empty() => value,
         _ => return 12,
     };
-    match select_guest(bytes(ptr, len), target, host_abi, false) {
-        Ok(guest) => {
-            out.write(PocketGuestPackage {
-                javascript: guest.js.as_ptr(),
-                javascript_length: guest.js.len(),
-                pak: guest.pak.as_ptr(),
-                pak_length: guest.pak.len(),
-                plan: guest.plan.as_ptr(),
-                plan_length: guest.plan.len(),
-                package_hash: guest.package_hash,
-                variant_hash: guest.variant_hash,
-            });
-            0
-        }
-        Err(error) => package_error_code(error),
+    let guest = match select_guest(bytes(ptr, len), target, host_abi, false) {
+        Ok(guest) => guest,
+        Err(error) => return package_error_code(error),
+    };
+    if guest.id.is_empty() {
+        return 8;
     }
+    let facts = match plan_facts(guest.plan) {
+        Ok(facts) => facts,
+        Err(PlanFactsError::Malformed) => return 13,
+        Err(PlanFactsError::Viewport) => return 14,
+        Err(PlanFactsError::Auxiliary) => return 15,
+    };
+    let auxiliary = facts.auxiliary;
+    let mut slot = [0u8; 17];
+    slot[..16].copy_from_slice(&sha256_hex_prefix::<16>(guest.id.as_bytes()));
+    out.write(PocketGuestPackage {
+        javascript: guest.js.as_ptr(),
+        javascript_length: guest.js.len(),
+        pak: guest.pak.as_ptr(),
+        pak_length: guest.pak.len(),
+        plan: guest.plan.as_ptr(),
+        plan_length: guest.plan.len(),
+        package_hash: guest.package_hash,
+        variant_hash: guest.variant_hash,
+        view_width: facts.viewport.width,
+        view_height: facts.viewport.height,
+        raster_density: facts.viewport.raster_density,
+        aux_width: auxiliary.map_or(0, |surface| surface.width),
+        aux_height: auxiliary.map_or(0, |surface| surface.height),
+        aux_raster_density: auxiliary.map_or(0, |surface| surface.raster_density),
+        features: if facts.feature("io.offload") { POCKET_GUEST_FEATURE_OFFLOAD } else { 0 }
+            | if facts.feature("media.playback") { POCKET_GUEST_FEATURE_MEDIA } else { 0 }
+            | if facts.feature("system.agent") { POCKET_GUEST_FEATURE_AGENT } else { 0 },
+        slot,
+    });
+    0
 }
 
 /// QuickJS encodes lone UTF-16 surrogates (a string sliced mid-emoji) as WTF-8
@@ -522,6 +568,12 @@ pub extern "C" fn ui_tick() {
     ui().tick();
 }
 
+/// Solve pending layout for both screens (timed apart from the builds).
+#[no_mangle]
+pub extern "C" fn ui_relayout() {
+    ui().relayout_outputs();
+}
+
 /// Build this frame's DrawList and return its length in words.
 ///
 /// Call exactly once per presented frame: the build is not idempotent (it
@@ -855,6 +907,26 @@ pub extern "C" fn ui_pak_sprite_step(index: usize) -> u32 {
 #[no_mangle]
 pub extern "C" fn ui_debug_inspect(id: i32) {
     ui().debug_inspect(id);
+}
+
+static mut CAPTURED_TEXTS: String = String::new();
+
+/// Arm a capture of the text runs painted inside `root` (0: the whole
+/// surface) on the next draw of `surface` (0 primary, 1 auxiliary).
+#[no_mangle]
+pub extern "C" fn ui_capture_texts(surface: u32, root: i32) -> i32 {
+    ui().capture_texts(surface, root) as i32
+}
+
+/// The last capture (Ui::captured_texts), valid until the next call.
+#[no_mangle]
+pub extern "C" fn ui_captured_texts(surface: u32, length: *mut usize) -> *const u8 {
+    let texts = unsafe { &mut *core::ptr::addr_of_mut!(CAPTURED_TEXTS) };
+    *texts = ui().captured_texts(surface);
+    if !length.is_null() {
+        unsafe { *length = texts.len() };
+    }
+    texts.as_ptr()
 }
 
 #[no_mangle]

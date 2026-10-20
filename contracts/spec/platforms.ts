@@ -189,6 +189,22 @@ export const POCKET_CAPABILITIES = defineCapabilityRegistry([
   // core exercise the contract without granting network access to every host.
   "io.offload",
   "net.http",
+  // The console's system link to a paired companion computer
+  // (`globalThis.link`, contracts/spec/link.ts): pairing, link status, the
+  // companion's app catalog and app installs. The 3ds-dev host owns the link
+  // and also routes net.http over it.
+  "link.companion",
+  // The console's wireless radio and saved connections (`globalThis.wifi`,
+  // contracts/spec/wifi.ts). Reads and selects; never writes a connection.
+  "system.wifi",
+  // Outer-camera preview texture plus an on-device QR decoder
+  // (`globalThis.camera`, contracts/spec/camera.ts).
+  "camera.qr",
+  // The system mascot on the top screen and the agent channel to the
+  // companion (`globalThis.agent`, contracts/spec/agent.ts): a guest that
+  // declares it hands the top screen to the host's 3D stage and keeps its
+  // whole interface on the auxiliary surface.
+  "system.agent",
   // SQLite behind the db module's own namespace (`globalThis.db`,
   // contracts/spec/db.ts): five synchronous ops, rows as one JSON line per
   // query() call, per-app storage the host confines. Registered ahead of any
@@ -415,6 +431,9 @@ export const POCKET_TARGETS = defineTargetRegistry<PocketCapabilityId, {
       "input.buttons",
       "display.viewport.live",
       "text.glyphs.baked",
+      // hosts/web/runtime-glyphs.js: the browser draws a codepoint no baked
+      // atlas maps and the realm appends it to the atlases (app-instance.js).
+      "text.glyphs.runtime",
       "io.offload",
       "text.layout.offload",
     ],

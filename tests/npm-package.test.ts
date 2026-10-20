@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
 
@@ -20,6 +20,37 @@ function packedFiles(cwd: string): string[] {
   ) as { files: Array<{ path: string }> } | undefined;
   expect(report?.files, result.stdout.toString().slice(0, 200)).toBeDefined();
   return report!.files.map((file) => file.path);
+}
+
+/** Every bare package specifier reachable from `entries` through relative
+ *  imports, with the first file that imports it. */
+function reachablePackages(entries: readonly string[]): Map<string, string> {
+  const transpiler = new Bun.Transpiler({ loader: "tsx" });
+  const seen = new Set<string>();
+  const packages = new Map<string, string>();
+  const pending = entries.map((entry) => join(root, entry));
+  const resolveRelative = (from: string, specifier: string) => {
+    const base = resolve(dirname(from), specifier);
+    return [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, join(base, "index.ts")]
+      .find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
+  };
+  while (pending.length > 0) {
+    const file = pending.pop()!;
+    if (seen.has(file) || !/\.(?:ts|tsx|js|mjs)$/.test(file)) continue;
+    seen.add(file);
+    const source = readFileSync(file, "utf8").replace(/^#!.*\n/, "");
+    for (const { path: specifier } of transpiler.scanImports(source)) {
+      if (specifier.startsWith(".")) {
+        const next = resolveRelative(file, specifier);
+        if (next) pending.push(next);
+        continue;
+      }
+      if (/^(?:node:|bun(?::|$))/.test(specifier) || specifier.startsWith("@pocketjs/framework")) continue;
+      const name = specifier.split("/").slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
+      if (!packages.has(name)) packages.set(name, file.slice(root.length));
+    }
+  }
+  return packages;
 }
 
 function packArchive(cwd: string, destination: string): string {
@@ -162,6 +193,9 @@ describe("published npm artifacts", () => {
       "engine/pocket3d/crates/pocket3d-anim/Cargo.toml",
       "engine/pocket3d/crates/pocket3d-mesh/src",
       "engine/pocket3d/crates/pocket3d-mesh/Cargo.toml",
+      "engine/pocket3d/crates/pocket3d-packs/src",
+      "engine/pocket3d/crates/pocket3d-packs/Cargo.toml",
+      "engine/pocket3d/crates/pocket3d-packs/pocket3d_packs.h",
       "engine/pocket3d/crates/pocket3d/src",
       "engine/pocket3d/crates/pocket3d/Cargo.toml",
       "engine/pocket3d/examples/handheld/src",
@@ -216,6 +250,9 @@ describe("published npm artifacts", () => {
       "engine/pocket3d/crates/pocket3d-mesh/src/p3m.rs",
       "engine/pocket3d/crates/pocket3d-mesh/src/colored.rs",
       "engine/pocket3d/crates/pocket3d-mesh/src/rigid.rs",
+      "engine/pocket3d/crates/pocket3d-packs/Cargo.toml",
+      "engine/pocket3d/crates/pocket3d-packs/src/lib.rs",
+      "engine/pocket3d/crates/pocket3d-packs/pocket3d_packs.h",
       "tools/3ds-toolchain.ts",
       "tools/vita-dev.ts",
       "tools/vita-dev-client.ts",
@@ -310,8 +347,8 @@ describe("published npm artifacts", () => {
     expect(files.some((file) => file.startsWith("engine/backends/"))).toBe(false);
     expect(files.some((file) => file.startsWith("hosts/esp-idf/"))).toBe(false);
     expect(files).not.toContain("docs/SYMBIAN_E7.md");
-    // The CLI toolchain pin still ships via the wholesale "tools" entry.
-    expect(files).toContain("tools/cli/psp-toolchain.json");
+    // Toolchain manifests travel with the framework that pins them.
+    expect(files).toContain("tools/targets/psp.toolchain.json");
 
     expect(files).toContain("devices/psp/pocket-psp-ge/src/lib.rs");
     expect(files).toContain("devices/psp/pocket-psp-ge/Cargo.lock");
@@ -320,12 +357,25 @@ describe("published npm artifacts", () => {
 
   }, 30_000);
 
+  test("manifest commands import only declared runtime dependencies", () => {
+    // An application installs the framework with its `dependencies` alone;
+    // a compiler import resolved from `devDependencies` or hoisting works in
+    // this checkout and fails in the application.
+    const dependencies = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).dependencies;
+    const undeclared = [...reachablePackages(["tools/pocket.ts", "tools/build.ts"])]
+      .filter(([name]) => !(name in dependencies))
+      .map(([name, importer]) => `${name} (${importer})`);
+    expect(undeclared).toEqual([]);
+  });
+
   test("CLI tarball stays self-contained and minimal", () => {
     expect(packedFiles(`${root}tools/cli`)).toEqual([
       "README.md",
       "bin.mjs",
+      "create.mjs",
+      "framework.mjs",
       "package.json",
-      "psp-toolchain.json",
+      "select.mjs",
       "symbian-toolchain.json",
     ]);
   });
@@ -363,6 +413,7 @@ describe("published npm artifacts", () => {
       expect(packages).toContain("pocket3d-world");
       expect(packages).toContain("pocket3d-anim");
       expect(packages).toContain("pocket3d-mesh");
+      expect(packages).toContain("pocket3d-packs");
       expect(existsSync(join(scratch, "package/engine/core/Cargo.toml"))).toBe(true);
     } finally {
       rmSync(scratch, { recursive: true, force: true });

@@ -29,42 +29,125 @@ test("each hostname belongs to exactly one Worker, and main deploys all three", 
   expect(readFileSync(ROOT + ".github/workflows/deploy.yml", "utf8")).toContain("bunx wrangler deploy -c site/pocket3d/wrangler.jsonc");
 });
 
-test("the homepage carries the title, the one-sentence lede and the four chapters", () => {
+test("the homepage carries the title, the one-sentence lede and the five chapters", () => {
   expect(home).toContain('<link rel="canonical" href="https://3d.pocket.nexus/">');
   expect(home).toContain("<title>Pocket3D</title>");
   expect(home).toContain('aria-label="Create 3D for every machine you love"');
   expect(home).toContain('<p class="lede">Pocket3D is a hardware-native 3D stack for portable interactive software.</p>');
-  for (const id of ["hardware-native", "compiler-first", "purpose-built", "coding-agents"]) {
-    expect(home).toContain(`<section class="chap" id="${id}"`);
-  }
+  const chapters = [...home.matchAll(/<section class="chap" id="([\w-]+)" style="--c:(var\(--\w+\))[^"]*">\s*<header class="head rv">\s*<div>\s*<h2>(.*?)<\/h2>\s*<p class="kick">([^<]+)<\/p>/g)];
+  expect(chapters.map((chapter) => chapter[1])).toEqual(["hardware-native", "compiler-first", "purpose-built", "efficient-ui", "coding-agents"]);
+  // the hero names each chapter, in order, with its colour and the line under its head
+  const named = [...home.slice(home.indexOf('<nav class="chapters"'), home.indexOf("<!-- 1 -->")).matchAll(/<a href="#([\w-]+)" style="--c:(var\(--\w+\))"><b>([^<]+)<\/b><span>([^<]+)<\/span><\/a>/g)];
+  expect(named.map((link) => link.slice(1))).toEqual(chapters.map((chapter) => [chapter[1], chapter[2], chapter[3].replace(/<[^>]+>/g, ""), chapter[4]]));
 });
 
-test("the bar, the hero and the footer link where a visitor expects", () => {
-  // the GitHub pill opens the repository's root, not a directory inside it
-  expect(home).toContain('<a class="pill go" href="https://github.com/pocket-nexus/pocketjs">GitHub</a>');
+test("the bar, the hero, the closing call and the footer link where a visitor expects", () => {
+  // the bar: PocketJS, then X, Discord and GitHub as icons, as on pocket.nexus; GitHub opens the repository's root
+  const bar = home.slice(home.indexOf('<nav class="links"'), home.indexOf("</header>"));
+  expect([...bar.matchAll(/<a class="(pill[^"]*)" href="([^"]+)"/g)].map((link) => [link[1], link[2]])).toEqual([
+    ["pill", "https://pocketjs.pocket.nexus/"],
+    ["pill ico", "https://x.com/pocket_js"],
+    ["pill ico", "https://discord.gg/cTce4eXzSK"],
+    ["pill ico", "https://github.com/pocket-nexus/pocketjs"],
+  ]);
+  expect((bar.match(/aria-label="[^"]+"><svg/g) ?? []).length).toBe(3);
   expect(home).not.toContain("pocketjs/tree/main/engine/pocket3d");
-  // Pocket Studio is named as unfinished wherever the page offers it
-  const studio = home.match(/<a class="btn alt" href="https:\/\/studio\.pocket\.nexus\/"[^>]*>(.*?)<\/a>/)![1];
-  expect(studio).toContain('<span class="wip" aria-hidden="true">WIP</span>');
-  expect(home).not.toContain("Read the source");
-  expect(home).toContain('<a href="mailto:support@pocket.nexus">support@pocket.nexus</a>');
+  // Pocket Studio is live: the hero offers it second, the closing call first, with a star on GitHub beside it
+  // the hero does not name a product the reader has not met: it offers to try online
+  expect(home).toContain('<a class="btn alt" href="https://studio.pocket.nexus/">Try it online</a>');
+  expect(home).not.toContain("Open Pocket Studio");
+  const close = home.slice(home.indexOf('<section class="close">'), home.indexOf("</main>"));
+  expect([...close.matchAll(/<a class="(btn[^"]*)" href="([^"]+)"/g)].map((button) => [button[1], button[2]])).toEqual([
+    ["btn", "https://studio.pocket.nexus/"],
+    ["btn alt", "https://github.com/pocket-nexus/pocketjs"],
+  ]);
+  expect(close).toContain("Star on GitHub");
+  // the closing text says what Pocket Studio is to Pocket3D before it sends the reader there
+  expect(close.indexOf("Pocket3D is built into Pocket Studio")).toBeGreaterThan(0);
+  expect(close.indexOf("Pocket3D is built into Pocket Studio")).toBeLessThan(close.indexOf('<a class="btn"'));
+  expect(close).not.toContain("device kernels");
+  for (const old of ["WIP", "Read the source", "Read the kernels"]) expect(home).not.toContain(old);
+  // the address is behind the word Contact
+  expect(home).toContain('<a href="mailto:support@pocket.nexus">Contact</a>');
+  expect(home).not.toContain(">support@pocket.nexus<");
 });
 
-test("the reel shows consoles' own frames, and chapter 1 carries no headline figures", () => {
-  const reel = home.slice(home.indexOf('<div class="reel">'), home.indexOf("<!-- 1 -->"));
-  const frames = [...reel.matchAll(/<img src="\/assets\/([^"]+)\.webp"[^>]*alt="([^"]*)"><figcaption><b>([^<]+)<\/b> on a ([^<]+)<\/figcaption>/g)];
-  // the list is written twice so the strip loops; the copy has empty alt text
-  expect(frames.length % 2).toBe(0);
-  const shown = frames.slice(0, frames.length / 2), copy = frames.slice(frames.length / 2);
-  expect(copy.map((frame) => frame[1])).toEqual(shown.map((frame) => frame[1]));
-  for (const frame of shown) expect(frame[2].length).toBeGreaterThan(20);
-  for (const frame of copy) expect(frame[2]).toBe("");
-  expect(shown.filter((frame) => frame[3] === "Pocket Tokyo").length).toBeGreaterThanOrEqual(2);
-  expect(new Set(shown.map((frame) => frame[4]))).toEqual(new Set(["PS Vita", "PSP"]));
-  expect(home).not.toContain("maneuver-3ds");
+test("the hero's wall shows consoles' own frames, and chapter 1 carries no headline figures", () => {
+  const wall = home.slice(home.indexOf('<div class="wall"'), home.indexOf('<nav class="chapters"'));
+  const columns = wall.split('<div class="col">').slice(1);
+  expect(columns.length).toBe(3);
+  const shown = new Set<string>(), consoles = new Set<string>();
+  for (const column of columns) {
+    const frames = [...column.matchAll(/<img src="\/assets\/([^"]+)\.webp"[^>]*alt="([^"]*)" decoding="async"><figcaption style="--c:var\(--(\w+)\)"><b>([^<]+)<\/b> · ([^<]+)<\/figcaption>/g)];
+    // five frames, written twice so the column loops; the copy has empty alt text
+    expect(frames.length).toBe(10);
+    const first = frames.slice(0, 5), copy = frames.slice(5);
+    expect(copy.map((frame) => frame[1])).toEqual(first.map((frame) => frame[1]));
+    for (const frame of copy) expect(frame[2]).toBe("");
+    for (const frame of first) {
+      // the caption's dot is the console's colour, and the alt text names the console that took the frame
+      const colours: Record<string, string> = { "PS Vita": "cyan", PSP: "yellow", "3DS": "pink" };
+      expect([frame[1], frame[3]]).toEqual([frame[1], colours[frame[5]]]);
+      expect(frame[2]).toStartWith((frame[5] === "3DS" ? "Nintendo 3DS" : frame[5]) + " capture: ");
+      shown.add(frame[1]);
+      consoles.add(frame[5]);
+    }
+  }
+  expect(shown.size).toBe(15);
+  expect(consoles).toEqual(new Set(["PS Vita", "PSP", "3DS"]));
+  // the reel under the hero is gone
+  for (const old of ['class="strip"', 'class="reel"', "maneuver-3ds"]) expect(home).not.toContain(old);
   const native = home.slice(home.indexOf('id="hardware-native"'), home.indexOf("<!-- 2 -->"));
   expect(native).not.toContain('class="proof"');
   for (const figure of ["16 → 7 ms", "250 → 60 draws", "0 late frames"]) expect(home).not.toContain(figure);
+});
+
+test("a name a reader may not know carries a bubble that says what it is", () => {
+  const tips = [...home.matchAll(/<span class="tip(?: under)?" tabindex="0" aria-describedby="(tip-\w+)">([^<]+)<span class="bubble" role="tooltip" id="(tip-\w+)"><b>([^<]+)<\/b>([^<]+)<\/span><\/span>/g)];
+  expect(tips.map((tip) => [tip[1], tip[2]])).toEqual([["tip-ge", "GE"], ["tip-pica", "PICA200"], ["tip-gxm", "GXM"], ["tip-tokyo", "Pocket Tokyo"], ["tip-cityir", "CityIR"], ["tip-atlas", "Pocket Atlas"]]);
+  for (const tip of tips) expect(tip[3]).toBe(tip[1]);
+  const said = Object.fromEntries(tips.map((tip) => [tip[1], tip[4] + " " + tip[5]]));
+  // each console's graphics chip or interface, beside the console's glyph in chapter 1
+  expect(said["tip-ge"]).toContain("Sony's PSP");
+  expect(said["tip-ge"]).toContain("no shaders");
+  expect(said["tip-pica"]).toContain("Nintendo 3DS");
+  expect(said["tip-gxm"]).toContain("PS Vita");
+  const native = home.slice(home.indexOf('id="hardware-native"'), home.indexOf("<!-- 2 -->"));
+  for (const id of ["tip-ge", "tip-pica", "tip-gxm"]) expect(native).toContain(`id="${id}"`);
+  // the two games are named as examples where chapter 2 first speaks of them
+  for (const id of ["tip-tokyo", "tip-atlas"]) expect(said[id]).toContain("an example app");
+  // the IR under the glass belongs to one game: its bubble says Pocket3D games do not share it.
+  // The glass is above the name, so this bubble opens below, and the name is not hidden from a reader.
+  expect(said["tip-cityir"]).toContain("Pocket3D games do not share an IR");
+  expect(said["tip-cityir"]).toContain("Pocket Tokyo's compiler");
+  expect(home).toContain('<span class="ir"><span class="tip under" tabindex="0" aria-describedby="tip-cityir">CityIR<');
+  expect(home).toContain(".under .bubble{left:50%;bottom:auto;top:calc(100% + 13px);translate:-50% 0;");
+  expect(home).toContain('<div class="optics">\n          <div class="glass" aria-hidden="true">');
+  // shown on hover and on focus, and kept inside its block below 1100 px
+  expect(home).toContain(".tip:hover .bubble,.tip:focus .bubble{opacity:1;visibility:visible");
+  expect(home).toContain("@media (max-width:1100px){\n  .tip{position:static}");
+});
+
+test("the Efficient UI chapter sets a screen's code beside the screen", () => {
+  const chapter = home.slice(home.indexOf('id="efficient-ui"'), home.indexOf("<!-- 5 -->"));
+  // between the engines and the agents
+  expect(home.indexOf('id="purpose-built"')).toBeLessThan(home.indexOf('id="efficient-ui"'));
+  expect(home.indexOf('id="efficient-ui"')).toBeLessThan(home.indexOf('id="coding-agents"'));
+  const why = chapter.match(/<p class="why">(.*?)<\/p>/)![1];
+  for (const said of ['<a href="https://pocketjs.pocket.nexus/">PocketJS</a>', "JSX", "SolidJS", "Tailwind", "32 MB", "333 MHz", "device kernels come from"]) expect(why).toContain(said);
+  // four parts of the code, each with its number, and the same four places on the capture of that screen
+  const marks = [...chapter.matchAll(/<span class="mk" data-m="(\d)" tabindex="0"><i>(\d)<\/i>/g)].map((mark) => [mark[1], mark[2]]);
+  const areas = [...chapter.matchAll(/<span class="area" data-m="(\d)" style="left:([\d.]+)%;top:([\d.]+)%;width:([\d.]+)%;height:([\d.]+)%" aria-label="[^"]+"><i>(\d)<\/i><\/span>/g)];
+  expect(marks).toEqual([["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"]]);
+  expect(areas.map((area) => [area[1], area[6]])).toEqual(marks);
+  for (const area of areas) {
+    expect(Number(area[2]) + Number(area[4])).toBeLessThanOrEqual(100);
+    expect(Number(area[3]) + Number(area[5])).toBeLessThanOrEqual(100);
+  }
+  expect(chapter).toContain('<img src="/assets/tokyo-title.webp"');
+  for (const said of ["Wordmark", "A flight over Shiba, around Tokyo Tower.", "Clock", "Rows"]) expect(chapter).toContain(said);
+  expect((chapter.match(/<div class="card fact rv"/g) ?? []).length).toBe(3);
+  expect(home).toContain('const light = (id) => { for (const el of $$("[data-m]", ui)) el.classList.toggle("on", el.dataset.m === id); };');
 });
 
 test("chapter 2 splits a line of Pocket Tokyo's scene into a mechanism for each console", () => {
@@ -98,8 +181,8 @@ test("chapter 2 splits a line of Pocket Tokyo's scene into a mechanism for each 
   expect(titles.size).toBe(9);
   expect([...shots].sort()).toEqual(["tokyo-3ds", "tokyo-3ds-dusk", "tokyo-day", "tokyo-dusk", "tokyo-psp", "tokyo-psp-dusk"]);
   // the glass is one drawing: still inside the figure, and live among the beams
-  expect(figure).toContain('<div class="glass"><svg class="still" viewBox="0 0 120 106"><use href="#glass-back"/><use href="#glass-front"/></svg></div>');
-  expect(figure).toContain("<b>CityIR</b>");
+  expect(figure).toContain('<div class="glass" aria-hidden="true"><svg class="still" viewBox="0 0 120 106"><use href="#glass-back"/><use href="#glass-front"/></svg></div>');
+  expect(figure).toContain('aria-describedby="tip-cityir">CityIR<');
   for (const id of ["glass-back", "glass-front"]) expect(home).toContain(`<symbol id="${id}" viewBox="0 0 120 106">`);
   const beams = figure.match(/<svg class="beams" aria-hidden="true">(.*?)<\/svg>\s*<\/div>\s*$/s)![1];
   expect([...beams.matchAll(/<use class="body" href="#(glass-\w+)"\/>/g)].map((use) => use[1])).toEqual(["glass-back", "glass-front"]);
@@ -116,10 +199,31 @@ test("chapter 2 splits a line of Pocket Tokyo's scene into a mechanism for each 
   for (const old of ['class="cols"', 'class="wire"', 'class="outs"', 'class="lrow', "LLVM does the same"]) expect(home).not.toContain(old);
   // the comparison of the reference with the capture is a figure of its own, named for its game
   const pair = home.slice(home.indexOf('<figure class="card viz pair rv"'), home.indexOf("<!-- 3 -->"));
-  expect(pair).toContain("<h3>Pocket Atlas <small>Griffith Observatory</small></h3>");
+  expect(pair).toMatch(/<h3><span class="tip"[^>]*>Pocket Atlas<span class="bubble".*?<\/span><\/span> <small>Griffith Observatory<\/small><\/h3>/);
+  for (const old of ['class="stage"', "written once in Three.js", "source and result", "Another game, one machine", "One meaning, three mechanisms"]) expect(home).not.toContain(old);
   expect(pair).toContain('<div class="compare" id="compare">');
   expect(pair).toContain('<img class="top" src="/assets/overlook-three.webp"');
+  // under it, the two halves as machines: what runs on each, and which parts the agent wrote
+  const route = pair.slice(pair.indexOf('<div class="route"'), pair.indexOf("</figure>"));
+  expect(pair.indexOf('<div class="route"')).toBeGreaterThan(pair.indexOf('<input type="range"'));
+  const machines = route.split('<div class="mach').slice(1).map((machine) => ({
+    name: machine.match(/<\/svg>([^<]+)<\/p>/)![1],
+    parts: [...machine.matchAll(/<div class="part (made|out)"><h4>([^<]+)<\/h4><p>([^<]+)<\/p>(<svg class="wrote")?/g)].map((part) => [part[2], part[1], Boolean(part[4])]),
+  }));
+  expect(machines).toEqual([
+    { name: "Development machine", parts: [["The scene", "made", true], ["The compiler", "made", true]] },
+    { name: "PS Vita", parts: [["The renderer", "made", true], ["The compiled scene", "out", false]] },
+  ]);
+  expect(route).toContain("Three.js, running in a browser.");
+  expect(route).toContain("Rust, written for these places.");
+  expect(route).toMatch(/<p class="by"><svg class="wrote"[^>]*>.*?<\/svg>written by a coding agent, as one project<\/p>/);
+  // the two cards share their rows, so the arrow from the compiler meets the compiled scene
+  expect(home).toContain(".mach{grid-row:1 / span 4;display:grid;grid-template-rows:subgrid;");
+  expect(home).toContain(".via{grid-row:4;");
+  // the slider itself is as it was
+  expect(pair).toContain('<input type="range" min="0" max="100" value="50" aria-label="Reveal the Three.js reference over the PS Vita capture">');
   expect(figure).not.toContain("Pocket Atlas");
+  expect(figure).toMatch(/<h3><span class="tip"[^>]*>Pocket Tokyo<span class="bubble"/);
   // the footer carries no credit line
   expect(home).not.toContain('class="credit"');
 });
@@ -137,10 +241,38 @@ test("the title is the arcade marquee: letters of the pixel face through five hu
   // the page loads the pixel face and no longer the round one, and the chapter heads use it
   expect(home).toContain("family=Press+Start+2P&");
   expect(home).toContain('--display:"Press Start 2P"');
-  expect(home).toContain(".head h2,.close h2{font:400 clamp(17px,2.2vw,29px)/1.6 var(--display)");
+  expect(home).toContain(".head h2,.close h2{--u:min(3px,.125em);font:400 clamp(17px,2.2vw,29px)/1.6 var(--display)");
   for (const page of [home, notFound]) expect(page).not.toContain("Titan");
   // the turned slab, its script and the stars are gone
   for (const old of ['class="rig"', 'class="spark"', "function pose(", "LEAN", "rotateX("]) expect(home).not.toContain(old);
+});
+
+test("pixel headlines step their outline, extrusion and drop by no more than one cell of the face", () => {
+  // Press Start 2P draws on a grid of 1/8 em. A step wider than a cell leaves the
+  // copies below a letter apart from it, as stripes: the step is 3px and one cell
+  // where the letters are under 24px, and no shadow of a headline is a fixed length.
+  const rule = (page: string, selector: string) => page.slice(page.indexOf(selector), page.indexOf("}", page.indexOf(selector)));
+  for (const [page, selector] of [[home, ".title{"], [home, ".head h2,.close h2{"], [notFound, "h1{"]] as const) {
+    expect(rule(page, selector)).toContain("--u:min(3px,.125em)");
+  }
+  for (const [page, selector] of [[home, ".ch{"], [home, ".head h2,.close h2{"], [notFound, "h1{"]] as const) {
+    const shadow = rule(page, selector).split("text-shadow:")[1];
+    expect(shadow).toContain("0 var(--u) 0");
+    expect(shadow).not.toMatch(/\dpx/);
+  }
+  // small letters take one step of extrusion, so the openings of A, E and R keep a dark row
+  const small = (page: string, query: string) => page.slice(page.indexOf(query), page.indexOf("\n}", page.indexOf(query)));
+  for (const [page, query, selector] of [
+    [home, "@media (max-width:980px){", ".head h2,.close h2{"],
+    [home, "@media (max-width:560px){", ".ch{"],
+    [notFound, "@media (max-width:560px){", "h1{"],
+  ] as const) {
+    const shadow = rule(small(page, query), selector).split("text-shadow:")[1];
+    expect(shadow).toContain("0 var(--u) 0");
+    expect(shadow).not.toContain("0 calc(var(--u)*2) 0 var(--c2)");
+    expect(shadow.split("calc(var(--u)*4)")).toHaveLength(1);
+    expect(shadow).not.toMatch(/\dpx/);
+  }
 });
 
 test("chapter 3 stands each engine as one tower, read from the game down to the plate", () => {
@@ -156,8 +288,13 @@ test("chapter 3 stands each engine as one tower, read from the game down to the 
   }
   expect(chapter).toContain('<p class="plate rv"');
   // a thread of beads runs down each tower, and the old rows of bricks are gone
-  expect(home).toContain(".chain::before{");
+  expect(home).toContain(".chain::before{content:\"\";position:absolute;left:calc(var(--x) - 3px);top:19px;");
+  // a pseudo-element states its own box: the page's "*" rule does not reach it
+  expect(home).toContain(".chain li::before{content:\"\";box-sizing:border-box;position:absolute;left:calc(var(--x) - 44px - 14px);top:1px;width:28px;height:28px;");
   expect(home).not.toContain('class="brick"');
+  // every engine's IR goes by a name of one kind
+  expect(towers.map((tower) => tower[4].match(/compiled to its IR<\/span><b>([^<]+)<\/b>/)![1])).toEqual(["PlaceIR", "WorldIR", "CityIR", "MapIR"]);
+  expect(chapter).not.toContain(".p3d");
 });
 
 test("the Worker deploys only what the homepage uses", () => {
@@ -230,6 +367,7 @@ test("page copy has no em dashes and links only to public places", () => {
     "https://fonts.gstatic.com",
     "https://3d.pocket.nexus/",
     "https://studio.pocket.nexus/",
+    "https://microts.pocket.nexus/",
   ];
   for (const html of [home, notFound, logo]) {
     expect(html).not.toContain("—");

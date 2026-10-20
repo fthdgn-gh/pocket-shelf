@@ -25,10 +25,28 @@ typedef struct {
   size_t plan_length;
   uint64_t package_hash;
   uint64_t variant_hash;
+  /* Read from the variant's plan when the package is opened: one runtime
+   * serves every game, so none of these is compiled in. aux_width and
+   * aux_height are 0 when the plan has no auxiliary surface. */
+  uint32_t view_width;
+  uint32_t view_height;
+  uint32_t raster_density;
+  uint32_t aux_width;
+  uint32_t aux_height;
+  uint32_t aux_raster_density;
+  uint32_t features; /* POCKET_GUEST_FEATURE_* */
+  /* First 16 hex digits of SHA-256(app id), NUL-terminated: the
+   * application's state directory below sdmc:/pocketjs/runtime/apps. */
+  char slot[17];
 } PocketGuestPackage;
 
+#define POCKET_GUEST_FEATURE_OFFLOAD 1u /* features["io.offload"] */
+#define POCKET_GUEST_FEATURE_MEDIA 2u   /* features["media.playback"] */
+#define POCKET_GUEST_FEATURE_AGENT 4u   /* features["system.agent"] */
+
 /* 0 = admitted. The package footer, target, host ABI, identity, plan and
- * NUL-terminated JS section are all checked before success. */
+ * NUL-terminated JS section are all checked before success; 13, 14 and 15
+ * name a plan whose JSON, viewport or auxiliary surface cannot be read. */
 int32_t pocket_package_open(
   const uint8_t *bytes,
   size_t length,
@@ -133,6 +151,10 @@ const uint32_t *ui_draw_list_ptr(void);
 size_t ui_draw_list_len(void);
 uint64_t ui_draw_hash(void);
 size_t ui_draw_auxiliary(void);
+/* Solve pending layout for both screens now; ui_draw and ui_draw_auxiliary
+ * solve on demand. Called first so the frame timing separates layout from
+ * the DrawList builds. */
+void ui_relayout(void);
 const uint32_t *ui_draw_auxiliary_list_ptr(void);
 size_t ui_draw_auxiliary_list_len(void);
 
@@ -214,6 +236,11 @@ uint32_t ui_pak_sprite_step(size_t index);
 
 /* DevTools (spec ops 18..22, docs/DEVTOOLS.md). All default-off. */
 void ui_debug_inspect(int32_t id);
+/* The agent's screen reading (contracts/spec/agent.ts): arm a capture of the
+ * text runs painted inside node `root` (0: the whole surface) on the next
+ * draw of a surface, then read it as lines of "x,y,w,h<TAB>text". */
+int32_t ui_capture_texts(uint32_t surface, int32_t root);
+const uint8_t *ui_captured_texts(uint32_t surface, size_t *length);
 int32_t ui_debug_rect_xy(void);
 int32_t ui_debug_rect_wh(void);
 void ui_debug_pause(int32_t paused);

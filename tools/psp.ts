@@ -1,11 +1,11 @@
 // tools/psp.ts <app> [cargo args…] — build the app JS+pak (tools/
 // build.ts), then the EBOOT:
 //   POCKETJS_APP_OUTPUT=<app> POCKETJS_EMBED_APP=1 cargo psp
-// inside hosts/psp/, with the canonical env from tools/psp-toolchain.ts
-// (LLVM PATH, TARGET_CFLAGS, AR_mipsel_sony_psp=llvm-ar,
-//  RUST_PSP_TARGET=hosts/psp/targets/mipsel-sony-psp.json, RUST_PSP_ABORT_ONLY=1,
-//  RUSTFLAGS "-A linker-messages …"). `bun run bootstrap` installs the exact
-//  Rust, cargo-psp and SDK revisions into the shared pocket-nexus cache.
+// inside hosts/psp/, with the environment tools/psp-toolchain.ts reads from the
+// installed toolchain (PSP_SDK, QUICKJS_PREBUILT_LIB, cargo-psp on PATH) plus
+// RUST_PSP_TARGET=hosts/psp/targets/mipsel-sony-psp.json, RUST_PSP_ABORT_ONLY=1
+// and RUSTFLAGS "-A linker-messages …". `pocket target add psp` installs the
+// pinned Rust, cargo-psp, SDK and prebuilt QuickJS.
 //
 // Demo entries: `bun tools/psp.ts hero` prefers apps/hero/main.tsx (the
 // mounting entry — apps/hero/app.tsx only exports the component) when it exists.
@@ -15,6 +15,11 @@
 // used by tests/e2e/ppsspp.ts, never by normal builds.
 // --bench additionally enables native microsecond timing output to
 // ms0:/PocketJS-bench.jsonl and implies --capture.
+//
+// --runtime builds the generic runtime instead of an app's EBOOT (cargo
+// feature `runtime`, POCKETJS_EMBED_APP=0): no app is built or embedded, and
+// the EBOOT reads app.pocket from its own folder at boot. tools/runtime/psp.ts
+// runs this and collects the output.
 
 import { $ } from "bun";
 import { createHash } from "node:crypto";
@@ -55,6 +60,7 @@ let projectRoot = process.cwd();
 let outputDir = pspUiDir + "dist/";
 let skipBuild = false;
 let launcherRegistry = "";
+let runtime = false;
 const cargoArgs: string[] = [];
 const buildFlags: string[] = [];
 for (const a of argv) {
@@ -83,25 +89,29 @@ for (const a of argv) {
   else if (a.startsWith("--project-root=")) projectRoot = resolvePath(a.slice("--project-root=".length));
   else if (a.startsWith("--outdir=")) outputDir = resolvePath(a.slice("--outdir=".length)) + "/";
   else if (a === "--skip-build") skipBuild = true;
+  else if (a === "--runtime") runtime = true;
   else if (!appArg && !a.startsWith("-")) appArg = a;
   else cargoArgs.push(a);
 }
-const features = [capture ? "capture" : "", bench ? "bench" : ""].filter(Boolean);
+const features = [capture ? "capture" : "", bench ? "bench" : "", runtime ? "runtime" : ""].filter(Boolean);
 if (features.length > 0) cargoArgs.push("--features", features.join(","));
-if (!appArg && !planPath) {
+if (runtime && (appArg || planPath || launcherRegistry)) {
+  console.error("PocketJS psp: --runtime builds an EBOOT without an app; give no app, --plan or --launcher-registry");
+  process.exit(1);
+}
+if (!appArg && !planPath && !runtime) {
   console.error("usage: bun tools/psp.ts <app> [--plan=<resolved-plan.json>] [--capture|--bench] [cargo args…]   e.g. bun tools/psp.ts hero --release");
   process.exit(1);
 }
 
-// Prereqs (fail fast with one PocketJS-owned setup path).
+// The installed toolchain, or a diagnostic naming `pocket target add psp`.
 let toolchain: ReturnType<typeof resolvePspBuildToolchain>;
 try {
   toolchain = resolvePspBuildToolchain();
 } catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(`PocketJS psp: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }
-const sdk = toolchain.sdk.path;
 
 // A bare component demo (apps/<app>/app.tsx exporting the component) needs
 // the mounting entry apps/<app>/main.tsx (imports mount() + STYLE_IDS).
@@ -138,7 +148,7 @@ async function loadConfig(): Promise<PocketConfig> {
   return mod.default ?? mod.config ?? {};
 }
 
-const config = buildPlan ? {} : await loadConfig();
+const config = buildPlan || runtime ? {} : await loadConfig();
 const framework: PocketFramework = buildPlan
   ? parseFramework(buildPlan.app.framework, "ResolvedBuildPlan")
   : frameworkFlag
@@ -152,8 +162,9 @@ const outputApp = buildPlan
 // 1. Build the app bundle + pak -> dist/<app>.js + dist/<app>.pak
 // ---------------------------------------------------------------------------
 
-console.log(`PocketJS psp: building app "${app}" (framework=${framework})`);
-if (!skipBuild) {
+if (runtime) console.log("PocketJS psp: building the generic runtime (no app; reads app.pocket)");
+else console.log(`PocketJS psp: building app "${app}" (framework=${framework})`);
+if (!skipBuild && !runtime) {
   if (buildPlan) {
     await $`bun tools/build.ts --plan=${planPath!} --project-root=${projectRoot} --outdir=${outputDir}`.cwd(pspUiDir);
   } else {
@@ -184,7 +195,7 @@ const frameworkFragmentHome = `${fragmentBase}/${framework}`;
 const fragmentHome = existsSync(`${frameworkFragmentHome}/Psp.toml`)
   ? frameworkFragmentHome
   : fragmentBase;
-const xmbFragment = `${fragmentHome}/Psp.toml`;
+const xmbFragment = runtime ? `${pspUiDir}hosts/psp/runtime/Psp.toml` : `${fragmentHome}/Psp.toml`;
 const xmbFragmentLabel = xmbFragment.startsWith(pspUiDir)
   ? xmbFragment.slice(pspUiDir.length)
   : xmbFragment;
@@ -294,8 +305,8 @@ const hostEnvironment = buildPlan
       embedApp: true,
     })
   : {
-      POCKETJS_APP_OUTPUT: outputApp,
-      POCKETJS_EMBED_APP: "1",
+      POCKETJS_APP_OUTPUT: runtime ? "" : outputApp,
+      POCKETJS_EMBED_APP: runtime ? "0" : "1",
       POCKETJS_OUTPUT_DIR: outputDir,
       POCKETJS_TARGET: "psp",
       POCKETJS_HOST_ABI: "1",
@@ -311,20 +322,6 @@ const env = {
   POCKETJS_OFFLOAD_SLOT: buildPlan?.features["io.offload"] ? createHash("sha256").update(buildPlan.app.id).digest("hex").slice(0, 16) : "",
   ...toolchain.environment,
   RUSTFLAGS: rustflags,
-  CRATE_CC_NO_DEFAULTS: "1",
-  TARGET_CC: "clang",
-  TARGET_AR: `${toolchain.llvmBin}/llvm-ar`,
-  // Match the Rust PSP target's +noabicalls mode. -G0 avoids clang's MIPS
-  // backend selecting unsupported GP-relative accesses for large C sources.
-  // -O2 must live HERE: CRATE_CC_NO_DEFAULTS=1 makes the cc crate drop its
-  // synthesized flags, including the -O from build.rs opt_level() — without
-  // it every C dependency (QuickJS!) silently compiles at -O0.
-  TARGET_CFLAGS:
-    `-target mipsel-sony-psp -mcpu=mips2 -msingle-float -mlittle-endian -mno-abicalls -fno-pic -G0 -mno-check-zero-division ` +
-    `-fno-stack-protector -O2 -I${sdk}/psp/include -I${sdk}/psp/sdk/include`,
-  // CRITICAL: archive MIPS objects with llvm-ar (Apple ar drops them -> undefined JS_*).
-  AR_mipsel_sony_psp: `${toolchain.llvmBin}/llvm-ar`,
-  RANLIB_mipsel_sony_psp: `${toolchain.llvmBin}/llvm-ranlib`,
   RUST_PSP_TARGET: pspTarget,
   // panic-abort EBOOTs: no panic_unwind/libunwind in build-std.
   RUST_PSP_ABORT_ONLY: "1",
@@ -367,8 +364,8 @@ function outputProfile(args: string[]): string {
   return args.includes("--release") || args.includes("-r") ? "release" : "debug";
 }
 
-console.log(`PocketJS psp: cargo psp (app=${outputApp})`);
-await $`${toolchain.rustup} run ${toolchain.manifest.rust.toolchain} cargo psp ${cargoArgs}`.cwd(nativeDir).env(env);
+console.log(`PocketJS psp: cargo psp (app=${runtime ? "none, runtime" : outputApp})`);
+await $`${toolchain.rustup} run ${toolchain.rustToolchain} cargo psp ${cargoArgs}`.cwd(nativeDir).env(env);
 
 const profile = outputProfile(cargoArgs);
 const { verifyPspPrx } = await import("./psp-prx.ts");

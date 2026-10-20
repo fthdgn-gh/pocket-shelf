@@ -19,9 +19,46 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define PACKAGES_DIR POCKET_RUNTIME_APP_ROOT "/packages"
-#define STATE_DIR POCKET_RUNTIME_APP_ROOT "/state"
 #define MAX_PACKAGE_BYTES (24u * 1024u * 1024u)
+
+/* "sdmc:/pocketjs/runtime/apps/" + 16 hex digits + the longest leaf below. */
+#define RUNTIME_PATH_BYTES 96
+static char slot_name[17];
+static char app_root[RUNTIME_PATH_BYTES];
+static char packages_dir[RUNTIME_PATH_BYTES];
+static char state_dir[RUNTIME_PATH_BYTES];
+static char pending_path[RUNTIME_PATH_BYTES];
+static char upload_path[RUNTIME_PATH_BYTES];
+#define PACKAGES_DIR packages_dir
+#define STATE_DIR state_dir
+
+static bool scan_state(const char *directory_path, PocketRuntimeState *state);
+
+bool runtime_select_slot(const char *slot) {
+  if (slot == NULL || strlen(slot) != 16) return false;
+  for (size_t index = 0; index < 16; index += 1) {
+    char c = slot[index];
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+  }
+  memcpy(slot_name, slot, 17);
+  snprintf(app_root, sizeof app_root, POCKET_RUNTIME_APPS "/%s", slot_name);
+  snprintf(packages_dir, sizeof packages_dir, POCKET_RUNTIME_APPS "/%s/packages", slot_name);
+  snprintf(state_dir, sizeof state_dir, POCKET_RUNTIME_APPS "/%s/state", slot_name);
+  snprintf(pending_path, sizeof pending_path, POCKET_RUNTIME_APPS "/%s/pending.pocket", slot_name);
+  /* The dev wire's staging file stays in the FIRST selected slot (the
+   * embedded guest's) for the process lifetime: a transfer that is in flight
+   * when the launcher switches apps lands where it started, and main.c routes
+   * the finished package to the slot its app id names. */
+  if (upload_path[0] == '\0') {
+    snprintf(upload_path, sizeof upload_path, POCKET_RUNTIME_APPS "/%s/network-upload.pocket", slot_name);
+  }
+  return true;
+}
+
+const char *runtime_slot(void) { return slot_name; }
+const char *runtime_app_root(void) { return app_root; }
+const char *runtime_pending_path(void) { return pending_path; }
+const char *runtime_upload_path(void) { return upload_path; }
 
 static const char *package_error(int32_t code) {
   switch (code) {
@@ -36,6 +73,9 @@ static const char *package_error(int32_t code) {
     case 9: return "package plan section missing";
     case 10: return "package JavaScript section missing";
     case 11: return "package JavaScript is not NUL-terminated";
+    case 13: return "package plan is not readable JSON";
+    case 14: return "package plan has no usable viewport";
+    case 15: return "package plan has an unusable auxiliary surface";
     default: return "invalid package arguments";
   }
 }
@@ -104,6 +144,10 @@ bool runtime_storage_init(PocketRuntimeState *state, char *error, size_t error_l
     return false;
   }
   memset(state, 0, sizeof *state);
+  if (slot_name[0] == '\0') {
+    pocket_set_error(error, error_length, "runtime slot not selected");
+    return false;
+  }
   if (!ensure_directory("sdmc:/pocketjs", error, error_length) ||
       !ensure_directory(POCKET_RUNTIME_ROOT, error, error_length) ||
       !ensure_directory(POCKET_RUNTIME_APPS, error, error_length) ||
@@ -113,11 +157,18 @@ bool runtime_storage_init(PocketRuntimeState *state, char *error, size_t error_l
     return false;
   }
 
-  DIR *directory = opendir(STATE_DIR);
-  if (directory == NULL) {
+  if (!scan_state(STATE_DIR, state)) {
     pocket_set_error(error, error_length, "opendir %s failed (%d)", STATE_DIR, errno);
     return false;
   }
+  return true;
+}
+
+/* The newest committed generation in one slot's state directory. */
+static bool scan_state(const char *directory_path, PocketRuntimeState *state) {
+  memset(state, 0, sizeof *state);
+  DIR *directory = opendir(directory_path);
+  if (directory == NULL) return false;
   struct dirent *entry;
   while ((entry = readdir(directory)) != NULL) {
     unsigned long generation = 0;
@@ -220,7 +271,7 @@ void runtime_package_free(PocketRuntimePackage *package) {
 }
 
 static void blob_path(uint64_t hash, char *out, size_t length) {
-  snprintf(out, length, PACKAGES_DIR "/%016llx.pocket", (unsigned long long)hash);
+  snprintf(out, length, "%s/%016llx.pocket", PACKAGES_DIR, (unsigned long long)hash);
 }
 
 PocketRuntimePackage *runtime_package_load_hash(
@@ -337,11 +388,12 @@ bool runtime_commit(
   uint32_t generation = state->generation + 1;
   char final_path[224];
   char temporary_path[192];
-  snprintf(temporary_path, sizeof temporary_path, STATE_DIR "/state.tmp");
+  snprintf(temporary_path, sizeof temporary_path, "%s/state.tmp", STATE_DIR);
   snprintf(
     final_path,
     sizeof final_path,
-    STATE_DIR "/state-%08lx-%016llx-%016llx.commit",
+    "%s/state-%08lx-%016llx-%016llx.commit",
+    STATE_DIR,
     (unsigned long)generation,
     (unsigned long long)active_hash,
     (unsigned long long)last_good_hash
@@ -369,8 +421,9 @@ bool runtime_commit(
 static void write_report(const char *name, const char *text) {
   char path[192];
   char temporary[192];
-  snprintf(path, sizeof path, POCKET_RUNTIME_APP_ROOT "/%s", name);
-  snprintf(temporary, sizeof temporary, POCKET_RUNTIME_APP_ROOT "/.%s.tmp", name);
+  if (slot_name[0] == '\0') return;
+  snprintf(path, sizeof path, "%s/%s", POCKET_RUNTIME_APP_ROOT, name);
+  snprintf(temporary, sizeof temporary, "%s/.%s.tmp", POCKET_RUNTIME_APP_ROOT, name);
   FILE *file = fopen(temporary, "wb");
   if (file == NULL) return;
   fputs(text == NULL ? "" : text, file);
@@ -385,7 +438,9 @@ static void write_report(const char *name, const char *text) {
 
 bool runtime_note_embedded(uint64_t embedded_hash) {
   unsigned long long recorded = 0;
-  FILE *file = fopen(POCKET_RUNTIME_APP_ROOT "/embedded.txt", "rb");
+  char path[RUNTIME_PATH_BYTES + 16];
+  snprintf(path, sizeof path, "%s/embedded.txt", POCKET_RUNTIME_APP_ROOT);
+  FILE *file = fopen(path, "rb");
   bool known = file != NULL && fscanf(file, "%16llx", &recorded) == 1;
   if (file != NULL) fclose(file);
   if (known && recorded == embedded_hash) return false;
@@ -406,7 +461,7 @@ void runtime_write_status(
     sizeof message,
     "phase=%s\nslot=%s\ngeneration=%lu\nactive=%016llx\nlast_good=%016llx\nrunning=%016llx\norigin=%s",
     phase == NULL ? "unknown" : phase,
-    POCKETJS_RUNTIME_SLOT,
+    slot_name,
     (unsigned long)(state == NULL ? 0 : state->generation),
     (unsigned long long)(state == NULL ? 0 : state->active_hash),
     (unsigned long long)(state == NULL ? 0 : state->last_good_hash),
@@ -426,4 +481,168 @@ void runtime_write_error(const char *phase, const char *message) {
     message == NULL ? "unknown failure" : message
   );
   write_report("last-error.txt", text);
+}
+
+// ---------------------------------------------------------------------------
+// other slots (the launcher's app table, Pocket Link installs, routed pushes)
+// ---------------------------------------------------------------------------
+
+static bool valid_slot(const char *slot) {
+  if (slot == NULL || strlen(slot) != 16) return false;
+  for (size_t index = 0; index < 16; index += 1) {
+    char c = slot[index];
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+  }
+  return true;
+}
+
+bool runtime_slot_path(const char *slot, const char *leaf, char *out, size_t length) {
+  if (!valid_slot(slot) || out == NULL || length == 0) return false;
+  int written = leaf == NULL || leaf[0] == '\0'
+    ? snprintf(out, length, POCKET_RUNTIME_APPS "/%s", slot)
+    : snprintf(out, length, POCKET_RUNTIME_APPS "/%s/%s", slot, leaf);
+  return written > 0 && (size_t)written < length;
+}
+
+bool runtime_slot_state(const char *slot, PocketRuntimeState *state) {
+  char directory[RUNTIME_PATH_BYTES];
+  if (state == NULL) return false;
+  memset(state, 0, sizeof *state);
+  if (!runtime_slot_path(slot, "state", directory, sizeof directory)) return false;
+  return scan_state(directory, state);
+}
+
+PocketRuntimePackage *runtime_slot_package_load(
+  const char *slot,
+  uint64_t hash,
+  char *error,
+  size_t error_length
+) {
+  char leaf[48];
+  char path[RUNTIME_PATH_BYTES + 48];
+  snprintf(leaf, sizeof leaf, "packages/%016llx.pocket", (unsigned long long)hash);
+  if (hash == 0 || !runtime_slot_path(slot, leaf, path, sizeof path)) {
+    pocket_set_error(error, error_length, "no stored package %016llx in slot", (unsigned long long)hash);
+    return NULL;
+  }
+  PocketRuntimePackage *package = runtime_package_load(path, error, error_length);
+  if (package != NULL && package->guest.package_hash != hash) {
+    pocket_set_error(error, error_length, "%s content hash does not match its name", path);
+    runtime_package_free(package);
+    return NULL;
+  }
+  return package;
+}
+
+PocketRuntimePackage *runtime_slot_install(
+  const char *slot,
+  const char *path,
+  uint64_t expected_hash,
+  PocketRuntimeState *current_state,
+  char *error,
+  size_t error_length
+) {
+  if (!valid_slot(slot)) {
+    pocket_set_error(error, error_length, "invalid runtime slot");
+    return NULL;
+  }
+  /* The path helpers and runtime_prepare_file read the selected slot, so the
+   * install selects the target for its duration and restores the running
+   * slot before returning. Everything here runs on the main thread. */
+  /* `path` may be one of this module's own slot paths (POCKET_RUNTIME_UPLOAD),
+   * which selecting the target slot rewrites: keep a copy. */
+  char source[RUNTIME_PATH_BYTES + 32];
+  if (path == NULL || strlen(path) >= sizeof source) {
+    pocket_set_error(error, error_length, "package staging path is unusable");
+    return NULL;
+  }
+  snprintf(source, sizeof source, "%s", path);
+  path = source;
+  char previous[17];
+  memcpy(previous, slot_name, sizeof previous);
+  bool running = strcmp(previous, slot) == 0;
+  PocketRuntimeState other = {0};
+  PocketRuntimeState *state = running && current_state != NULL ? current_state : &other;
+  PocketRuntimePackage *package = NULL;
+  if (!runtime_select_slot(slot)) {
+    pocket_set_error(error, error_length, "invalid runtime slot");
+    return NULL;
+  }
+  if (!running || current_state == NULL) {
+    if (!runtime_storage_init(state, error, error_length)) goto done;
+  }
+  RuntimePendingResult result = runtime_prepare_file(path, expected_hash, &package, error, error_length);
+  if (result != RUNTIME_PENDING_READY) {
+    if (result == RUNTIME_PENDING_NONE) pocket_set_error(error, error_length, "%s is missing", path);
+    package = NULL;
+    goto done;
+  }
+  if (strcmp(package->guest.slot, slot) != 0) {
+    /* The blob is content-addressed and harmless where it landed; it is
+     * simply never made active in a slot whose app id it does not carry. */
+    pocket_set_error(error, error_length, "package app id belongs to slot %s, not %s", package->guest.slot, slot);
+    runtime_package_free(package);
+    package = NULL;
+    goto done;
+  }
+  uint64_t hash = package->guest.package_hash;
+  if (state->active_hash != hash) {
+    uint64_t last_good = state->active_hash != 0 ? state->active_hash : state->last_good_hash;
+    if (!runtime_commit(state, hash, last_good, error, error_length)) {
+      runtime_package_free(package);
+      package = NULL;
+      goto done;
+    }
+  }
+done:
+  if (previous[0] != '\0') runtime_select_slot(previous);
+  return package;
+}
+
+static bool remove_tree(const char *path, unsigned depth) {
+  struct stat info;
+  if (stat(path, &info) != 0) return errno == ENOENT;
+  if (!S_ISDIR(info.st_mode)) return remove(path) == 0;
+  if (depth > 8) return false;
+  DIR *directory = opendir(path);
+  if (directory == NULL) return false;
+  bool ok = true;
+  struct dirent *entry;
+  while ((entry = readdir(directory)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+    char child[256];
+    int written = snprintf(child, sizeof child, "%s/%s", path, entry->d_name);
+    if (written <= 0 || (size_t)written >= sizeof child) {
+      ok = false;
+      continue;
+    }
+    if (!remove_tree(child, depth + 1)) ok = false;
+  }
+  closedir(directory);
+  return rmdir(path) == 0 && ok;
+}
+
+bool runtime_slot_remove(const char *slot, char *error, size_t error_length) {
+  char root[RUNTIME_PATH_BYTES];
+  if (!runtime_slot_path(slot, NULL, root, sizeof root)) {
+    pocket_set_error(error, error_length, "invalid runtime slot");
+    return false;
+  }
+  if (strcmp(slot, slot_name) == 0) {
+    pocket_set_error(error, error_length, "the running app's slot cannot be removed");
+    return false;
+  }
+  if (!remove_tree(root, 0)) {
+    pocket_set_error(error, error_length, "remove %s failed (%d)", root, errno);
+    return false;
+  }
+  return true;
+}
+
+void runtime_slot_write_error(const char *slot, const char *phase, const char *message) {
+  char previous[17];
+  memcpy(previous, slot_name, sizeof previous);
+  if (!runtime_select_slot(slot)) return;
+  runtime_write_error(phase, message);
+  if (previous[0] != '\0') runtime_select_slot(previous);
 }

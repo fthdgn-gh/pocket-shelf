@@ -9,8 +9,9 @@ application code, AOT views and compiled model bodies; the rules for one mode
 do not define the source subset for another.
 
 This page describes the low-level bundle/style/font/pak compiler. Product builds
-should first resolve `pocket.json` through `bun pocket check`, `compile`, or
-`build`; see [Platform contracts](/docs/platform-contracts/) for how one small,
+resolve `pocket.json` through `pocket check`, `compile`, or `build`
+([CLI](/docs/cli/#check-compile-build)) before this pipeline runs; see
+[Platform contracts](/docs/platform-contracts/) for how one small,
 checksummed target plan becomes the authoritative input to this pipeline and
 native packaging.
 
@@ -29,21 +30,10 @@ host packaging. See [TypeScript models to Rust](/docs/microts-model/).
 Admission and generation commands for both paths are listed in
 [Checking an application](/docs/typescript-support/#checking-an-application).
 
-The manifest-first compiler resolves the target before producing its bundle:
-
-```sh
-bun pocket check --target psp
-bun pocket compile --target psp
-bun pocket build --target psp -- --release
-
-bun pocket check --target vita
-bun pocket build --target vita -- --release
-```
-
-`check` validates the schema, capabilities, viewport, and reachable TypeScript.
-`compile` also writes `.pocket/<target>/plan.json` plus the target-specific JS
-and pak. `build` dispatches that same plan to the matching native backend —
-`tools/pocket.ts` registers one for `psp`, `vita`, and `pocketbook`.
+**The manifest-first compiler resolves the target before producing its
+bundle.** `pocket compile` writes `.pocket/<target>/plan.json` and runs this
+compiler with `--plan`, which yields the target-specific JS and pak;
+`pocket build` hands the same plan to the target's native backend.
 
 The lower-level compiler can still turn one entry into two files directly:
 
@@ -88,16 +78,9 @@ A bare name resolves against `apps/`: `hero` finds `apps/hero/app.tsx`, and a
 name ending in `-main` finds `apps/hero/main.tsx`.
 
 An external ESP-IDF product supplies its host profile instead of selecting a
-stock target:
-
-```sh
-pocket build --manifest app/pocket.json \
-  --host-profile firmware/pocket.host.json \
-  --project-root app --output dist/app.pocket
-```
-
-The package carries the JSON plan and a fixed-width binary `hostInputs`
-section. Device admission reads the binary section and does not run a JSON
+stock target, through `pocket build --host-profile`
+([CLI](/docs/cli/#check-compile-build)). The package carries the JSON plan and
+a fixed-width binary `hostInputs` section. Device admission reads the binary section and does not run a JSON
 parser in QuickJS. See [ESP-IDF](/docs/esp-idf/#build-an-application-package).
 
 | Flag | Effect |
@@ -205,10 +188,14 @@ so the transform **throws with a code frame** rather than miscompiling:
 
 ### The transform cache
 
-Each transform result is cached in `.cache/transforms/`, keyed by a SHA‑256 of
-the file contents **plus** the toolchain identity — the selected framework, the
-versions of the JSX/compiler packages, the renderer path, and an internal cache
-version. Bumping any dependency invalidates
+Each transform result is cached in `transforms/` under the PocketJS cache root
+(`POCKET_NEXUS_CACHE_DIR`, else `$XDG_CACHE_HOME/pocket-nexus`, else
+`~/.cache/pocket-nexus`), keyed by a SHA‑256 of the file path and contents
+**plus** the toolchain identity — the selected framework, the versions of the
+JSX/compiler packages and of the Solid runtime, the renderer path, the compiler
+sources, and an internal cache version. Checkouts, forks and installed
+frameworks share the cache; a build writes nothing into the framework
+directory. Bumping any dependency invalidates
 the cache automatically. Because pass 2 loads through the *same* `transformFile`,
 the expensive Babel work runs once per file per build and pass 2 gets it for
 free.
@@ -241,8 +228,10 @@ compiler emits:
   an `animate-<name>` class are baked into it too, as frame-precise
   per-property segment timelines (the ANIM TABLE) — see
   [Animation → baked keyframe timelines](/docs/animation/#baked-keyframe-timelines).
-- **`framework/src/styles.generated.ts`** — a TypeScript module the renderer imports,
-  mapping each source class literal to its styleId, plus the font‑slot metadata
+- **The style module** — the framework imports `framework/src/styles.generated.ts`;
+  in a build, the JSX plugin serves this build's module for that path from
+  memory, and `tools/build.ts` writes a copy to `<outdir>/<output>.styles.ts`.
+  It maps each source class literal to its styleId, plus the font‑slot metadata
   and record count:
 
 ```ts
@@ -267,7 +256,7 @@ both `w-N` and `h-N` (the radius must be build‑time bakeable), and any `hover:
 variant (the PSP has no pointer — use `focus:`/`active:`).
 
 ```
-  tailwind: 48 style record(s), 0 baked timeline(s), 48 literal(s) -> framework/src/styles.generated.ts
+  tailwind: 48 style record(s), 0 baked timeline(s), 48 literal(s) -> dist/hero.styles.ts
 ```
 
 ## Bake fonts
@@ -300,9 +289,27 @@ Codepoints the font does not map are left out of the atlas. **On a target whose
 profile carries only `text.glyphs.baked`, a codepoint missing from the atlas
 resolves to glyph 0 — a drawn hollow "tofu" box, also mapped from U+FFFD so it
 has an advance.** A target that also advertises `text.glyphs.runtime`
-(`macos-widget` today) rasterizes the missing glyph from a system font and
+(`macos-widget`, and `web-app` and every page that runs a package through
+`hosts/web/app-instance.js`) rasterizes the missing glyph from a system font and
 reloads the atlas through `loadFontAtlas`, so tofu is what an app that accepts
-arbitrary text gets on a baked-only target. Each atlas is horizontally
+arbitrary text gets on a baked-only target.
+
+In a browser, `hosts/web/runtime-glyphs.js` does this inside the package's
+realm. It keeps a copy of each atlas the guest loads. Before the core reads a
+string (`setText`, `replaceText`, `measureText`, `wrapText`) it draws each
+codepoint no atlas maps on a 2D canvas, in the browser's Japanese, Chinese and
+Korean faces and then `sans-serif`, and appends the cell to **every loaded
+slot**. The new glyph's em is the slot's cap height (the ink of its `H`) over
+0.72, so it stands as tall beside the slot's Latin as it does in a CJK UI face;
+a bold slot draws at weight 700; a slot whose baked coverage is only 0 and 255
+(a bitmap face) gets cells thresholded at 120; a glyph wider than the slot's
+cells widens every cell of that atlas. The grown atlases reach the core before
+`measureText` and `wrapText` measure and before each tick, and layout
+re-measures on the reload. The pixels are the browser's: Hiragino on macOS,
+Yu Gothic or Meiryo on Windows, Noto Sans CJK on Android and ChromeOS.
+`create({ runtimeGlyphs: false })` keeps the baked atlases unchanged, and
+`glyphFamilies` names other CSS families. `glyphStats()` on the instance
+reports the codepoints and cells added, the reloads and the milliseconds. Each atlas is horizontally
 supersampled 8‑bit coverage cells plus proportional advances and a cmap, and is
 packed into the pak as `ui:font.<slot>`.
 
@@ -402,10 +409,12 @@ Bun.build({
 
 The plugin's `onLoad` hook intercepts every project `.ts`/`.tsx` file and serves
 the **cached pass‑1 transform** (`node_modules` and `.d.ts` fall through to
-Bun). It also serves this build's generated style module directly from memory;
-the ignored `framework/src/styles.generated.ts` file is only a human-readable
-mirror. Parallel target builds therefore cannot consume one another's transient
-style table. The bundle is built from *exactly* the code the class/charset scan
+Bun). It also serves this build's generated style module from memory for the
+framework's `styles.generated.ts` import. The committed file at that path holds
+the empty table that code importing framework sources without a build receives;
+`<outdir>/<output>.styles.ts` is a copy for inspection. Parallel target builds
+therefore cannot consume one another's style table, and no build writes into
+the framework directory. The bundle is built from *exactly* the code the class/charset scan
 saw — the two passes agree on the module graph by construction, so a style can
 never be shipped that the bundle doesn't use, or vice versa.
 

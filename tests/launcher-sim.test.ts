@@ -63,7 +63,7 @@ describe("launcher registry admission", () => {
   test("admits every PSP-compatible demo, excludes the rest", () => {
     const outputs = registry.apps.map((a) => a.output);
     // The two structurally incompatible demos (docs/LAUNCHER.md "Admission").
-    expect(outputs).not.toContain("ipod-nano-main");
+    expect(outputs).not.toContain("ipodnano-hero-main");
     expect(outputs).not.toContain("note-main");
     // The launcher never lists itself.
     expect(outputs).not.toContain("launcher-main");
@@ -331,12 +331,8 @@ describe("launcher registry admission", () => {
       "apps/launcher/registry.generated.ts",
     );
     const imagesSource = join(repository, "apps/launcher/images.json");
-    const stylesSource = join(repository, "framework/src/styles.generated.ts");
     const registryBefore = readFileSync(registrySource);
     const imagesBefore = readFileSync(imagesSource);
-    const stylesBefore = existsSync(stylesSource)
-      ? readFileSync(stylesSource)
-      : undefined;
     try {
       const targetRegistry = scanRegistry(
         new Set(),
@@ -425,8 +421,6 @@ describe("launcher registry admission", () => {
       expect(readFileSync(registrySource)).toEqual(registryBefore);
       expect(readFileSync(imagesSource)).toEqual(imagesBefore);
     } finally {
-      if (stylesBefore) writeFileSync(stylesSource, stylesBefore);
-      else rmSync(stylesSource, { force: true });
       rmSync(testRoot, { recursive: true, force: true });
     }
   });

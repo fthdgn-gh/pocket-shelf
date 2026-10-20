@@ -33,6 +33,10 @@ test("the entry points the skill names are in the sources it names", () => {
     ["tools/3ds-profile.ts", ["export function resolve3dsBuildPlan"]],
     ["framework/src/manifest/resolve.ts", ["validateAndResolveBuildPlan"]],
     ["hosts/web/wasm-ops.js", ["createAuxiliarySurface", "renderScaled"]],
+    ["hosts/web/app-instance.js", ["renderPremultiplied", "drawHashAuxiliary", "text === false"]],
+    ["devices/web/pocket-web-wgpu/web/pocket3d-interface.js", ["export async function openInterface", "export function screens"]],
+    ["devices/web/pocket-web-wgpu/web/pocket3d-player.js", ["export function createPlayer"]],
+    ["devices/web/pocket-web-wgpu/src/overlay.rs", ["pub fn write", "pub fn draw"]],
   ];
   for (const [path, names] of named) {
     const source = read(path);

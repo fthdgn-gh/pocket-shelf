@@ -54,6 +54,8 @@ pub mod seplugins;
 pub mod input;
 pub mod net;
 pub mod pak;
+#[cfg(feature = "runtime")]
+pub mod package_file;
 pub mod stats;
 #[cfg(feature = "status")]
 pub mod status;

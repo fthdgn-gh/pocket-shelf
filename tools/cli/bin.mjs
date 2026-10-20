@@ -1,12 +1,19 @@
-#!/usr/bin/env node
-// @pocketjs/cli — the PocketJS toolchain CLI (flutter/react-native doctor
-// style). Zero dependencies; plain Node >= 18.
+#!/usr/bin/env bun
+// @pocketjs/cli — the PocketJS toolchain CLI. Runs on Bun: the framework's
+// compiler and host scripts are Bun programs, so the CLI is one too and
+// launches them with its own executable. No dependencies.
 //
-//   pocket doctor          diagnose the local toolchain
-//   pocket setup [--yes]   run the checkout's pinned, idempotent bootstrap
-//   pocket create <name>   scaffold a manifest-first demo app
-//   pocket check|compile|build --target <psp|vita> [...args]
-//                            resolve pocket.json once, then build from its plan
+//   pocket create <name> [--target T] [--framework F] [--host-profile FILE]
+//                            scaffold an app: apps/<name> inside a checkout, a
+//                            standalone project anywhere else
+//   pocket [+<id>] check|compile|build [+<id>] [--target <id> | --host-profile FILE] [...args]
+//                            select a target, resolve pocket.json once, build from its plan
+//   pocket show [--json]     framework, project, selected target and the catalog
+//                            with each target's install state
+//   pocket target add [<id> …] | list [--check] [--json] | remove <id> …
+//                            install the toolchains the framework pins
+//   pocket default [<id> | --unset]
+//   pocket override set <id> [--path DIR] | unset [--path DIR] | list
 //   pocket play vita <demo> build, install and launch a demo in Vita3K
 //   pocket play ios <demo>  build, stage and launch a demo on the iOS simulator
 //   pocket dev|psp|vita|hw|psplink|devtools|tape [...args]
@@ -14,16 +21,32 @@
 //   pocket symbian <cmd>      Nokia E7 toolchain doctor/setup/build/deploy
 //   pocket ios <cmd>          Apple iOS doctor/setup/build/play on the simulator
 //
-// The published CLI ships the same manifest consumed by PocketJS build scripts.
+// The CLI holds no toolchain pins: the framework it resolves carries the target
+// catalog and the toolchain manifests.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir, platform } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { platform } from "node:os";
+import { join, posix, relative, resolve } from "node:path";
+import { CREATE_USAGE, CreateUsageError, create, pocketCommands } from "./create.mjs";
+import { CLI_PROTOCOL, protocolMismatch, resolveFramework } from "./framework.mjs";
+import {
+  NO_SELECTION,
+  overrideFor,
+  readSettings,
+  select,
+  settingsPath,
+  takeExplicitSelection,
+  writeSettings,
+} from "./select.mjs";
 
-const TOOLCHAIN = JSON.parse(readFileSync(new URL("./psp-toolchain.json", import.meta.url), "utf8"));
-const NIGHTLY = TOOLCHAIN.rust.toolchain;
+if (typeof Bun === "undefined") {
+  console.error(
+    "pocket runs on Bun: install it from https://bun.sh and run `pocket` again, or use `bunx @pocketjs/cli`.",
+  );
+  process.exit(1);
+}
+
 const C = {
   ok: (s) => `\x1b[32m✓\x1b[0m ${s}`,
   bad: (s) => `\x1b[31m✗\x1b[0m ${s}`,
@@ -32,351 +55,71 @@ const C = {
   bold: (s) => `\x1b[1m${s}\x1b[0m`,
 };
 
-const which = (bin) => {
-  const r = spawnSync(platform() === "win32" ? "where" : "which", [bin], { encoding: "utf8" });
-  return r.status === 0 ? r.stdout.trim().split("\n")[0] : null;
-};
-const run = (cmd, args) => {
-  const r = spawnSync(cmd, args, { encoding: "utf8" });
-  return r.status === 0 ? r.stdout.trim() : null;
-};
+const cliVersion = () => JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
 
 // ---------------------------------------------------------------------------
-// Checkout discovery
+// Framework: tools/cli/framework.mjs resolves it
 // ---------------------------------------------------------------------------
 
-function findCheckout(from = process.cwd()) {
-  let dir = resolve(from);
-  for (;;) {
-    const pkg = join(dir, "package.json");
-    if (existsSync(pkg)) {
-      try {
-        if (JSON.parse(readFileSync(pkg, "utf8")).name === "@pocketjs/framework") return dir;
-      } catch {}
-    }
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
+function fail(message) {
+  console.error(C.bad(message));
+  process.exit(1);
 }
 
-/** Resolve a project-local published framework when no source checkout owns cwd. */
-function findFrameworkInstallation(from = process.cwd()) {
-  if (process.env.POCKETJS_FRAMEWORK_ROOT?.trim()) {
-    const explicit = resolve(process.env.POCKETJS_FRAMEWORK_ROOT.trim());
-    return existsSync(join(explicit, "tools", "pocket.ts")) ? explicit : null;
-  }
-  let dir = resolve(from);
-  for (;;) {
-    const candidate = join(dir, "node_modules", "@pocketjs", "framework");
-    if (existsSync(join(candidate, "package.json")) && existsSync(join(candidate, "tools", "pocket.ts"))) {
-      return candidate;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
+/** The framework for this directory after the protocol check; exits on either error. */
+function requireFramework() {
+  const framework = resolveFramework();
+  if (framework.error) fail(framework.error);
+  const mismatch = protocolMismatch(framework, cliVersion());
+  if (mismatch) fail(mismatch);
+  return framework;
+}
+
+/** The framework root when it is a source checkout or POCKETJS_FRAMEWORK_ROOT;
+ *  host-development commands run the checkout's scripts. */
+function checkoutRoot() {
+  const framework = resolveFramework();
+  return !framework.error && (framework.source === "checkout" || framework.source === "env") ? framework.root : null;
 }
 
 // ---------------------------------------------------------------------------
-// Canonical cache + doctor
+// create — tools/cli/create.mjs writes the files; this prints what to run next
 // ---------------------------------------------------------------------------
 
-function cacheRoot() {
-  if (process.env.POCKET_NEXUS_CACHE_DIR?.trim()) {
-    return resolve(process.env.POCKET_NEXUS_CACHE_DIR.trim());
-  }
-  return join(resolve(process.env.XDG_CACHE_HOME?.trim() || join(homedir(), ".cache")), "pocket-nexus");
-}
-
-function sdkResolution() {
-  if (process.env.PSP_SDK?.trim()) {
-    return { path: resolve(process.env.PSP_SDK.trim()), source: "PSP_SDK" };
-  }
-  if (process.env.PSPDEV?.trim()) {
-    return { path: resolve(process.env.PSPDEV.trim()), source: "PSPDEV" };
-  }
-  return { path: join(cacheRoot(), TOOLCHAIN.sdk.cachePath), source: "cache" };
-}
-
-function hasVerifiedSdkReceipt(sdk) {
+function scaffold(args) {
+  const resolved = resolveFramework();
+  let result;
   try {
-    const receipt = JSON.parse(readFileSync(join(sdk, TOOLCHAIN.sdk.receipt), "utf8"));
-    return receipt.tag === TOOLCHAIN.sdk.tag && receipt.asset === TOOLCHAIN.sdk.asset &&
-      receipt.url === TOOLCHAIN.sdk.url && receipt.sha256 === TOOLCHAIN.sdk.sha256;
-  } catch {
-    return false;
-  }
-}
-
-function hasPinnedCargoPspTools(root) {
-  if (!TOOLCHAIN.cargoPsp.tools.every((tool) => existsSync(join(root, "bin", tool)))) return false;
-  const host = hostTriple();
-  try {
-    const metadata = JSON.parse(readFileSync(join(root, ".crates2.json"), "utf8"));
-    const source = `git+${TOOLCHAIN.rustPsp.repository}?rev=${TOOLCHAIN.rustPsp.rev}#${TOOLCHAIN.rustPsp.rev}`;
-    if (Object.entries(metadata.installs || {}).some(([id, install]) =>
-      id.startsWith(`${TOOLCHAIN.cargoPsp.package} `) && id.includes(source) &&
-      install.target === host &&
-      Array.isArray(install.bins) && TOOLCHAIN.cargoPsp.tools.every((tool) => install.bins.includes(tool))
-    )) return true;
-  } catch {}
-  try {
-    const receipt = JSON.parse(readFileSync(join(root, ".pocket-nexus-cargo-psp.json"), "utf8"));
-    return receipt.schemaVersion === 1 && receipt.repository === TOOLCHAIN.rustPsp.repository &&
-      receipt.rev === TOOLCHAIN.rustPsp.rev && receipt.package === TOOLCHAIN.cargoPsp.package &&
-      receipt.host === host && Array.isArray(receipt.tools) &&
-      receipt.tools.length === TOOLCHAIN.cargoPsp.tools.length &&
-      TOOLCHAIN.cargoPsp.tools.every((tool) => receipt.tools.includes(tool));
-  } catch {}
-  return false;
-}
-
-function hostTriple() {
-  const cpu = process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : process.arch;
-  if (platform() === "darwin") return `${cpu}-apple-darwin`;
-  if (platform() === "linux") return `${cpu}-unknown-linux-gnu`;
-  if (platform() === "win32") return `${cpu}-pc-windows-msvc`;
-  return `${cpu}-unknown-${platform()}`;
-}
-
-function llvmResolution() {
-  if (process.env.POCKETJS_LLVM_BIN?.trim()) {
-    const bin = resolve(process.env.POCKETJS_LLVM_BIN.trim());
-    const ok = existsSync(join(bin, "clang")) && existsSync(join(bin, "llvm-ar"));
-    return { bin, ok, source: "POCKETJS_LLVM_BIN" };
-  }
-  const candidates = ["/opt/homebrew/opt/llvm/bin", "/usr/local/opt/llvm/bin"];
-  for (const bin of candidates) {
-    if (existsSync(join(bin, "clang")) && existsSync(join(bin, "llvm-ar"))) {
-      return { bin, ok: true, source: "auto" };
-    }
-  }
-  const clang = which("clang");
-  const llvmAr = which("llvm-ar");
-  const bin = clang && llvmAr && dirname(clang) === dirname(llvmAr) ? dirname(clang) : null;
-  return { bin, ok: !!bin, source: "auto" };
-}
-
-function checks() {
-  const root = findCheckout();
-  const isMac = platform() === "darwin";
-  const llvm = llvmResolution();
-  const toolchains = run("rustup", ["toolchain", "list"]) ?? "";
-  const targets = run("rustup", ["target", "list", "--installed", "--toolchain", "stable"]) ?? "";
-  const components = run("rustup", ["component", "list", "--toolchain", NIGHTLY]) ?? "";
-  const sdk = sdkResolution();
-  const sdkMarkerOk = existsSync(join(sdk.path, TOOLCHAIN.sdk.marker));
-  const sdkOk = sdkMarkerOk && (sdk.source !== "cache" || hasVerifiedSdkReceipt(sdk.path));
-  const cargoPspRoot = join(cacheRoot(), TOOLCHAIN.cargoPsp.cachePath);
-  const cargoPspBin = join(cargoPspRoot, "bin");
-  const cargoToolsOk = hasPinnedCargoPspTools(cargoPspRoot);
-  return {
-    root,
-    isMac,
-    core: [
-      { name: "bun", ok: !!which("bun"), hint: "curl -fsSL https://bun.sh/install | bash" },
-      { name: "rustup", ok: !!which("rustup"), hint: "curl https://sh.rustup.rs -sSf | sh" },
-      {
-        name: "Rust stable + wasm32-unknown-unknown (web host)",
-        ok: targets.includes("wasm32-unknown-unknown"),
-        fix: ["rustup", ["target", "add", "wasm32-unknown-unknown"]],
-      },
-      {
-        name: "PocketJS checkout",
-        ok: !!root,
-        hint: "git clone https://github.com/pocket-nexus/pocketjs && cd pocketjs",
-        detail: root ?? undefined,
-      },
-    ],
-    psp: [
-      {
-        name: `Rust ${NIGHTLY} + rust-src`,
-        ok: toolchains.includes(NIGHTLY) && /rust-src.*\(installed\)/.test(components),
-        hint: "run `pocket setup` (or `bun run bootstrap` in the checkout)",
-      },
-      {
-        name: `cargo-psp tools (${TOOLCHAIN.rustPsp.rev.slice(0, 12)})`,
-        ok: cargoToolsOk,
-        hint: "run `pocket setup` (unversioned cargo installs are not used)",
-        detail: cargoPspBin,
-      },
-      {
-        name: llvm.source === "POCKETJS_LLVM_BIN"
-          ? "LLVM override (POCKETJS_LLVM_BIN)"
-          : "LLVM (TARGET_CFLAGS clang)",
-        ok: llvm.ok,
-        fix: llvm.source === "auto" && isMac ? ["brew", ["install", "llvm"]] : null,
-        hint: llvm.source === "POCKETJS_LLVM_BIN"
-          ? "explicit override must contain both clang and llvm-ar; fix or unset POCKETJS_LLVM_BIN"
-          : isMac ? undefined : "install clang/llvm via your distro's package manager",
-        detail: llvm.bin ? (llvm.ok ? join(llvm.bin, "clang") : llvm.bin) : undefined,
-      },
-      {
-        name: sdk.source === "cache"
-          ? `verified PSP SDK (${TOOLCHAIN.sdk.tag})`
-          : `PSP SDK override (${sdk.source})`,
-        ok: sdkOk,
-        hint: sdk.source === "cache"
-          ? "run `pocket setup` to download and verify the pinned SDK"
-          : `${sdk.source} is explicit but ${TOOLCHAIN.sdk.marker} is missing`,
-        detail: `${sdk.path} via ${sdk.source}`,
-      },
-    ],
-    optional: [
-      {
-        name: "PSPLINK host tools (real-hardware hot reload only)",
-        ok: !!which("usbhostfs_pc") && !!which("pspsh"),
-        hint: "needed by pocket hw/psplink, not by PSP builds; see pspdev/psplinkusb",
-      },
-      {
-        name: "PPSSPPHeadless (emulator E2E)",
-        ok: existsSync(join(homedir(), "ppsspp-src", "build", "PPSSPPHeadless")) || !!process.env.PPSSPP_HEADLESS,
-        hint: "source-build PPSSPP with headless, or set PPSSPP_HEADLESS",
-      },
-      { name: "ImageMagick (frame decoding)", ok: !!which("magick"), fix: isMac ? ["brew", ["install", "imagemagick"]] : null },
-    ],
-  };
-}
-
-function doctor() {
-  const c = checks();
-  const section = (title, items) => {
-    console.log("\n" + C.bold(title));
-    for (const it of items) {
-      const line = it.ok ? C.ok(it.name) : title === "Optional" ? C.warn(it.name) : C.bad(it.name);
-      console.log("  " + line + (it.detail ? C.dim(`  (${it.detail})`) : ""));
-      if (!it.ok && (it.hint || it.fix)) {
-        console.log("      " + C.dim(it.fix ? `fix: ${it.fix[0]} ${it.fix[1].join(" ")}` : it.hint));
-      }
-    }
-  };
-  console.log(C.bold("PocketJS doctor"));
-  section("Core (web/desktop development)", c.core);
-  section("PSP builds", c.psp);
-  section("Optional", c.optional);
-  const missing = [...c.core, ...c.psp].filter((i) => !i.ok).length;
-  console.log(
-    "\n" +
-      (missing === 0
-        ? C.ok("Everything looks good.")
-        : C.warn(`${missing} issue(s) found — run ${C.bold("pocket setup")} to fix the installable ones.`)),
-  );
-  process.exitCode = missing === 0 ? 0 : 1;
-}
-
-// ---------------------------------------------------------------------------
-// setup — one implementation lives in the PocketJS checkout
-// ---------------------------------------------------------------------------
-
-async function confirm(question) {
-  if (process.argv.includes("--yes") || process.argv.includes("-y")) return true;
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await new Promise((res) => rl.question(`${question} [y/N] `, res));
-  rl.close();
-  return /^y(es)?$/i.test(answer.trim());
-}
-
-async function setup() {
-  const root = findCheckout();
-  if (!root) {
-    console.error(C.bad("`pocket setup` must run inside a PocketJS checkout"));
-    console.error(C.dim("git clone https://github.com/pocket-nexus/pocketjs && cd pocketjs"));
-    process.exitCode = 1;
-    return;
-  }
-  if (!which("bun")) {
-    console.error(C.bad("bun not found — install from https://bun.sh, then retry"));
-    process.exitCode = 1;
-    return;
-  }
-  if (!(await confirm(`Install the pinned PocketJS toolchain into ${C.bold(cacheRoot())}?`))) return;
-  const result = spawnSync("bun", [join(root, "tools/bootstrap.ts")], { cwd: root, stdio: "inherit" });
-  if (result.status !== 0) {
-    console.error(C.bad(`PocketJS bootstrap failed (exit ${result.status})`));
-    process.exitCode = result.status ?? 1;
-    return;
-  }
-  doctor();
-}
-
-// ---------------------------------------------------------------------------
-// create
-// ---------------------------------------------------------------------------
-
-const APP_TSX = (title) => `// ${title} — scaffolded by \`pocket create\`.
-import { createSignal } from "solid-js";
-import { Text, View } from "@pocketjs/framework/components";
-import { onButtonPress } from "@pocketjs/framework/lifecycle";
-import { BTN } from "@pocketjs/framework/input";
-
-export default function App() {
-  const [count, setCount] = createSignal(0);
-  onButtonPress(BTN.CROSS, () => setCount((n) => n + 1));
-  return (
-    <View class="w-full h-full flex-col items-center justify-center gap-4 bg-slate-950">
-      <View class="w-[48] h-[48] rounded-[12px] bg-indigo-500 animate-spin" />
-      <Text class="text-xl text-white font-bold">{\`Count: \${count()}\`}</Text>
-      <Text class="text-sm text-slate-400">Press CROSS (Z / Enter) to count</Text>
-    </View>
-  );
-}
-`;
-
-const MAIN_TSX = (title) => `// @title PocketJS: ${title}
-import App from "./app.tsx";
-import { mount } from "@pocketjs/framework/solid";
-
-mount(() => <App />);
-`;
-
-const MANIFEST = (name, title) => ({
-  $schema: "https://pocketjs.dev/schema/pocket-2.json",
-  pocket: 2,
-  id: `dev.example.${name.replace(/-/g, ".")}`,
-  name,
-  title,
-  version: "0.1.0",
-  engine: {
-    capabilities: {
-      requires: ["text.glyphs.baked", "input.buttons"],
-    },
-  },
-  app: {
-    entry: "main.tsx",
-    output: `${name}-main`,
-    framework: "solid",
-    viewport: {
-      logical: [480, 272],
-      presentation: "integer-fit",
-    },
-  },
-});
-
-function create(name) {
-  if (!name || !/^[a-z][a-z0-9-]*$/.test(name)) {
-    console.error(C.bad("usage: pocket create <kebab-case-name>"));
+    result = create(args, {
+      checkoutRoot: !resolved.error && resolved.source === "checkout" ? resolved.root : null,
+      cliVersion: cliVersion(),
+    });
+  } catch (error) {
+    if (!(error instanceof CreateUsageError)) throw error;
+    console.error(C.bad(error.message));
+    console.error(C.dim(CREATE_USAGE));
     process.exit(1);
   }
-  const root = findCheckout();
-  if (!root) {
-    console.error(C.bad("not inside a PocketJS checkout — clone https://github.com/pocket-nexus/pocketjs first"));
-    process.exit(1);
+  const { name, target, framework, hostProfilePath } = result;
+  if (result.standalone) {
+    const commands = pocketCommands({ name, target, hostProfilePath });
+    console.log(C.ok(`${relative(process.cwd(), result.directory) || "."}/ scaffolded (${framework}, ${target})`));
+    console.log(C.dim(`  cd ${relative(process.cwd(), result.directory)}`));
+    console.log(C.dim("  bun install"));
+    console.log(C.dim(`  bun run check     # ${commands.check}`));
+    console.log(C.dim(`  bun run build     # ${commands.build}`));
+    return;
   }
-  const dir = join(root, "apps", name);
-  if (existsSync(dir)) {
-    console.error(C.bad(`apps/${name} already exists`));
-    process.exit(1);
-  }
-  const title = name.replace(/-/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "app.tsx"), APP_TSX(title));
-  writeFileSync(join(dir, "main.tsx"), MAIN_TSX(title));
-  writeFileSync(join(dir, "pocket.json"), JSON.stringify(MANIFEST(name, title), null, 2) + "\n");
-  console.log(C.ok(`apps/${name} scaffolded`));
-  console.log(C.dim(`  pocket check --target psp --manifest apps/${name}/pocket.json`));
-  console.log(C.dim(`  pocket build --target psp --manifest apps/${name}/pocket.json -- --release`));
-  console.log(C.dim(`  pocket build --target vita --manifest apps/${name}/pocket.json -- --release`));
+  const manifest = `apps/${name}/pocket.json`;
+  const commands = pocketCommands({
+    name,
+    target,
+    hostProfilePath: hostProfilePath && posix.normalize(`apps/${name}/${hostProfilePath}`),
+    manifest,
+  });
+  console.log(C.ok(`apps/${name} scaffolded (${framework}, ${target})`));
+  console.log(C.dim(`  ${commands.check}`));
+  console.log(C.dim(`  ${commands.build}`));
 }
 
 // ---------------------------------------------------------------------------
@@ -396,25 +139,220 @@ const SCRIPTS = {
   play: "tools/play.ts",
 };
 
-function manifestCommand(cmd, args) {
-  const root = process.env.POCKETJS_FRAMEWORK_ROOT?.trim()
-    ? findFrameworkInstallation()
-    : findCheckout() ?? findFrameworkInstallation();
-  if (!root) {
-    console.error(C.bad(
-      "PocketJS framework not found — install @pocketjs/framework in this project or set POCKETJS_FRAMEWORK_ROOT",
-    ));
-    process.exit(1);
-  }
-  if (!which("bun")) {
-    console.error(C.bad("bun not found — install Bun to compile an application package"));
-    process.exit(1);
-  }
-  const r = spawnSync("bun", [join(root, "tools/pocket.ts"), cmd, ...args], {
-    stdio: "inherit",
+// ---------------------------------------------------------------------------
+// verbs — select the target (tools/cli/select.mjs), then run tools/pocket.ts
+// ---------------------------------------------------------------------------
+
+/** The value of `--<name>` before `--`, or undefined. */
+function optionValue(args, name) {
+  const separator = args.indexOf("--");
+  const before = separator >= 0 ? args.slice(0, separator) : args;
+  const inline = before.find((value) => value.startsWith(`--${name}=`));
+  if (inline) return inline.slice(name.length + 3);
+  const index = before.indexOf(`--${name}`);
+  return index >= 0 ? before[index + 1] : undefined;
+}
+
+/** A query of tools/pocket.ts that prints JSON. */
+function frameworkQuery(framework, args) {
+  const result = spawnSync(process.execPath, [join(framework.root, "tools/pocket.ts"), ...args], {
     cwd: process.cwd(),
+    encoding: "utf8",
   });
-  process.exit(r.status ?? 1);
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    fail(`tools/pocket.ts ${args[0]} failed:\n${result.stderr || result.stdout}`);
+  }
+}
+
+/** The project configuration for the manifest the command names. */
+function projectFor(framework, manifest) {
+  const result = frameworkQuery(framework, ["project", ...(manifest ? ["--manifest", manifest] : [])]);
+  if (!result.ok) fail(result.diagnostics.join("\n"));
+  return result.project;
+}
+
+/** tools/pocket.ts arguments for a selection: a catalog id, or a host profile;
+ *  a project entry's manifest applies unless the command names one. */
+function selectionArgs(selection, project, args) {
+  if (selection.hostProfile) return ["--host-profile", selection.hostProfile];
+  const entry = project.targets.find((target) => target.id === selection.id);
+  const manifest = entry?.manifest && optionValue(args, "manifest") === undefined ? ["--manifest", entry.manifest] : [];
+  if (entry?.hostProfile) return ["--host-profile", entry.hostProfile, ...manifest];
+  return ["--target", selection.id, ...manifest];
+}
+
+function runVerb(framework, cmd, selection, project, args) {
+  console.error(C.dim(`pocket: target ${selection.id ?? selection.hostProfile} · ${selection.origin}`));
+  const result = spawnSync(
+    process.execPath,
+    [
+      join(framework.root, "tools/pocket.ts"),
+      cmd,
+      ...selectionArgs(selection, project, args),
+      "--cli-protocol",
+      String(CLI_PROTOCOL),
+      ...args,
+    ],
+    { stdio: "inherit", cwd: process.cwd() },
+  );
+  return result.status ?? 1;
+}
+
+/** `pocket target …`: the framework installs its own pins. */
+function targetCommand(args) {
+  const framework = requireFramework();
+  const result = spawnSync(
+    process.execPath,
+    [join(framework.root, "tools/pocket.ts"), "target", ...args, "--cli-protocol", String(CLI_PROTOCOL)],
+    { stdio: "inherit", cwd: process.cwd() },
+  );
+  process.exit(result.status ?? 1);
+}
+
+function verb(cmd, args, leading) {
+  const framework = requireFramework();
+  const taken = takeExplicitSelection(args, leading);
+  if (taken.error) fail(taken.error);
+  let rest = taken.args;
+  const separator = rest.indexOf("--");
+  const allIndex = rest.indexOf("--all");
+  const all = allIndex >= 0 && (separator < 0 || allIndex < separator);
+  if (all) {
+    if (cmd !== "build") fail("--all applies to `pocket build`");
+    if (taken.explicit) fail("--all builds the targets of pocket.config.ts; drop the explicit target");
+    rest = rest.filter((_, index) => index !== allIndex);
+  }
+  const project = projectFor(framework, optionValue(rest, "manifest"));
+  if (all) {
+    if (project.targets.length === 0) {
+      fail(`--all builds the targets of pocket.config.ts, and ${project.config ?? "no pocket.config.ts"} lists none`);
+    }
+    for (const target of project.targets) {
+      const status = runVerb(framework, cmd, { id: target.id, source: "project", origin: project.config }, project, rest);
+      if (status !== 0) process.exit(status);
+    }
+    process.exit(0);
+  }
+  const selection = select({ explicit: taken.explicit, settings: readSettings(), project });
+  if (!selection) fail(NO_SELECTION);
+  process.exit(runVerb(framework, cmd, selection, project, rest));
+}
+
+// ---------------------------------------------------------------------------
+// show, default, override
+// ---------------------------------------------------------------------------
+
+function currentHostId() {
+  const os = platform() === "darwin" ? "darwin" : platform() === "linux" ? "linux" : null;
+  const cpu = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : null;
+  return os && cpu ? `${os}-${cpu}` : null;
+}
+
+function show(args, leading) {
+  const json = args.includes("--json");
+  const resolved = resolveFramework();
+  const problem = resolved.error ?? protocolMismatch(resolved, cliVersion());
+  const settings = readSettings();
+  const host = currentHostId();
+  const project = problem ? null : projectFor(resolved, optionValue(args, "manifest"));
+  const status = problem ? [] : frameworkQuery(resolved, ["status", "--json"]);
+  const explicit = leading ? { id: leading, origin: `+${leading}` } : null;
+  const selection = select({ explicit, settings, project });
+  const report = {
+    framework: problem
+      ? { error: problem }
+      : { name: resolved.name, version: resolved.version, root: resolved.root, source: resolved.source, origin: resolved.origin, protocol: resolved.protocol },
+    project: project ?? null,
+    selection,
+    host: host ?? `${platform()}-${process.arch} (unsupported)`,
+    settings: settingsPath(),
+    targets: status,
+  };
+  if (json) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+  const row = (label, value) => console.log(`${label.padEnd(11)} ${value}`);
+  row("framework", problem ? C.bad(problem) : `${resolved.name ?? "@pocketjs/framework"} ${resolved.version ?? ""}   ${resolved.origin} ${resolved.root}`);
+  row("project", project?.config
+    ? `${project.config}${project.targets.length ? `   (targets: ${project.targets.map((target) => target.id).join(", ")})` : "   (no targets)"}`
+    : "no pocket.config.ts");
+  row("target", selection ? `${selection.id ?? selection.hostProfile}   ${selection.origin}` : C.dim("none — `pocket default <id>`, `pocket override set <id>`, or `targets` in pocket.config.ts"));
+  row("host", report.host);
+  if (report.targets.length === 0) return;
+  console.log("\ntargets for this framework");
+  for (const target of report.targets) {
+    const marker = target.id === selection?.id ? "*" : " ";
+    // Bold marks the states `pocket target add` changes.
+    const actionable = target.state === "not installed" || target.state === "outdated" || target.state === "broken";
+    const state = actionable ? C.bold(target.state) : target.state;
+    console.log(` ${marker} ${target.id.padEnd(20)} ${state}${" ".repeat(Math.max(1, 19 - target.state.length))}${C.dim(target.detail)}`);
+  }
+}
+
+/** Fails unless `id` names a catalog target or a host profile of this project; skipped without a framework. */
+function requireKnownTarget(id) {
+  const resolved = resolveFramework();
+  if (resolved.error || protocolMismatch(resolved, cliVersion())) return;
+  const catalog = frameworkQuery(resolved, ["catalog", "--json"]);
+  if (catalog.some((target) => target.id === id)) return;
+  const project = projectFor(resolved, undefined);
+  if (project.targets.some((target) => target.id === id)) return;
+  fail(`unknown target ${id}; targets: ${catalog.map((target) => target.id).join(", ")}`);
+}
+
+function defaultCommand(args) {
+  const settings = readSettings();
+  if (args.length === 0) {
+    console.log(settings.default ?? "no user default");
+    return;
+  }
+  if (args[0] === "--unset") {
+    delete settings.default;
+    writeSettings(settings);
+    console.log(C.ok("user default removed"));
+    return;
+  }
+  requireKnownTarget(args[0]);
+  writeSettings({ ...settings, default: args[0] });
+  console.log(C.ok(`user default: ${args[0]}`));
+}
+
+function overrideCommand(args) {
+  const [action, ...rest] = args;
+  const settings = readSettings();
+  // Real paths: the current directory a later command compares against is one.
+  const requested = resolve(optionValue(rest, "path") ?? process.cwd());
+  const path = existsSync(requested) ? realpathSync(requested) : requested;
+  switch (action) {
+    case "set": {
+      const id = rest.find((value, index) => !value.startsWith("--") && rest[index - 1] !== "--path");
+      if (!id) fail("usage: pocket override set <id> [--path DIR]");
+      requireKnownTarget(id);
+      writeSettings({ ...settings, overrides: { ...settings.overrides, [path]: id } });
+      console.log(C.ok(`override: ${path} → ${id}`));
+      return;
+    }
+    case "unset": {
+      if (!(path in settings.overrides)) fail(`no override for ${path}`);
+      const { [path]: _removed, ...overrides } = settings.overrides;
+      writeSettings({ ...settings, overrides });
+      console.log(C.ok(`override removed: ${path}`));
+      return;
+    }
+    case "list": {
+      const entries = Object.entries(settings.overrides);
+      if (entries.length === 0) console.log("no overrides");
+      for (const [directory, id] of entries) console.log(`${directory}  ${id}`);
+      const active = overrideFor(process.cwd(), settings);
+      if (active) console.log(C.dim(`active here: ${active.directory} → ${active.id}`));
+      return;
+    }
+    default:
+      fail("usage: pocket override set <id> [--path DIR] | unset [--path DIR] | list");
+  }
 }
 
 function passthrough(cmd, args) {
@@ -422,16 +360,12 @@ function passthrough(cmd, args) {
 }
 
 function passthroughScript(cmd, script, args) {
-  const root = findCheckout();
+  const root = checkoutRoot();
   if (!root) {
     console.error(C.bad(`\`pocket ${cmd}\` must run inside a PocketJS checkout`));
     process.exit(1);
   }
-  if (!which("bun")) {
-    console.error(C.bad("bun not found — run `pocket setup`"));
-    process.exit(1);
-  }
-  const r = spawnSync("bun", [join(root, script), ...args], { stdio: "inherit", cwd: root });
+  const r = spawnSync(process.execPath, [join(root, script), ...args], { stdio: "inherit", cwd: root });
   process.exit(r.status ?? 1);
 }
 
@@ -439,20 +373,39 @@ function passthroughScript(cmd, script, args) {
 // main
 // ---------------------------------------------------------------------------
 
-const [, , cmd, ...rest] = process.argv;
-const HELP = `${C.bold("pocket")} — the PocketJS toolchain CLI
+const argvAfterPocket = process.argv.slice(2);
+// `pocket +<id> <command>`: a leading selection, as `cargo +<toolchain>`.
+const leading = argvAfterPocket[0]?.startsWith("+") ? argvAfterPocket.shift().slice(1) : undefined;
+const [cmd, ...rest] = argvAfterPocket;
+const SELECTING = new Set(["check", "compile", "build", "show"]);
+if (leading !== undefined && !SELECTING.has(cmd)) fail(`+${leading} selects a target for check, compile, build or show`);
+const HELP = `${C.bold("pocket")} — the PocketJS toolchain CLI (runs on Bun)
 
-  pocket doctor            diagnose bun / Rust / PSP toolchain / PSPLINK
-  pocket setup [--yes]     install what doctor found missing
-  pocket create <name>     scaffold a pocket.json v2 app under apps/<name>
-  pocket check --target T  validate pocket.json, target APIs and app types
-  pocket check --host-profile FILE
-                           validate against an ESP-IDF product host
-  pocket compile --target T
-                           check + emit JS/pak from one resolved build plan
-  pocket build --target T  check + compile + package PSP or Vita artifacts
-  pocket build --host-profile FILE
-                           build a .pocket for an ESP-IDF product host
+  pocket create <name>     scaffold a pocket.json v2 app: apps/<name> inside a
+                           checkout, a standalone project anywhere else
+      --target T           psp (default) | vita | pocketbook | web-app |
+                           macos-app | linux-app | esp-idf
+      --framework F        solid (default) | vue-vapor | octane
+      --host-profile FILE  derive the manifest from an ESP-IDF host profile
+  pocket [+id] check       validate pocket.json, target APIs and app types
+  pocket [+id] compile     check + emit JS/pak from one resolved build plan
+  pocket [+id] build       check + compile + package the target's artifacts
+      --target ID          the same as +ID
+      --host-profile FILE  an ESP-IDF product host
+      --all                (build) every target of pocket.config.ts
+  pocket show [--json]     framework, project, selected target and why, and
+                           the install state of every target
+  pocket target add [ID …] install the toolchains the framework pins; with no
+                           ID, the targets of pocket.config.ts
+  pocket target list [--check] [--json]
+                           install states; --check exits 1 unless every
+                           target of pocket.config.ts is ready to build
+  pocket target remove ID …
+                           delete the install records and prune the store
+  pocket default [ID | --unset]
+                           the user default target
+  pocket override set ID [--path DIR] | unset [--path DIR] | list
+                           a target for a directory and everything below it
   pocket play vita <app>   build, install and launch a demo in Vita3K
   pocket play ios <app>    build, stage and launch a demo on the iOS simulator
   pocket dev <app>-main    build + serve an app in the browser
@@ -467,19 +420,25 @@ const HELP = `${C.bold("pocket")} — the PocketJS toolchain CLI
 `;
 
 switch (cmd) {
-  case "doctor":
-    doctor();
-    break;
-  case "setup":
-    await setup();
-    break;
   case "create":
-    create(rest[0]);
+    scaffold(rest);
     break;
   case "check":
   case "compile":
   case "build":
-    manifestCommand(cmd, rest);
+    verb(cmd, rest, leading);
+    break;
+  case "show":
+    show(rest, leading);
+    break;
+  case "target":
+    targetCommand(rest);
+    break;
+  case "default":
+    defaultCommand(rest);
+    break;
+  case "override":
+    overrideCommand(rest);
     break;
   case "dev":
   case "psp":
@@ -494,9 +453,14 @@ switch (cmd) {
     passthrough(cmd, rest);
     break;
   case "--version":
-  case "-v":
-    console.log(JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version);
+  case "-v": {
+    console.log(cliVersion());
+    const framework = resolveFramework();
+    if (!framework.error) {
+      console.log(C.dim(`${framework.name ?? "@pocketjs/framework"} ${framework.version ?? "(unversioned)"} (${framework.origin} ${framework.root})`));
+    }
     break;
+  }
   default:
     console.log(HELP);
     process.exitCode = cmd && cmd !== "--help" && cmd !== "help" ? 1 : 0;

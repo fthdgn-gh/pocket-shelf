@@ -583,9 +583,11 @@ cannot be driven. Evidence comes from its log and from files under
   2026-10-04; the 0.13.0 before it was the framework's release number).
   `tools/vita.ts` writes it to `param.sfo` as `APP_VER` (`MM.mm`, "00.01"),
   which the system shows as the app's version.
-- **The title id is `POCKTSHLF`**, set by `POCKET_VITA_TITLE_ID` in the
-  `shelf:build` script (`tools/vita.ts` checks it: nine uppercase letters or
-  digits). Without it the id is derived from the app id in `pocket.json`; that
+- **The title id is `POCKTSHLF`**, set by the `--title=POCKTSHLF` backend
+  argument in the `shelf:build` script (upstream's flag since PocketJS
+  0.15.0; `tools/vita.ts` checks it: a letter, then eight uppercase letters
+  or digits). Until the 0.15.0 merge it was our own `POCKET_VITA_TITLE_ID`
+  variable. Without it the id is derived from the app id in `pocket.json`; that
   was `PBCF7609D` until 2026-10-05. Changing the id installs a new bubble and
   leaves the old one; the data folder (`ux0:/data/PocketShelf/`) is fixed in
   `datafs.rs` and stays the same.
@@ -704,6 +706,22 @@ and **Check for updates**. The install works on hardware.
   Pocket Shelf. So it stopped after `report("ok")`: in the two seconds of
   drawing, `vita2d_fini`, or the launch requests and exit. The same code
   restarted Pocket Shelf in the 2026-10-06 test. Not yet known which step.
+
+## Keeping up with PocketJS
+
+`upstream` is `pocket-stack/pocketjs`. Merge `upstream/main` on a branch
+(`sync/pocketjs-<version>`), then check: `shelf:check`, `shelf:test`,
+`retroarch-test.sh`, a release build (its `param.sfo` must still hold
+`POCKTSHLF`, "Pocket Shelf" and `APP_VER`), every preview shot against the
+renders from before the merge, and a start in Vita3K.
+
+- **Conflicts to expect:** `pocket.json` (keep ours: the root manifest is
+  Pocket Shelf, upstream's is the Hero demo), `README.md` (ours is Pocket
+  Shelf's), `tools/vita.ts` (our `-c` SELF compression and `APP_VER`).
+- **0.15.0 (merged 2026-10-20, 47 commits):** four conflicts, those above
+  and a test written two ways. All 189 preview shots matched pixel for
+  pixel except the Diagnostics timings. `tests/launcher-sim.test.ts` fails
+  11 tests on this machine both merged and on a clean upstream checkout.
 
 ## Data folder (`ux0:/data/PocketShelf/`)
 

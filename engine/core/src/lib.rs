@@ -54,7 +54,9 @@ pub mod layout;
 pub mod package;
 pub mod pak;
 pub mod physics;
+pub mod plan_facts;
 pub mod raster;
+pub mod sha256;
 pub mod compositor;
 pub mod spec;
 pub mod stream;
@@ -257,6 +259,19 @@ struct AuxiliarySurface {
 
 /// The retained UI core. One per AppInstance, with an optional independent
 /// auxiliary output root sharing the same resources and frame clock.
+/// Which solver projection a change belongs to (`Ui::box_owner`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Owner {
+    Primary,
+    Auxiliary,
+    /// The region rooted at this node id.
+    Region(i32),
+    /// Under an externally placed node: nothing to solve.
+    Static,
+    /// Not attached to any output root.
+    Detached,
+}
+
 pub struct Ui {
     tree: tree::Tree,
     styles: style::StyleTable,
@@ -425,20 +440,227 @@ impl Ui {
         }
     }
 
-    /// Nodes moved, appeared or disappeared: reconcile the retained trees and
-    /// keep unchanged nodes and measurements.
-    fn mark_layout_structure(&mut self) {
+    /// Nodes moved, appeared or disappeared somewhere unknown: reconcile
+    /// every retained tree and keep unchanged nodes and measurements.
+    fn mark_layout_structure_all(&mut self) {
         self.layout.mark_structure();
         if let Some(auxiliary) = self.auxiliary.as_mut() {
             auxiliary.layout.mark_structure();
         }
     }
 
-    fn mark_layout_style(&mut self, slot: u32) {
-        self.layout.mark_style(slot);
-        if let Some(auxiliary) = self.auxiliary.as_mut() {
-            auxiliary.layout.mark_style(slot);
+    /// The projection that solves a node's box: the nearest region root above
+    /// it, else the output root the ancestor chain reaches. `Static` means an
+    /// ancestor is externally placed (its whole subtree has no solver nodes).
+    fn box_owner(&self, slot: u32) -> Owner {
+        let auxiliary = self.auxiliary_surface_root();
+        let mut current = self.tree.slots[slot as usize].parent;
+        loop {
+            if current == spec::ROOT_ID {
+                return Owner::Primary;
+            }
+            if current != 0 && current == auxiliary {
+                return Owner::Auxiliary;
+            }
+            let Some(parent_slot) = self.tree.resolve(current) else {
+                return Owner::Detached;
+            };
+            let node = &self.tree.slots[parent_slot as usize];
+            if node.region_root {
+                return Owner::Region(current);
+            }
+            if node.layout_mode != tree::LAYOUT_LIVE {
+                return Owner::Static;
+            }
+            current = node.parent;
         }
+    }
+
+    /// The projection that holds `slot`'s children.
+    fn children_owner(&self, slot: u32) -> Owner {
+        let id = self.tree.slots[slot as usize].id(slot);
+        if id == spec::ROOT_ID {
+            return Owner::Primary;
+        }
+        if id == self.auxiliary_surface_root() {
+            return Owner::Auxiliary;
+        }
+        let node = &self.tree.slots[slot as usize];
+        if node.region_root {
+            return Owner::Region(id);
+        }
+        if node.layout_mode != tree::LAYOUT_LIVE {
+            return Owner::Static;
+        }
+        self.box_owner(slot)
+    }
+
+    /// The engine that registered region `id` (regions inside the auxiliary
+    /// surface live in its engine).
+    fn region_engine(&mut self, id: i32) -> &mut layout::LayoutEngine {
+        if self.layout.is_region(id) {
+            return &mut self.layout;
+        }
+        match self.auxiliary.as_mut() {
+            Some(auxiliary) if auxiliary.layout.is_region(id) => &mut auxiliary.layout,
+            _ => &mut self.layout,
+        }
+    }
+
+    fn mark_structure_owner(&mut self, owner: Owner) {
+        match owner {
+            Owner::Primary => self.layout.mark_structure(),
+            Owner::Auxiliary => {
+                if let Some(auxiliary) = self.auxiliary.as_mut() {
+                    auxiliary.layout.mark_structure();
+                }
+            }
+            Owner::Region(id) => self.region_engine(id).mark_region_structure(id),
+            Owner::Static => {}
+            Owner::Detached => self.mark_layout_structure_all(),
+        }
+    }
+
+    /// Structure changed among the children of node `parent`.
+    fn mark_layout_structure_under(&mut self, parent: i32) {
+        let owner = match self.tree.resolve(parent) {
+            Some(slot) => self.children_owner(slot),
+            None => Owner::Detached,
+        };
+        self.mark_structure_owner(owner);
+    }
+
+    fn mark_layout_style(&mut self, slot: u32) {
+        match self.tree.slots[slot as usize].layout_mode {
+            tree::LAYOUT_STATIC => return,
+            tree::LAYOUT_FORMULA => {
+                self.formula_layout(slot);
+                return;
+            }
+            _ => {}
+        }
+        match self.box_owner(slot) {
+            Owner::Primary => self.layout.mark_style(slot),
+            Owner::Auxiliary => {
+                if let Some(auxiliary) = self.auxiliary.as_mut() {
+                    auxiliary.layout.mark_style(slot);
+                }
+            }
+            Owner::Region(id) => self.region_engine(id).mark_region_style(id, slot),
+            Owner::Static => {}
+            Owner::Detached => {
+                self.layout.mark_style(slot);
+                if let Some(auxiliary) = self.auxiliary.as_mut() {
+                    auxiliary.layout.mark_style(slot);
+                }
+            }
+        }
+        if self.tree.slots[slot as usize].region_root {
+            // The region's solver root mirrors this node's layout style.
+            let id = self.tree.slots[slot as usize].id(slot);
+            self.region_engine(id).mark_region_style(id, slot);
+        }
+    }
+
+    /// Keep `Node::region_root` and the engine's region table in step with
+    /// the resolved `contain` value (text nodes never contain).
+    fn refresh_region(&mut self, slot: u32) {
+        let node = &self.tree.slots[slot as usize];
+        let id = node.id(slot);
+        let contained = node.node_type != spec::NodeType::Text as u8
+            && style::resolve_contain(node, &self.styles) != spec::Contain::None as u8;
+        if contained == node.region_root || id == spec::ROOT_ID || id == self.auxiliary_surface_root() {
+            return;
+        }
+        self.tree.slots[slot as usize].region_root = contained;
+        let auxiliary = self.auxiliary_surface_root();
+        let in_auxiliary = auxiliary != 0 && self.tree.is_in_subtree(auxiliary, id);
+        let engine = match self.auxiliary.as_mut() {
+            Some(surface) if in_auxiliary => &mut surface.layout,
+            _ => &mut self.layout,
+        };
+        if contained {
+            engine.register_region(id);
+        } else {
+            engine.unregister_region(id);
+        }
+        // The children change projection; the node's own leaf changes shape.
+        let owner = self.box_owner(slot);
+        self.mark_structure_owner(owner);
+    }
+
+    /// Set how `id`'s rect is produced (tree::LAYOUT_LIVE, LAYOUT_STATIC or
+    /// LAYOUT_FORMULA). A static node takes the given rect, relative to its
+    /// parent, and its subtree leaves every solver projection; a formula node
+    /// follows its own resolved inset and size (`layout::formula_rect`). The
+    /// MicroTS compiler calls this for nodes whose geometry it proved; marks on
+    /// a static node are no-ops, so a layout prop set on one does nothing.
+    /// Output roots stay live.
+    pub fn set_layout_mode(&mut self, id: i32, mode: u8, x: f32, y: f32, w: f32, h: f32) {
+        let Some(slot) = self.tree.resolve(id) else {
+            return;
+        };
+        if id == spec::ROOT_ID || id == self.auxiliary_surface_root() || mode > tree::LAYOUT_FORMULA {
+            return;
+        }
+        let was_live = self.tree.slots[slot as usize].layout_mode == tree::LAYOUT_LIVE;
+        self.tree.slots[slot as usize].layout_mode = mode;
+        match mode {
+            tree::LAYOUT_STATIC => {
+                self.tree.slots[slot as usize].layout = tree::LayoutRect { x, y, w, h };
+            }
+            tree::LAYOUT_FORMULA => self.formula_layout(slot),
+            _ => {}
+        }
+        if was_live != (mode == tree::LAYOUT_LIVE) {
+            // The node enters or leaves its owner's projection. A detached
+            // node (mount order: create, set the mode, insert) has none yet;
+            // the insert marks its owner.
+            let owner = self.box_owner(slot);
+            if owner != Owner::Detached {
+                self.mark_structure_owner(owner);
+            }
+        }
+    }
+
+    /// Layout mode of a node (tree::LAYOUT_*), or None for a stale id.
+    pub fn layout_mode(&self, id: i32) -> Option<u8> {
+        self.tree.get(id).map(|node| node.layout_mode)
+    }
+
+    /// Recompute a formula node's rect from its resolved style and its
+    /// parent's rect.
+    fn formula_layout(&mut self, slot: u32) {
+        let parent = self.tree.slots[slot as usize].parent;
+        let (parent_size, origin) = match self.tree.resolve(parent) {
+            Some(parent_slot) => {
+                let rect = self.tree.slots[parent_slot as usize].layout;
+                ((rect.w, rect.h), layout::absolute_origin(&self.tree, parent_slot))
+            }
+            None => ((0.0, 0.0), (0.0, 0.0)),
+        };
+        let resolved = style::resolve(&self.tree.slots[slot as usize], &self.styles, true);
+        self.tree.slots[slot as usize].layout = layout::formula_rect(&resolved, parent_size, origin);
+    }
+
+    /// Unrounded solver output of a live node relative to its parent:
+    /// (x, y, w, h). None for stale ids and nodes without a solver node.
+    pub fn layout_unrounded_of(&self, id: i32) -> Option<(f32, f32, f32, f32)> {
+        let slot = self.tree.resolve(id)?;
+        layout::unrounded_of(&self.layout, &self.tree, slot).or_else(|| {
+            self.auxiliary
+                .as_ref()
+                .and_then(|auxiliary| layout::unrounded_of(&auxiliary.layout, &self.tree, slot))
+        })
+    }
+
+    /// Full-tree oracle: every live node under the primary root whose rect
+    /// differs from a fresh solve of the whole tree with no regions, static or
+    /// formula nodes, as (id, expected, actual). Empty means the modes agree.
+    #[cfg(feature = "counters")]
+    pub fn layout_mismatches(&mut self) -> Vec<(i32, tree::LayoutRect, tree::LayoutRect)> {
+        let viewport = self.layout.viewport;
+        layout::reference_mismatches(&mut self.tree, &self.styles, &self.fonts, viewport, spec::ROOT_ID)
     }
 
     /// Create the fixed auxiliary UI root, or resize the existing one. The
@@ -514,15 +736,22 @@ impl Ui {
         if self.focused != 0 && self.tree.is_in_subtree(id, self.focused) {
             self.focused = 0;
         }
+        let parent = self.tree.get(id).map_or(0, |node| node.parent);
         self.tree.detach(id);
         let mut slots = Vec::new();
         self.tree.collect_subtree(id, &mut slots);
         for slot in slots {
             let nid = self.tree.slots[slot as usize].id(slot);
             self.anims.kill_node(nid);
+            if self.tree.slots[slot as usize].region_root {
+                self.layout.unregister_region(nid);
+                if let Some(auxiliary) = self.auxiliary.as_mut() {
+                    auxiliary.layout.unregister_region(nid);
+                }
+            }
             self.tree.free_slot(slot);
         }
-        self.mark_layout_structure();
+        self.mark_layout_structure_under(parent);
     }
 
     /// Insert `child` under `parent` before `anchor` (0 = append). DOM move
@@ -531,8 +760,48 @@ impl Ui {
         if child == self.auxiliary_surface_root() {
             return;
         }
+        let previous = self.tree.get(child).map_or(0, |node| node.parent);
         if self.tree.insert_before(parent, child, anchor) {
-            self.mark_layout_structure();
+            self.mark_layout_structure_under(parent);
+            if previous != 0 && previous != parent {
+                self.mark_layout_structure_under(previous);
+            }
+            self.rehome_regions(child);
+        }
+    }
+
+    /// A region belongs to the engine of the output its node is in. A node
+    /// contained while detached (a renderer sets the class before it inserts)
+    /// registered with the primary engine; inserting it, or an ancestor, under
+    /// the auxiliary surface moves its region to the auxiliary engine, and
+    /// moving it back moves the region back.
+    fn rehome_regions(&mut self, id: i32) {
+        let Some(auxiliary) = self.auxiliary.as_mut() else {
+            return;
+        };
+        if self.layout.regions.is_empty() && auxiliary.layout.regions.is_empty() {
+            return;
+        }
+        let in_auxiliary = self.tree.is_in_subtree(auxiliary.root, id);
+        let (from, to) = if in_auxiliary {
+            (&mut self.layout, &mut auxiliary.layout)
+        } else {
+            (&mut auxiliary.layout, &mut self.layout)
+        };
+        if from.regions.is_empty() {
+            return;
+        }
+        let mut pending = alloc::vec![id];
+        while let Some(current) = pending.pop() {
+            let Some(slot) = self.tree.resolve(current) else {
+                continue;
+            };
+            let node = &self.tree.slots[slot as usize];
+            if node.region_root && from.is_region(current) {
+                from.unregister_region(current);
+                to.register_region(current);
+            }
+            pending.extend_from_slice(&node.children);
         }
     }
 
@@ -540,7 +809,7 @@ impl Ui {
     /// during reorder; the JS renderer sweep destroys still-detached nodes).
     pub fn remove_child(&mut self, parent: i32, child: i32) {
         if self.tree.remove_child(parent, child) {
-            self.mark_layout_structure();
+            self.mark_layout_structure_under(parent);
         }
     }
 
@@ -570,6 +839,12 @@ impl Ui {
         self.tree.get(id).map(|node| node.text.as_str())
     }
 
+    /// Style-table record id of a node (spec::STYLE_ID_NONE when unstyled).
+    /// Native presenters match mounted conditional branches by it.
+    pub fn node_style(&self, id: i32) -> Option<i32> {
+        self.tree.get(id).map(|node| node.style_id)
+    }
+
     // ---- styling ----------------------------------------------------------
 
     /// Apply style-table record `style_id` (spec::STYLE_ID_NONE clears).
@@ -592,6 +867,7 @@ impl Ui {
         }
         self.retarget(slot, &old, was_initialized);
         self.restart_timelines(slot);
+        self.refresh_region(slot);
         self.mark_layout_style(slot);
     }
 
@@ -614,6 +890,9 @@ impl Ui {
         tree::Node::remove_entry(&mut node.anim_values, prop);
         tree::Node::put_entry(&mut node.overrides, prop, bits);
         if spec::is_layout_dirtying(prop) {
+            if prop == spec::prop::CONTAIN {
+                self.refresh_region(slot);
+            }
             self.mark_layout_style(slot);
         }
     }
@@ -636,6 +915,13 @@ impl Ui {
         // non-empty flip is structural: empty runs are excluded from the
         // taffy tree entirely, so the leaf has to (dis)appear.
         let root_slot = self.text_layout_root(slot);
+        if self.tree.slots[root_slot as usize].layout_mode != tree::LAYOUT_LIVE {
+            // An externally placed cell: the run never sizes the box.
+            let node = &mut self.tree.slots[slot as usize];
+            node.text.clear();
+            node.text.push_str(text);
+            return;
+        }
         let mut run = alloc::string::String::new();
         self.tree.collect_run(root_slot, &mut run);
         let was_empty = run.is_empty();
@@ -647,7 +933,8 @@ impl Ui {
         run.clear();
         self.tree.collect_run(root_slot, &mut run);
         if was_empty != run.is_empty() {
-            self.mark_layout_structure();
+            let parent = self.tree.slots[root_slot as usize].parent;
+            self.mark_layout_structure_under(parent);
         } else if !run.is_empty() {
             // A text swap inside a FIXED cell (definite px width AND height
             // on the layout leaf) cannot move layout — the measure result is
@@ -1577,6 +1864,26 @@ impl Ui {
         }
     }
 
+    /// Solve pending layout for both outputs now. `draw` and `draw_auxiliary`
+    /// solve on demand; a host that times layout apart from the DrawList
+    /// build calls this first.
+    pub fn relayout_outputs(&mut self) {
+        if self.layout.needs() {
+            layout::relayout(&mut self.tree, &self.styles, &self.fonts, &mut self.layout);
+        }
+        if let Some(auxiliary) = self.auxiliary.as_mut() {
+            if auxiliary.layout.needs() {
+                layout::relayout_root(
+                    &mut self.tree,
+                    &self.styles,
+                    &self.fonts,
+                    &mut auxiliary.layout,
+                    auxiliary.root,
+                );
+            }
+        }
+    }
+
     /// Walk the tree into the DrawList (spec.ts DRAWLIST format) and return
     /// it. Output is valid until the next mutating call.
     pub fn draw(&mut self) -> &DrawList {
@@ -1835,6 +2142,49 @@ impl Ui {
         if id == 0 {
             self.inspect_drawn = None;
         }
+    }
+
+    /// Arm a capture of the text runs painted inside node `root`'s subtree
+    /// on the next draw of `surface` (0 the primary output, 1 the auxiliary
+    /// one); `root` 0 reads the whole surface. Returns false for a surface
+    /// this Ui does not have or a node it does not hold.
+    pub fn capture_texts(&mut self, surface: u32, root: i32) -> bool {
+        if root != 0 && self.tree.resolve(root).is_none() {
+            return false;
+        }
+        match surface {
+            0 => self.draw_list.capture_texts = if root == 0 { spec::ROOT_ID } else { root },
+            1 => match self.auxiliary.as_mut() {
+                Some(auxiliary) => auxiliary.draw_list.capture_texts = if root == 0 { auxiliary.root } else { root },
+                None => return false,
+            },
+            _ => return false,
+        }
+        true
+    }
+
+    /// The last capture of `surface`, one painted text run per line:
+    /// `x,y,w,h` (whole px of its visible box), a tab, then the text with
+    /// tabs and line breaks as spaces. Empty until a capture completes.
+    pub fn captured_texts(&self, surface: u32) -> alloc::string::String {
+        use core::fmt::Write;
+        let list = match surface {
+            0 => &self.draw_list,
+            1 => match self.auxiliary.as_ref() {
+                Some(auxiliary) => &auxiliary.draw_list,
+                None => return alloc::string::String::new(),
+            },
+            _ => return alloc::string::String::new(),
+        };
+        let mut out = alloc::string::String::new();
+        for text in &list.texts {
+            let _ = write!(out, "{},{},{},{}\t", text.x as i32, text.y as i32, (text.w + 0.999) as i32, (text.h + 0.999) as i32);
+            for ch in text.text.chars() {
+                out.push(if ch == '\t' || ch == '\n' || ch == '\r' { ' ' } else { ch });
+            }
+            out.push('\n');
+        }
+        out
     }
 
     /// Packed `x | y << 16` (i16 halves) of the inspected node's last-drawn

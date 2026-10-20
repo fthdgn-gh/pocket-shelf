@@ -146,6 +146,14 @@ export async function createWasmUi(wasm, options = {}) {
     ops.fontStreamRequests = () => streamJSON(ex.ui_font_stream_requests);
     ops.fontStreamStats = () => streamJSON(ex.ui_font_stream_stats);
   }
+  // The agent's screen reading (contracts/spec/agent.ts): feature-detected.
+  if (ex.ui_capture_texts) {
+    ops.captureTexts = (surface, root) => !!ex.ui_capture_texts(surface, root ?? 0);
+    ops.capturedTexts = (surface) => {
+      const n = ex.ui_captured_texts(surface);
+      return new TextDecoder().decode(new Uint8Array(ex.memory.buffer, ex.ui_captured_texts_ptr(), n));
+    };
+  }
   // 2D bodies (spec ops 52..56, ui.physics) — feature-detected so a stale
   // pocketjs.wasm still boots; @pocketjs/framework/physics reports the gap.
   if (ex.ui_physics_create) {
@@ -259,6 +267,8 @@ export async function createWasmUi(wasm, options = {}) {
     tick: () => ex.ui_tick(),
     /** Hash the current DrawList without rasterizing it (BigInt, wasm i64). */
     drawHash: ex.ui_draw_hash ? () => ex.ui_draw_hash() : null,
+    /** The same for the auxiliary surface's DrawList; null on a wasm build that predates it. */
+    drawHashAuxiliary: ex.ui_draw_hash_auxiliary ? () => ex.ui_draw_hash_auxiliary() : null,
     /** Every live shell binding, including hidden/minimized surface nodes. */
     compositorBindings() {
       return Array.from(compositorBindings.values(), (entry) => ({ ...entry }));
@@ -302,6 +312,18 @@ export async function createWasmUi(wasm, options = {}) {
       scale = integerInRange(scale, "render scale", 1, 4);
       return framebufferView(ex.ui_render_scaled(scale), scale);
     },
+    /**
+     * Rasterize the DrawList once into RGBA8 that keeps coverage: premultiplied
+     * R,G,B and the alpha the ops accumulated, 0 where nothing is drawn. For a
+     * host that lays the interface over a scene of its own. The view is a buffer
+     * separate from render()'s; null on a wasm build that predates the export.
+     */
+    renderPremultiplied: ex.ui_render_premultiplied_scaled
+      ? (scale = 1) => {
+          scale = integerInRange(scale, "render scale", 1, 4);
+          return framebufferView(ex.ui_render_premultiplied_scaled(scale), scale);
+        }
+      : null,
     /** Render shell chrome and child rasters in SURFACE_QUAD painter order. */
     renderComposited(scale = 1) {
       scale = integerInRange(scale, "render scale", 1, 4);

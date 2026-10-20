@@ -93,6 +93,23 @@ const shimPlugin: import("bun").BunPlugin = {
 // binding but prune its declaration in a browser bundle. Resolve the browser
 // compiler straight to the owning module; normal Bun/Node consumers keep using
 // the public `octane/compiler` subpath in source.
+// The playground runtimes bundle the framework with the hero build's style
+// table (tools/site-build.ts builds hero before this script) as the default
+// table for applications that pass none.
+const HERO_STYLES = ROOT + "dist/hero.styles.ts";
+function heroStyles(): string {
+  if (!existsSync(HERO_STYLES)) {
+    throw new Error(`site build: ${HERO_STYLES} is missing; run \`bun tools/build.ts hero\` first`);
+  }
+  return readFileSync(HERO_STYLES, "utf8");
+}
+const heroStylesPlugin: import("bun").BunPlugin = {
+  name: "hero-styles",
+  setup(build) {
+    build.onResolve({ filter: /(?:^|\/)styles\.generated(?:\.ts)?$/ }, () => ({ path: HERO_STYLES }));
+  },
+};
+
 const octaneBrowserCompilerPlugin: import("bun").BunPlugin = {
   name: "octane-browser-compiler",
   setup(b) {
@@ -515,8 +532,15 @@ async function main() {
   await bundleSolidUniversal("pg/solid-universal.js");
   await bundleVueVapor("pg/vue-vapor.js");
   writeVueVaporHelpers();
-  await bundle("playground/runtime-entry.ts", "pg/runtime.js", { external: ["solid-js", "solid-js/universal"] });
-  await bundle("playground/runtime-vue-vapor-entry.ts", "pg/runtime-vue-vapor.js", { external: ["vue"] });
+  heroStyles();
+  await bundle("playground/runtime-entry.ts", "pg/runtime.js", {
+    external: ["solid-js", "solid-js/universal"],
+    plugins: [heroStylesPlugin],
+  });
+  await bundle("playground/runtime-vue-vapor-entry.ts", "pg/runtime-vue-vapor.js", {
+    external: ["vue"],
+    plugins: [heroStylesPlugin],
+  });
   await bundle("playground/compiler-entry.ts", "pg/compiler.js", {
     shims: true,
     prelude: PROCESS_PRELUDE,
@@ -532,7 +556,7 @@ async function main() {
   // with a require-of-top-level-await error.
   const { jsxPlugin } = await import("../framework/compiler/jsx-plugin.ts");
   await bundle("playground/runtime-octane-entry.ts", "pg/runtime-octane.js", {
-    plugins: [jsxPlugin("octane")],
+    plugins: [jsxPlugin("octane", { generatedStyles: heroStyles() })],
   });
   await bundle("playground/playground.js", "pg/playground.bundle.js");
   // Live docs demos (`:::demo <app>`). Bundled from source so it can import
@@ -555,6 +579,7 @@ async function main() {
   copy(ROOT + "hosts/web/app-instance.html", "pg/app-instance.html");
   copy(ROOT + "hosts/web/app-instance.js", "pg/app-instance.js");
   copy(ROOT + "hosts/web/wasm-ops.js", "pg/wasm-ops.js");
+  copy(ROOT + "hosts/web/runtime-glyphs.js", "pg/runtime-glyphs.js");
   for (const name of ["offload-worker.js", "text-worker.js", "text-engine.js", "pocket_text.wasm"]) {
     copy(ROOT + "hosts/web/" + name, "pg/" + name);
   }
@@ -632,6 +657,9 @@ async function main() {
   ]) {
     if (existsSync(SITE + "assets/" + asset)) copy(SITE + "assets/" + asset, asset);
   }
+  // The Pocket3D mark beside the homepage's link to 3d.pocket.nexus: that site's
+  // drawing, copied at build time so this one keeps no second copy.
+  copy(SITE + "pocket3d/mark.svg", "assets/pocket3d-mark.svg");
   // The Arcade look for pages outside the homepage, and its self-hosted pixel font.
   copy(SITE + "assets/arcade.css", "assets/arcade.css");
   copy(SITE + "assets/fonts/", "assets/fonts/");
@@ -820,22 +848,13 @@ ${body}
 
 // The /for/ pages share the homepage's bespoke chrome (home.css, no shared
 // Tailwind shell): site/for/shell.html holds the nav + footer, and
-// site/for/<slug>.html the main content. Linked from the use-case cards.
+// site/for/<slug>.html the main content. Games and 3D have no page here: that
+// subject belongs to Pocket3D and its own site.
 const FOR_PAGES = [
   {
     slug: "interfaces",
     title: "PocketJS for user interfaces",
     desc: "Components, signals and Tailwind classes in Solid, Vue Vapor or Octane become one native tree that runs on every machine in the registry.",
-  },
-  {
-    slug: "games",
-    title: "PocketJS for games",
-    desc: "Rust engine cores under JavaScript gameplay: OpenStrike holds a locked 60 fps on a 333 MHz PSP while the HUD stays a Solid app.",
-  },
-  {
-    slug: "worlds",
-    title: "PocketJS for 3D worlds",
-    desc: "Pocket3D cooks a scene once and renders it through wgpu, sceGu, GXM and OpenGL ES, up to VRM humans with spring-bone physics.",
   },
   {
     slug: "agents",

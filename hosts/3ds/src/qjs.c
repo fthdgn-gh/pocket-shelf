@@ -16,12 +16,25 @@
  * (framework/src/index.ts walks them so JSX `src="<name>"` resolves), and
  * `ui.__viewport`, the logical UI size the same file sizes the mounted app and
  * overlay layers from.
+ *
+ * Host services beside `ui` (their contracts are in contracts/spec/):
+ * `link` (link.ts) and `net` (net.ts), both served by link.c over the Pocket
+ * Link; `wifi` (wifi.ts, wifi.c); `camera` (camera.ts, camera.c); `agent`
+ * (agent.ts, agent.c) for a guest that declared "system.agent". The app
+ * switching ops 39..41 hang on `ui` (docs/LAUNCHER.md, launcher.c). Capture
+ * and offload builds compile those services to inert stubs and leave the
+ * app switching ops out.
  */
 
 #include "qjs.h"
 #include "offload.h"
 #include "media.h"
 #include "offload_coverage.h"
+#include "camera.h"
+#include "launcher.h"
+#include "link.h"
+#include "agent.h"
+#include "wifi.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -87,6 +100,7 @@ typedef enum {
   HostDebugPause,
   HostDebugStep,
   HostDebugStats,
+  HostDebugFrames,
   HostDbgActive,
   HostDbgConnected,
   HostDbgPoll,
@@ -100,6 +114,37 @@ typedef enum {
   HostPhysicsDestroy,
   HostPhysicsEvents,
   HostPhysicsQuery,
+  HostAppTable,
+  HostAppLaunch,
+  HostAppShot,
+  HostLinkStatus,
+  HostLinkPair,
+  HostLinkForget,
+  HostLinkCatalog,
+  HostLinkInstall,
+  HostLinkRemove,
+  HostLinkPoll,
+  HostNetStart,
+  HostNetTake,
+  HostNetCancel,
+  HostNetPoll,
+  HostNetLastError,
+  HostWifiStatus,
+  HostWifiSetEnabled,
+  HostWifiConnect,
+  HostCameraOpen,
+  HostCameraClose,
+  HostCameraPoll,
+  HostCameraInfo,
+  HostCaptureTexts,
+  HostCapturedTexts,
+  HostAgentPoll,
+  HostAgentSend,
+  HostAgentStage,
+  HostAgentListen,
+  HostAgentLevel,
+  HostAgentShot,
+  HostAgentStatus,
 } HostOperation;
 
 static JSRuntime *runtime;
@@ -513,6 +558,8 @@ static JSValue host_operation(
       return JS_UNDEFINED;
     case HostDebugStats:
       return JS_NewString(ctx, devserver_debug_stats());
+    case HostDebugFrames:
+      return JS_NewString(ctx, devserver_debug_frames());
     case HostDbgActive:
       return JS_NewBool(ctx, devserver_active());
     case HostDbgConnected:
@@ -599,6 +646,123 @@ static JSValue host_operation(
         JS_FreeCString(ctx, text);
       }
       return JS_UNDEFINED;
+#ifdef POCKETJS_LINK
+    case HostAppTable:
+      return JS_NewString(ctx, launcher_table_json());
+    case HostAppLaunch: {
+      if (argc < 1) return JS_NewInt32(ctx, 0);
+      text = JS_ToCStringLen2(ctx, &text_length, argv[0], 0);
+      if (text == NULL) return JS_NewInt32(ctx, 0);
+      bool scheduled = launcher_launch(text);
+      JS_FreeCString(ctx, text);
+      return JS_NewInt32(ctx, scheduled ? 1 : 0);
+    }
+    case HostAppShot:
+      /* No frozen frame on this host yet (docs/LAUNCHER.md allows -1). */
+      return JS_NewInt32(ctx, -1);
+#endif
+    case HostLinkStatus:
+      return JS_NewString(ctx, link_status_json());
+    case HostLinkPair:
+    case HostLinkForget:
+    case HostLinkInstall:
+    case HostLinkRemove: {
+      bool is_bool = magic != HostLinkInstall;
+      if (argc < 1 || !JS_IsString(argv[0])) return is_bool ? JS_FALSE : JS_NewInt32(ctx, -1);
+      text = JS_ToCStringLen2(ctx, &text_length, argv[0], 0);
+      if (text == NULL) return is_bool ? JS_FALSE : JS_NewInt32(ctx, -1);
+      JSValue result;
+      if (magic == HostLinkPair) result = JS_NewBool(ctx, link_pair(text, text_length));
+      else if (magic == HostLinkForget) result = JS_NewBool(ctx, link_forget(text));
+      else if (magic == HostLinkRemove) result = JS_NewBool(ctx, link_remove(text, text_length));
+      else result = JS_NewInt32(ctx, link_install(text, text_length));
+      JS_FreeCString(ctx, text);
+      return result;
+    }
+    case HostLinkCatalog:
+      return JS_NewInt32(ctx, link_catalog());
+    case HostLinkPoll:
+    case HostNetPoll: {
+      const char *batch = magic == HostLinkPoll ? link_poll() : link_net_poll();
+      return batch == NULL ? JS_UNDEFINED : JS_NewString(ctx, batch);
+    }
+    case HostNetStart: {
+      if (argc < 1 || !JS_IsString(argv[0])) return JS_NewInt32(ctx, -1);
+      text = JS_ToCStringLen2(ctx, &text_length, argv[0], 0);
+      if (text == NULL) return JS_NewInt32(ctx, -1);
+      /* Borrowed after the string conversion (which may allocate) and used
+       * before anything else can run JS: start() copies the body. */
+      if (!argument_bytes(ctx, argc, argv, 1, &bytes, &byte_length)) {
+        bytes = NULL;
+        byte_length = 0;
+      }
+      int32_t handle = link_net_start(text, text_length, bytes, byte_length);
+      JS_FreeCString(ctx, text);
+      return JS_NewInt32(ctx, handle);
+    }
+    case HostNetTake: {
+      int32_t handle = argument_int(ctx, argc, argv, 0);
+      if (!argument_bytes(ctx, argc, argv, 1, &bytes, &byte_length)) return JS_NewInt32(ctx, -1);
+      return JS_NewInt32(ctx, link_net_take(handle, (uint8_t *)bytes, byte_length));
+    }
+    case HostNetCancel:
+      link_net_cancel(argument_int(ctx, argc, argv, 0));
+      return JS_UNDEFINED;
+    case HostNetLastError:
+      return JS_NewString(ctx, link_net_last_error());
+    case HostWifiStatus:
+      return JS_NewString(ctx, wifi_status_json());
+    case HostWifiSetEnabled:
+      return JS_NewBool(ctx, wifi_set_enabled(argc > 0 && JS_ToBool(ctx, argv[0])));
+    case HostWifiConnect:
+      return JS_NewBool(ctx, wifi_connect(argument_int(ctx, argc, argv, 0)));
+    case HostCameraOpen:
+      return JS_NewInt32(ctx, camera_open());
+    case HostCameraClose:
+      camera_close();
+      return JS_UNDEFINED;
+    case HostCameraPoll: {
+      size_t length = 0;
+      const char *payload = camera_poll(&length);
+      return payload == NULL ? JS_UNDEFINED : JS_NewStringLen(ctx, payload, length);
+    }
+    case HostCameraInfo:
+      return JS_NewString(ctx, camera_info_json());
+    case HostCaptureTexts:
+      return JS_NewBool(
+        ctx,
+        ui_capture_texts((uint32_t)argument_int(ctx, argc, argv, 0), argument_int(ctx, argc, argv, 1)) != 0
+      );
+    case HostCapturedTexts: {
+      size_t length = 0;
+      const uint8_t *texts = ui_captured_texts((uint32_t)argument_int(ctx, argc, argv, 0), &length);
+      return JS_NewStringLen(ctx, (const char *)texts, length);
+    }
+    case HostAgentPoll: {
+      const char *batch = agent_poll();
+      return batch == NULL ? JS_UNDEFINED : JS_NewString(ctx, batch);
+    }
+    case HostAgentSend: {
+      if (argc < 1 || !JS_IsString(argv[0])) return JS_FALSE;
+      text = JS_ToCStringLen2(ctx, &text_length, argv[0], 0);
+      if (text == NULL) return JS_FALSE;
+      bool sent = agent_send(text, text_length);
+      JS_FreeCString(ctx, text);
+      return JS_NewBool(ctx, sent);
+    }
+    case HostAgentStage:
+      agent_stage(argument_int(ctx, argc, argv, 0), argument_int(ctx, argc, argv, 1));
+      return JS_UNDEFINED;
+    case HostAgentListen:
+      return JS_NewInt32(ctx, agent_listen(argument_int(ctx, argc, argv, 0)));
+    case HostAgentLevel:
+      return JS_NewInt32(ctx, agent_level());
+    case HostAgentShot:
+      return JS_NewInt32(ctx, agent_shot());
+    case HostAgentStatus:
+      return JS_NewString(ctx, agent_status_json());
+    default:
+      break;
   }
   return JS_UNDEFINED;
 }
@@ -684,6 +848,8 @@ static void install_host(void) {
   add_operation(ui, "setCursorPos", 2, HostSetCursorPos);
   add_operation(ui, "loadStyles", 1, HostLoadStyles);
   add_operation(ui, "loadFontAtlas", 1, HostLoadFontAtlas);
+  add_operation(ui, "captureTexts", 2, HostCaptureTexts);
+  add_operation(ui, "capturedTexts", 1, HostCapturedTexts);
   add_operation(ui, "measureText", 2, HostMeasureText);
   /* Texture streaming ops (spec ops 23..25: deep-zoom tiles + dynamic IMGs). */
   add_operation(ui, "loadTileTexture", 2, HostLoadTileTexture);
@@ -696,6 +862,7 @@ static void install_host(void) {
   add_operation(ui, "debugPause", 1, HostDebugPause);
   add_operation(ui, "debugStep", 0, HostDebugStep);
   add_operation(ui, "debugStats", 0, HostDebugStats);
+  add_operation(ui, "__dbgFrames", 0, HostDebugFrames);
   add_operation(ui, "__dbgActive", 0, HostDbgActive);
   add_operation(ui, "__dbgConnected", 0, HostDbgConnected);
   add_operation(ui, "__dbgPoll", 0, HostDbgPoll);
@@ -711,6 +878,13 @@ static void install_host(void) {
   add_operation(ui, "physicsDestroy", 1, HostPhysicsDestroy);
   add_operation(ui, "physicsEvents", 0, HostPhysicsEvents);
   add_operation(ui, "physicsQuery", 6, HostPhysicsQuery);
+
+#ifdef POCKETJS_LINK
+  /* App switching (spec ops 39..41, docs/LAUNCHER.md). */
+  add_operation(ui, "appTable", 0, HostAppTable);
+  add_operation(ui, "appLaunch", 1, HostAppLaunch);
+  add_operation(ui, "appShot", 0, HostAppShot);
+#endif
 
   /* Framework-owned host identity, from the build's -D defines rather than
    * literals that can drift. Bundles refuse to mount when they disagree. */
@@ -791,6 +965,50 @@ static void install_host(void) {
 
   /* JS_SetPropertyStr consumes ownership of `ui`. */
   JS_SetPropertyStr(context, global, "ui", ui);
+
+  JSValue link = JS_NewObject(context);
+  add_operation(link, "status", 0, HostLinkStatus);
+  add_operation(link, "pair", 1, HostLinkPair);
+  add_operation(link, "forget", 1, HostLinkForget);
+  add_operation(link, "catalog", 0, HostLinkCatalog);
+  add_operation(link, "install", 1, HostLinkInstall);
+  add_operation(link, "remove", 1, HostLinkRemove);
+  add_operation(link, "poll", 0, HostLinkPoll);
+  JS_SetPropertyStr(context, global, "link", link);
+
+  JSValue net = JS_NewObject(context);
+  add_operation(net, "start", 2, HostNetStart);
+  add_operation(net, "take", 2, HostNetTake);
+  add_operation(net, "cancel", 1, HostNetCancel);
+  add_operation(net, "poll", 0, HostNetPoll);
+  add_operation(net, "lastError", 0, HostNetLastError);
+  JS_SetPropertyStr(context, global, "net", net);
+
+  JSValue wifi = JS_NewObject(context);
+  add_operation(wifi, "status", 0, HostWifiStatus);
+  add_operation(wifi, "setEnabled", 1, HostWifiSetEnabled);
+  add_operation(wifi, "connect", 1, HostWifiConnect);
+  JS_SetPropertyStr(context, global, "wifi", wifi);
+
+  JSValue camera = JS_NewObject(context);
+  add_operation(camera, "open", 0, HostCameraOpen);
+  add_operation(camera, "close", 0, HostCameraClose);
+  add_operation(camera, "poll", 0, HostCameraPoll);
+  add_operation(camera, "info", 0, HostCameraInfo);
+  JS_SetPropertyStr(context, global, "camera", camera);
+
+  /* Only a guest that declared "system.agent" sees the namespace. */
+  if (agent_enabled()) {
+    JSValue agent = JS_NewObject(context);
+    add_operation(agent, "poll", 0, HostAgentPoll);
+    add_operation(agent, "send", 1, HostAgentSend);
+    add_operation(agent, "stage", 2, HostAgentStage);
+    add_operation(agent, "listen", 1, HostAgentListen);
+    add_operation(agent, "level", 0, HostAgentLevel);
+    add_operation(agent, "shot", 0, HostAgentShot);
+    add_operation(agent, "status", 0, HostAgentStatus);
+    JS_SetPropertyStr(context, global, "agent", agent);
+  }
 }
 
 static bool drain_jobs(void) {

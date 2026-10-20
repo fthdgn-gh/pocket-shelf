@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Pocket Nexus</title>
-<meta name="description" content="An independent lab exploring new possibilities in computing, interaction and creation. We start with PocketJS.">
+<meta name="description" content="An independent lab exploring new possibilities in computing, interaction and creation. Our product is Pocket Studio; our technology is PocketJS, Pocket3D and MicroTS.">
 <link rel="canonical" href="https://pocket.nexus/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Pocket Nexus">
 <meta property="og:title" content="Pocket Nexus">
-<meta property="og:description" content="An independent lab exploring new possibilities in computing, interaction and creation. We start with PocketJS.">
+<meta property="og:description" content="An independent lab exploring new possibilities in computing, interaction and creation. Our product is Pocket Studio; our technology is PocketJS, Pocket3D and MicroTS.">
 <meta property="og:url" content="https://pocket.nexus/">
 <meta property="og:image" content="https://pocket.nexus/og-image.png">
 <meta property="og:image:type" content="image/png">
@@ -20,7 +20,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@pocket_js">
 <meta name="twitter:title" content="Pocket Nexus">
-<meta name="twitter:description" content="An independent lab exploring new possibilities in computing, interaction and creation. We start with PocketJS.">
+<meta name="twitter:description" content="An independent lab exploring new possibilities in computing, interaction and creation. Our product is Pocket Studio; our technology is PocketJS, Pocket3D and MicroTS.">
 <meta name="twitter:image" content="https://pocket.nexus/og-image.png">
 <meta name="twitter:image:alt" content="The Pocket Nexus wordmark in bubble letters above a stitched jeans pocket">
 <meta name="theme-color" content="#171226">
@@ -33,7 +33,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=1">
 <meta name="apple-mobile-web-app-title" content="Pocket Nexus">
 <link rel="manifest" href="/site.webmanifest">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Pocket Nexus","url":"https://pocket.nexus/","logo":"https://pocket.nexus/icon-512.png","description":"An independent lab exploring new possibilities in computing, interaction and creation. We start with PocketJS.","email":"support@pocket.nexus","sameAs":["https://github.com/pocket-nexus","https://x.com/pocket_js","https://discord.gg/cTce4eXzSK"]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Pocket Nexus","url":"https://pocket.nexus/","logo":"https://pocket.nexus/icon-512.png","description":"An independent lab exploring new possibilities in computing, interaction and creation. Our product is Pocket Studio; our technology is PocketJS, Pocket3D and MicroTS.","email":"support@pocket.nexus","sameAs":["https://github.com/pocket-nexus","https://x.com/pocket_js","https://discord.gg/cTce4eXzSK"]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titan+One&text=POCKETNXUS&display=block">
@@ -88,8 +88,7 @@ html:not(.js) .ch{width:auto;height:auto;line-height:.86;color:var(--c);-webkit-
   padding:0 .14em;margin:0 -.04em;border-radius:.3em;text-shadow:0 2px 0 var(--shade);
   background:linear-gradient(180deg,transparent 54%,rgba(var(--h),.2) 54%,rgba(var(--h),.2) 94%,transparent 94%)}
 .lede .v1{--h:63,208,232}.lede .v2{--h:255,95,158}.lede .v3{--h:255,210,63}
-.lede .starts{display:block;margin-top:.3em;color:var(--ink);font-weight:600}
-.cta{display:flex;flex-wrap:wrap;justify-content:center;gap:12px 14px;margin-top:clamp(12px,2.4vh,24px);pointer-events:auto}
+.cta{display:flex;flex-direction:column;align-items:center;gap:clamp(10px,1.9vh,16px);margin-top:clamp(12px,2.4vh,24px);pointer-events:auto}
 .btn{display:inline-flex;align-items:center;gap:.6em;height:54px;padding:0 24px 0 9px;border-radius:999px;text-decoration:none;
   background:linear-gradient(180deg,#ffdc63,#ffc01f);color:#2a1b10;font:600 17px/1 var(--sans);letter-spacing:.005em;
   border:2.5px solid var(--out);
@@ -102,11 +101,24 @@ html:not(.js) .ch{width:auto;height:auto;line-height:.86;color:var(--c);-webkit-
 .btn:hover .arr{transform:translateX(4px)}
 .btn:active{transform:translateY(4px) scale(1.08,.86);box-shadow:0 1px 0 var(--drop),inset 0 2px 0 rgba(255,255,255,.6),inset 0 -2px 0 rgba(214,134,0,.32);transition-duration:.07s}
 .btn:focus-visible{outline-offset:5px}
-.btn.alt{background:var(--panel);color:var(--ink);box-shadow:0 5px 0 var(--drop),inset 0 2px 0 rgba(255,255,255,.08)}
-.btn.alt .pj svg{width:27px;height:27px;overflow:visible}
-.btn.alt:active{box-shadow:0 1px 0 var(--drop),inset 0 2px 0 rgba(255,255,255,.08)}
+/* the product's button: larger, with a line that says what the product is */
+.btn.big{height:66px;gap:.8em;padding:0 26px 0 11px;font-size:19px}
+.btn.big .pj{width:44px;height:44px}
+.btn.big .pj svg{width:27px;height:27px}
+.btn .two{display:grid;gap:4px;text-align:left}
+.btn .two b{font:600 19px/1 var(--sans);letter-spacing:.005em}
+.btn .two small{font:500 13px/1 var(--sans);color:#6a4f12}
+/* the lab's technology, one small button each */
+.tech{display:inline-flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
+.tech > span{margin-right:4px;font:500 13.5px/1 var(--sans);color:var(--ink-2)}
+.chip{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px 0 8px;border-radius:999px;text-decoration:none;color:var(--ink);font:600 14.5px/1 var(--round);letter-spacing:.01em;
+  background:rgba(35,27,59,.82);border:2px solid rgba(203,189,226,.16);box-shadow:0 4px 0 var(--shade);
+  transition:transform .2s cubic-bezier(.3,1.6,.5,1),background-color .15s,border-color .15s,color .15s}
+.chip svg{width:23px;height:23px;flex:none;overflow:visible}
+.chip:hover{background:var(--yellow);border-color:var(--yellow);color:#2a1b10;transform:translateY(-2px)}
+.chip:active{transform:translateY(3px);box-shadow:0 1px 0 var(--shade)}
 
-/* top bar: the mark on the left, projects and social links on the right */
+/* top bar: the mark on the left; the product, the technology and the social links on the right */
 .bar{position:fixed;z-index:6;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:max(16px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) 0 max(18px,env(safe-area-inset-left));
   pointer-events:none;transition:opacity .7s ease}
@@ -120,6 +132,8 @@ html:not(.js) .ch{width:auto;height:auto;line-height:.86;color:var(--c);-webkit-
 .pill svg{width:20px;height:20px;flex:none}
 .pill:hover,.menu.open>.pill{background:var(--yellow);border-color:var(--yellow);color:#2a1b10}
 .pill.ico:hover{transform:rotate(-10deg) scale(1.08)}
+.pill.go{padding:0 17px;background:var(--yellow);border-color:var(--yellow);color:#2a1b10}
+.pill.go:hover{transform:translateY(-2px) rotate(-1.5deg)}
 .brand{padding:0;width:48px;height:48px}
 .brand svg{width:34px;height:34px;overflow:visible}
 .brand:hover{background:rgba(35,27,59,.78);border-color:rgba(203,189,226,.16);transform:rotate(-8deg) scale(1.06)}
@@ -127,7 +141,7 @@ html:not(.js) .ch{width:auto;height:auto;line-height:.86;color:var(--c);-webkit-
 .menu>.pill{padding:0 14px 0 17px}
 .menu>.pill .chev{width:11px;height:11px;transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
 .menu.open>.pill .chev{transform:rotate(180deg)}
-.menu-list{position:absolute;right:0;top:calc(100% + 12px);width:min(300px,calc(100vw - 32px));padding:8px;border-radius:20px;
+.menu-list{position:absolute;right:0;top:calc(100% + 12px);width:min(318px,calc(100vw - 32px));padding:8px;border-radius:20px;
   background:var(--panel);border:2px solid rgba(203,189,226,.18);box-shadow:0 6px 0 var(--shade),0 26px 44px -18px rgba(0,0,0,.7);
   transform-origin:calc(100% - 40px) -8px;opacity:0;visibility:hidden;transform:translateY(-6px) scale(.9);
   transition:opacity .16s ease,transform .3s cubic-bezier(.3,1.6,.5,1),visibility 0s linear .3s}
@@ -204,7 +218,6 @@ html.hide-btn .cta{opacity:0;transform:translateY(14px) scale(.2);pointer-events
 @media (max-width:640px){
   :root{--gap:.04em;--rowgap:.1em}
   .lede{font-size:15.5px;max-width:22em}
-  .btn{height:50px;font-size:16px}
   .copy{bottom:max(18px,env(safe-area-inset-bottom));left:20px}
   .pill{height:40px;min-width:40px;font-size:14px}
   .pill svg{width:18px;height:18px}
@@ -213,50 +226,63 @@ html.hide-btn .cta{opacity:0;transform:translateY(14px) scale(.2);pointer-events
   .links{gap:6px}
   .menu>.pill{padding:0 11px 0 14px}
 }
+@media (max-width:640px){
+  .pill.go{display:none}
+}
 @media (max-width:480px){
-  .cta{gap:10px 8px}
-  .btn{height:46px;font-size:15px;gap:.45em;padding:0 14px 0 7px}
-  .btn .enter{display:none}
-  .btn .pj{width:32px;height:32px}
-  .btn .pj svg{width:21px;height:21px}
-  .btn.alt .pj svg{width:24px;height:24px}
+  .btn.big{height:58px;padding:0 20px 0 9px;gap:.65em}
+  .btn.big .pj{width:40px;height:40px}
+  .btn .two b{font-size:17px}
+  .btn .two small{font-size:12px}
+  .tech{gap:7px 6px}
+  .tech > span{flex-basis:100%;margin:0;text-align:center}
+  .chip{height:35px;padding:0 11px 0 6px;font-size:13.5px;gap:6px}
+  .chip svg{width:21px;height:21px}
 }
 @media (max-width:340px){
   .hero{padding:0 10px}
-  .cta{gap:10px 6px}
-  .btn{font-size:14.5px;padding:0 11px 0 6px}
+  .btn.big{padding:0 16px 0 8px}
+  .btn.big .arr{display:none}
+  .btn .two small{font-size:11.5px;white-space:nowrap}
+  .tech > span{display:none}
+  .chip{height:33px;padding:0 9px 0 5px;font-size:12.5px;gap:5px}
+  .chip svg{width:19px;height:19px}
 }
 @media (max-height:560px) and (min-width:641px){
   .lede{font-size:13.5px;max-width:46em;line-height:1.4;margin-top:2px}
-  .lede .starts{margin-top:.15em}
-  .cta{margin-top:8px}
-  .btn{height:42px;font-size:15px;padding-right:18px}
-  .btn .pj{width:30px;height:30px}
-  .btn .pj svg{width:20px;height:20px}
-  .btn.alt .pj svg{width:23px;height:23px}
+  .cta{flex-direction:row;gap:16px;margin-top:8px}
+  .btn.big{height:44px;font-size:15px;padding:0 18px 0 7px}
+  .btn.big .pj{width:30px;height:30px}
+  .btn.big .pj svg{width:19px;height:19px}
+  .btn .two b{font-size:15px}
+  .btn .two small{display:none}
+  .chip{height:34px}
 }
 @media (prefers-reduced-motion:reduce){
-  .lede,.cta,.bar,.pill,.menu-list,.copy,.btn,.btn .arr{transition:none}
+  .lede,.cta,.bar,.pill,.menu-list,.copy,.btn,.btn .arr,.chip{transition:none}
 }
 </style>
 </head>
 <body>
 <!-- the Pocket3D mark, as site/pocket3d/mark.svg draws it -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="m3d-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe98a"/><stop offset=".45" stop-color="#ffd23f"/><stop offset="1" stop-color="#ffbe1f"/></linearGradient></defs><symbol id="p3d" viewBox="-16.48 -17.09 33.56 33.56"><path d="M7.14 -14.12L8.15 -13.38L14.31 -9.27L13.31 -10.00Z" fill="#e09f1b" stroke="#e09f1b" stroke-width=".12" stroke-linejoin="round"/><path d="M8.15 -13.38L8.92 -12.35L15.08 -8.25L14.31 -9.27Z" fill="#dd9c1a" stroke="#dd9c1a" stroke-width=".12" stroke-linejoin="round"/><path d="M8.92 -12.35L9.42 -11.06L15.59 -7.00L15.08 -8.25Z" fill="#da9819" stroke="#da9819" stroke-width=".12" stroke-linejoin="round"/><path d="M9.42 -11.06L9.61 -9.59L15.79 -5.57L15.59 -7.00Z" fill="#d69418" stroke="#d69418" stroke-width=".12" stroke-linejoin="round"/><path d="M9.61 -9.59L9.76 -1.94L16.03 1.85L15.79 -5.57Z" fill="#d49217" stroke="#d49217" stroke-width=".12" stroke-linejoin="round"/><path d="M9.76 -1.94L9.63 -0.31L15.92 3.43L16.03 1.85Z" fill="#d19017" stroke="#d19017" stroke-width=".12" stroke-linejoin="round"/><path d="M9.63 -0.31L9.18 1.34L15.50 5.03L15.92 3.43Z" fill="#cd8b15" stroke="#cd8b15" stroke-width=".12" stroke-linejoin="round"/><path d="M9.18 1.34L8.43 2.92L14.78 6.55L15.50 5.03Z" fill="#c98614" stroke="#c98614" stroke-width=".12" stroke-linejoin="round"/><path d="M8.43 2.92L7.42 4.35L13.80 7.92L14.78 6.55Z" fill="#c48213" stroke="#c48213" stroke-width=".12" stroke-linejoin="round"/><path d="M7.42 4.35L6.21 5.55L12.63 9.06L13.80 7.92Z" fill="#c17e12" stroke="#c17e12" stroke-width=".12" stroke-linejoin="round"/><path d="M6.21 5.55L4.86 6.45L11.31 9.92L12.63 9.06Z" fill="#be7b11" stroke="#be7b11" stroke-width=".12" stroke-linejoin="round"/><path d="M4.86 6.45L3.44 7.01L9.92 10.45L11.31 9.92Z" fill="#bc7910" stroke="#bc7910" stroke-width=".12" stroke-linejoin="round"/><path d="M3.44 7.01L-9.90 10.64L-3.18 13.81L9.92 10.45Z" fill="#bb7810" stroke="#bb7810" stroke-width=".12" stroke-linejoin="round"/><path d="M-9.90 10.64L-11.19 10.82L-4.46 13.97L-3.18 13.81Z" fill="#bb7810" stroke="#bb7810" stroke-width=".12" stroke-linejoin="round"/><path d="M-11.19 10.82L-12.40 10.64L-5.65 13.78L-4.46 13.97Z" fill="#bb7810" stroke="#bb7810" stroke-width=".12" stroke-linejoin="round"/><path d="M3.30 -14.29L4.65 -14.58L5.96 -14.52L7.14 -14.12L8.15 -13.38L8.92 -12.35L9.42 -11.06L9.61 -9.59L9.76 -1.94L9.63 -0.31L9.18 1.34L8.43 2.92L7.42 4.35L6.21 5.55L4.86 6.45L3.44 7.01L-9.90 10.64L-11.19 10.82L-12.40 10.64L-13.47 10.12L-14.33 9.29L-14.97 8.19L-15.34 6.89L-15.43 5.44L-15.21 -1.76L-15.03 -3.24L-14.58 -4.73L-13.89 -6.16L-13.00 -7.45L-11.93 -8.56L-10.74 -9.42L-9.50 -10.00Z" fill="url(#m3d-gold)"/><path d="M3.31 -11.93L4.19 -12.11L5.03 -12.07L5.79 -11.80L6.43 -11.32L6.92 -10.65L7.23 -9.82L7.35 -8.87L7.47 -1.26L7.38 -0.22L7.09 0.83L6.61 1.84L5.96 2.75L5.19 3.52L4.33 4.10L3.42 4.47L-9.85 8.17L-10.68 8.29L-11.46 8.19L-12.15 7.86L-12.71 7.33L-13.13 6.63L-13.37 5.79L-13.44 4.86L-13.24 -2.38L-13.13 -3.34L-12.84 -4.30L-12.39 -5.23L-11.81 -6.07L-11.12 -6.79L-10.35 -7.34L-9.54 -7.71Z" fill="#171226"/><path d="M-6.44 -1.57L-6.52 -0.91L-5.71 -0.47L-5.64 -1.13Z" fill="#c2366d" stroke="#c2366d" stroke-width=".12" stroke-linejoin="round"/><path d="M-6.52 -0.91L-6.71 -0.25L-5.90 0.19L-5.71 -0.47Z" fill="#bf356b" stroke="#bf356b" stroke-width=".12" stroke-linejoin="round"/><path d="M-6.71 -0.25L-7.01 0.39L-6.21 0.82L-5.90 0.19Z" fill="#bc3469" stroke="#bc3469" stroke-width=".12" stroke-linejoin="round"/><path d="M-7.01 0.39L-7.42 0.97L-6.61 1.39L-6.21 0.82Z" fill="#ba3267" stroke="#ba3267" stroke-width=".12" stroke-linejoin="round"/><path d="M-7.42 0.97L-7.89 1.45L-7.09 1.88L-6.61 1.39Z" fill="#b83166" stroke="#b83166" stroke-width=".12" stroke-linejoin="round"/><path d="M-7.89 1.45L-8.42 1.82L-7.61 2.25L-7.09 1.88Z" fill="#b63165" stroke="#b63165" stroke-width=".12" stroke-linejoin="round"/><path d="M-8.42 1.82L-8.98 2.06L-8.17 2.48L-7.61 2.25Z" fill="#b53064" stroke="#b53064" stroke-width=".12" stroke-linejoin="round"/><path d="M-8.98 2.06L-9.52 2.15L-8.71 2.57L-8.17 2.48Z" fill="#b43063" stroke="#b43063" stroke-width=".12" stroke-linejoin="round"/><path d="M-9.52 2.15L-10.04 2.09L-9.23 2.51L-8.71 2.57Z" fill="#b43063" stroke="#b43063" stroke-width=".12" stroke-linejoin="round"/><path d="M-10.04 2.09L-10.50 1.89L-9.69 2.31L-9.23 2.51Z" fill="#b53064" stroke="#b53064" stroke-width=".12" stroke-linejoin="round"/><path d="M-7.35 -3.51L-6.96 -3.18L-6.16 -2.74L-6.55 -3.06Z" fill="#cb3b73" stroke="#cb3b73" stroke-width=".12" stroke-linejoin="round"/><path d="M-6.96 -3.18L-6.68 -2.73L-5.88 -2.29L-6.16 -2.74Z" fill="#c93a72" stroke="#c93a72" stroke-width=".12" stroke-linejoin="round"/><path d="M-6.68 -2.73L-6.50 -2.19L-5.70 -1.75L-5.88 -2.29Z" fill="#c73971" stroke="#c73971" stroke-width=".12" stroke-linejoin="round"/><path d="M-6.50 -2.19L-6.44 -1.57L-5.64 -1.13L-5.70 -1.75Z" fill="#c5376f" stroke="#c5376f" stroke-width=".12" stroke-linejoin="round"/><path d="M-6.44 -1.57L-6.52 -0.91L-6.71 -0.25L-7.01 0.39L-7.42 0.97L-7.89 1.45L-8.42 1.82L-8.98 2.06L-9.52 2.15L-10.04 2.09L-10.50 1.89L-10.88 1.55L-11.15 1.10L-11.32 0.55L-11.37 -0.06L-11.29 -0.71L-11.10 -1.36L-10.80 -1.99L-10.40 -2.55L-9.94 -3.03L-9.42 -3.40L-8.87 -3.64L-8.33 -3.75L-7.81 -3.70L-7.35 -3.51L-6.96 -3.18L-6.68 -2.73L-6.50 -2.19Z" fill="#ff5f9e"/><path d="M3.88 -7.75L4.09 -7.58L4.87 -7.10L4.66 -7.27Z" fill="#269db5" stroke="#269db5" stroke-width=".12" stroke-linejoin="round"/><path d="M4.09 -7.58L4.23 -7.34L5.00 -6.86L4.87 -7.10Z" fill="#259bb3" stroke="#259bb3" stroke-width=".12" stroke-linejoin="round"/><path d="M4.23 -7.34L4.28 -7.03L5.05 -6.55L5.00 -6.86Z" fill="#2498b0" stroke="#2498b0" stroke-width=".12" stroke-linejoin="round"/><path d="M4.28 -7.03L4.23 -6.70L5.01 -6.22L5.05 -6.55Z" fill="#2395ac" stroke="#2395ac" stroke-width=".12" stroke-linejoin="round"/><path d="M4.23 -6.70L4.10 -6.37L4.88 -5.89L5.01 -6.22Z" fill="#2291a9" stroke="#2291a9" stroke-width=".12" stroke-linejoin="round"/><path d="M4.10 -6.37L3.90 -6.07L4.67 -5.60L4.88 -5.89Z" fill="#208ea5" stroke="#208ea5" stroke-width=".12" stroke-linejoin="round"/><path d="M3.90 -6.07L3.63 -5.84L4.41 -5.37L4.67 -5.60Z" fill="#208ca3" stroke="#208ca3" stroke-width=".12" stroke-linejoin="round"/><path d="M3.63 -5.84L3.34 -5.70L4.12 -5.23L4.41 -5.37Z" fill="#1f8aa1" stroke="#1f8aa1" stroke-width=".12" stroke-linejoin="round"/><path d="M3.34 -5.70L-3.18 -3.68L-2.39 -3.23L4.12 -5.23Z" fill="#1f89a0" stroke="#1f89a0" stroke-width=".12" stroke-linejoin="round"/><path d="M-3.18 -3.68L-3.46 -3.65L-2.67 -3.19L-2.39 -3.23Z" fill="#1f89a0" stroke="#1f89a0" stroke-width=".12" stroke-linejoin="round"/><path d="M-3.46 -3.65L-3.71 -3.71L-2.92 -3.26L-2.67 -3.19Z" fill="#1f8aa0" stroke="#1f8aa0" stroke-width=".12" stroke-linejoin="round"/><path d="M3.33 -7.77L3.62 -7.81L3.88 -7.75L4.09 -7.58L4.23 -7.34L4.28 -7.03L4.28 -7.03L4.23 -6.70L4.10 -6.37L3.90 -6.07L3.63 -5.84L3.34 -5.70L-3.18 -3.68L-3.46 -3.65L-3.71 -3.71L-3.91 -3.88L-4.03 -4.12L-4.07 -4.42L-4.07 -4.42L-4.03 -4.75L-3.90 -5.07L-3.70 -5.36L-3.45 -5.58L-3.17 -5.72Z" fill="#3fd0e8"/><path d="M0.93 -2.50L1.14 -2.33L1.93 -1.87L1.72 -2.04Z" fill="#cb3b73" stroke="#cb3b73" stroke-width=".12" stroke-linejoin="round"/><path d="M1.14 -2.33L1.27 -2.08L2.06 -1.62L1.93 -1.87Z" fill="#c93972" stroke="#c93972" stroke-width=".12" stroke-linejoin="round"/><path d="M1.27 -2.08L1.32 -1.77L2.11 -1.31L2.06 -1.62Z" fill="#c5386f" stroke="#c5386f" stroke-width=".12" stroke-linejoin="round"/><path d="M1.32 -1.77L1.27 -1.43L2.06 -0.98L2.11 -1.31Z" fill="#c1366d" stroke="#c1366d" stroke-width=".12" stroke-linejoin="round"/><path d="M1.27 -1.43L1.14 -1.10L1.93 -0.65L2.06 -0.98Z" fill="#be346a" stroke="#be346a" stroke-width=".12" stroke-linejoin="round"/><path d="M1.14 -1.10L0.94 -0.80L1.73 -0.36L1.93 -0.65Z" fill="#ba3267" stroke="#ba3267" stroke-width=".12" stroke-linejoin="round"/><path d="M0.94 -0.80L0.68 -0.58L1.47 -0.13L1.73 -0.36Z" fill="#b73165" stroke="#b73165" stroke-width=".12" stroke-linejoin="round"/><path d="M0.68 -0.58L0.39 -0.44L1.18 0.01L1.47 -0.13Z" fill="#b53064" stroke="#b53064" stroke-width=".12" stroke-linejoin="round"/><path d="M0.39 -0.44L-3.21 0.63L-2.41 1.06L1.18 0.01Z" fill="#b43063" stroke="#b43063" stroke-width=".12" stroke-linejoin="round"/><path d="M-3.21 0.63L-3.49 0.66L-2.69 1.09L-2.41 1.06Z" fill="#b43063" stroke="#b43063" stroke-width=".12" stroke-linejoin="round"/><path d="M-3.49 0.66L-3.74 0.59L-2.94 1.02L-2.69 1.09Z" fill="#b43064" stroke="#b43064" stroke-width=".12" stroke-linejoin="round"/><path d="M0.39 -2.53L0.67 -2.56L0.93 -2.50L1.14 -2.33L1.27 -2.08L1.32 -1.77L1.32 -1.77L1.27 -1.43L1.14 -1.10L0.94 -0.80L0.68 -0.58L0.39 -0.44L-3.21 0.63L-3.49 0.66L-3.74 0.59L-3.94 0.42L-4.07 0.17L-4.11 -0.14L-4.11 -0.14L-4.06 -0.47L-3.93 -0.80L-3.73 -1.09L-3.48 -1.31L-3.20 -1.44Z" fill="#ff5f9e"/></symbol></svg>
+<!-- the MicroTS mark, as site/microts/mark.svg draws it -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="mts" viewBox="0 0 100 100"><rect x="4.5" y="4.5" width="91" height="91" rx="22" fill="#171226" stroke="#ffd23f" stroke-width="9"/><path d="M17.5 40h7.5M75 40h7.5" stroke="#ff5f9e" stroke-width="8" stroke-linecap="round"/><path d="M17.5 53.5h7.5M75 53.5h7.5" stroke="#a98bff" stroke-width="8" stroke-linecap="round"/><path d="M44.3 31.5 34.6 72.3" stroke="#3fd0e8" stroke-width="11" stroke-linecap="round"/><path d="M65.4 30.9 61.6 46.5C60.1 51.8 61.2 60.2 63.1 57.8" fill="none" stroke="#3fd0e8" stroke-width="10" stroke-linecap="round"/><path d="M41.1 51.5 45.3 51.2C44.2 55.8 55 55.4 56.1 47.3L60.8 47.3 56.6 57.4C54.8 60.6 50.7 63.2 47.5 63.2 44.2 63.2 41.3 62.8 38.8 58.9Z" fill="#3fd0e8"/></symbol></svg>
 <div class="sky" aria-hidden="true"></div>
 <canvas id="play" aria-hidden="true"></canvas>
 
 <header class="bar">
   <a class="pill brand" href="/" aria-label="Pocket Nexus home"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 13h22v7.4c0 1-.3 1.9-.9 2.6C23.6 26 20 27.8 16 27.8S8.4 26 5.9 23C5.3 22.3 5 21.4 5 20.4z" fill="#171226" stroke="#ffd23f" stroke-width="2.6" stroke-linejoin="round"/><path d="M9 17.4h14" stroke="#ffd23f" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2.2 2.2"/><path d="M16 1.6c.55 3.4 1.5 4.5 4.9 5.05-3.4.55-4.35 1.65-4.9 5.05-.55-3.4-1.5-4.5-4.9-5.05 3.4-.55 4.35-1.65 4.9-5.05z" fill="#ff5f9e"/><circle cx="24.2" cy="5" r="1.8" fill="#3fd0e8"/></svg></a>
   <nav class="links" aria-label="Pocket Nexus">
-    <div class="menu" id="projects">
-      <button class="pill" type="button" aria-expanded="false" aria-controls="projects-list">Projects
+    <a class="pill go" href="https://studio.pocket.nexus/">Pocket Studio</a>
+    <div class="menu" id="tech">
+      <button class="pill" type="button" aria-expanded="false" aria-controls="tech-list">Technology
         <svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 3.5 5 7l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <div class="menu-list" id="projects-list">
-        <a href="https://pocketjs.pocket.nexus/"><span class="tile"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="6" width="28" height="20" rx="6" fill="#171226" stroke="#ffd23f" stroke-width="2.6"/><circle cx="10" cy="16" r="3.1" fill="#ff5f9e"/><rect x="16" y="12.6" width="10" height="2.2" rx="1.1" fill="#3fd0e8"/><rect x="16" y="17.2" width="6.5" height="2.2" rx="1.1" fill="#ff5f9e"/></svg></span><span><b>PocketJS</b><small>Create on every screen you love</small></span></a>
+      <div class="menu-list" id="tech-list">
+        <a href="https://pocketjs.pocket.nexus/"><span class="tile"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="6" width="28" height="20" rx="6" fill="#171226" stroke="#ffd23f" stroke-width="2.6"/><circle cx="10" cy="16" r="3.1" fill="#ff5f9e"/><rect x="16" y="12.6" width="10" height="2.2" rx="1.1" fill="#3fd0e8"/><rect x="16" y="17.2" width="6.5" height="2.2" rx="1.1" fill="#ff5f9e"/></svg></span><span><b>PocketJS</b><small>Create UI on every screen you love</small></span></a>
         <a href="https://3d.pocket.nexus/"><span class="tile"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#p3d" width="32" height="32"/></svg></span><span><b>Pocket3D</b><small>Create 3D for every machine you love</small></span></a>
-        <a href="https://github.com/pocket-nexus/pocket-shell" target="_blank" rel="noreferrer"><span class="tile"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="5" width="26" height="22" rx="5" fill="#171226" stroke="#a98bff" stroke-width="2.4"/><rect x="7" y="9" width="8" height="14" rx="2" fill="#3fd0e8"/><rect x="17.5" y="9" width="7.5" height="6" rx="2" fill="#ff5f9e"/><rect x="17.5" y="17" width="7.5" height="6" rx="2" fill="#ffd23f"/></svg></span><span><b>Pocket Shell <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2.5h5.5V8M9.3 2.7 2.5 9.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></b><small>Interaction models across devices</small></span></a>
+        <a href="https://microts.pocket.nexus/"><span class="tile"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#mts" width="32" height="32"/></svg></span><span><b>MicroTS</b><small>TypeScript compiled ahead of time to native code</small></span></a>
       </div>
     </div>
     <a class="pill ico" href="https://x.com/pocket_js" target="_blank" rel="noreferrer" aria-label="Pocket Nexus on X"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
@@ -270,16 +296,14 @@ html.hide-btn .cta{opacity:0;transform:translateY(14px) scale(.2);pointer-events
     <span class="row" aria-hidden="true"><span class="ch" data-c="pink" style="--c:var(--pink)">P</span><span class="ch" data-c="yellow" data-face style="--c:var(--yellow)">O</span><span class="ch" data-c="cyan" style="--c:var(--cyan)">C</span><span class="ch" data-c="lilac" style="--c:var(--lilac)">K</span><span class="ch" data-c="orange" style="--c:var(--orange)">E</span><span class="ch" data-c="pink" style="--c:var(--pink)">T</span></span>
     <span class="row" aria-hidden="true"><span class="ch" data-c="cyan" style="--c:var(--cyan)">N</span><span class="ch" data-c="lilac" style="--c:var(--lilac)">E</span><span class="ch" data-c="yellow" style="--c:var(--yellow)">X</span><span class="ch" data-c="pink" style="--c:var(--pink)">U</span><span class="ch" data-c="cyan" style="--c:var(--cyan)">S</span></span>
   </h1>
-  <p class="lede">An independent lab exploring new possibilities in <span class="v v1">computing</span>, <span class="v v2">interaction</span> and <span class="v v3">creation</span>. <span class="starts">We start with PocketJS.</span></p>
+  <p class="lede">An independent lab exploring new possibilities in <span class="v v1">computing</span>, <span class="v v2">interaction</span> and <span class="v v3">creation</span>.</p>
   <div class="cta">
-    <a class="btn" href="https://pocketjs.pocket.nexus/">
-      <span class="pj" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="2" y="6" width="28" height="20" rx="6" fill="#171226" stroke="#ffd23f" stroke-width="2.6"/><circle cx="10" cy="16" r="3.1" fill="#ff5f9e"/><rect x="16" y="12.6" width="10" height="2.2" rx="1.1" fill="#3fd0e8"/><rect x="16" y="17.2" width="6.5" height="2.2" rx="1.1" fill="#ff5f9e"/></svg></span>
-      <span><span class="enter">Enter </span>PocketJS <span class="arr" aria-hidden="true">→</span></span>
+    <a class="btn big" href="https://studio.pocket.nexus/">
+      <span class="pj" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M12.5 9.5v13l10.5-6.5z" fill="#ffd23f" stroke="#ffd23f" stroke-width="2.6" stroke-linejoin="round"/></svg></span>
+      <span class="two"><b>Try Pocket Studio</b><small>Make a game with your coding agent</small></span>
+      <span class="arr" aria-hidden="true">→</span>
     </a>
-    <a class="btn alt" href="https://3d.pocket.nexus/">
-      <span class="pj" aria-hidden="true"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#p3d" width="32" height="32"/></svg></span>
-      <span><span class="enter">Enter </span>Pocket3D <span class="arr" aria-hidden="true">→</span></span>
-    </a>
+    <p class="tech"><span>Our technology</span><a class="chip" href="https://pocketjs.pocket.nexus/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="6" width="28" height="20" rx="6" fill="#171226" stroke="#ffd23f" stroke-width="2.6"/><circle cx="10" cy="16" r="3.1" fill="#ff5f9e"/><rect x="16" y="12.6" width="10" height="2.2" rx="1.1" fill="#3fd0e8"/><rect x="16" y="17.2" width="6.5" height="2.2" rx="1.1" fill="#ff5f9e"/></svg>PocketJS</a><a class="chip" href="https://3d.pocket.nexus/"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#p3d" width="32" height="32"/></svg>Pocket3D</a><a class="chip" href="https://microts.pocket.nexus/"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#mts" width="32" height="32"/></svg>MicroTS</a></p>
   </div>
 </main>
 
@@ -289,7 +313,7 @@ html.hide-btn .cta{opacity:0;transform:translateY(14px) scale(.2);pointer-events
   <b>tap the pocket</b>
 </div>
 <div id="tags" aria-hidden="true"></div>
-<p class="copy"><span>© 2026 Pocket Nexus</span><a href="mailto:support@pocket.nexus">support@pocket.nexus</a></p>
+<p class="copy"><span>© 2026 Pocket Nexus</span><a href="mailto:support@pocket.nexus">Contact</a></p>
 
 <script>
 (() => {
@@ -799,6 +823,9 @@ function measure() {
     shelves.push({ poly: rectPoly(cb.l, cb.t, cb.r, cb.b + 5), kind: "btn" });
     below = Math.max(below, cb.b);
   }
+  const row = boxOf(ctaWrap.querySelector(".tech"));
+  shelves.push({ poly: rectPoly(row.l, row.t, row.r, row.b + 5), kind: "btn" });
+  below = Math.max(below, row.b);
   // the top bar's pills are solid too, so a toy never comes to rest behind them
   for (const el of barEl.querySelectorAll(".brand,.links")) {
     const q = el.getBoundingClientRect();
@@ -1598,10 +1625,10 @@ window.addEventListener("keydown", (e) => {
   if (hits.length) lastInteract = T;
 });
 
-/* ---------- projects menu ---------- */
+/* ---------- technology menu ---------- */
 // click or Enter toggles it; a mouse also opens it on hover. Escape, a click
 // elsewhere, or tabbing out of it closes it.
-const menuEl = $("#projects"), menuBtn = menuEl.querySelector("button");
+const menuEl = $("#tech"), menuBtn = menuEl.querySelector("button");
 const finePointer = matchMedia("(hover: hover) and (pointer: fine)");
 let menuHoverT = 0, menuHoverAt = -1e9;
 function setMenu(open) {

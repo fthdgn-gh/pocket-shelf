@@ -112,6 +112,11 @@ describe("private Nintendo 3DS build profile", () => {
         "display.auxiliary",
         "text.glyphs.baked",
         "ui.physics",
+        "net.http",
+        "link.companion",
+        "system.wifi",
+        "camera.qr",
+        "system.agent",
       ],
     });
     expect(validatePlatformContractRegistry(THREE_DS_DEV_CONTRACTS)).toEqual([]);
@@ -330,7 +335,8 @@ describe("private Nintendo 3DS build profile", () => {
     expect(makefile).toContain(
       "$(BUILD)/vshader_shbin.s $(BUILD)/vshader_shbin.h &:",
     );
-    expect(makefile).toContain("-DPOCKETJS_RUNTIME_SLOT='");
+    // The state slot is named at boot from the RomFS package, not compiled in.
+    expect(makefile).not.toContain("POCKETJS_RUNTIME_SLOT");
   });
 
   test("derives bounded, application-specific Runtime state slots", () => {

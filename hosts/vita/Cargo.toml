@@ -47,6 +47,9 @@ http = ["data-fs", "dep:rustls", "dep:rustls-rustcrypto", "dep:webpki-roots"]
 self-update = ["http", "installed-apps", "vitasdk-sys/ScePromoterUtil_stub", "vitasdk-sys/SceSysmodule_stub"]
 capture = []
 bench = []
+# The generic runtime (tools/runtime/vita.ts): no embedded app; the game is
+# app0:app.pocket, read at startup (src/package_file.rs).
+runtime = []
 
 [package.metadata.vita]
 # The Vita backend supplies VITA_DEFAULT_TITLE_ID from pocket.json. Keeping the

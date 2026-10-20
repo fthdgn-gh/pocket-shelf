@@ -13,12 +13,12 @@ const NEXUS_URL = "https://pocket.nexus";
 // The canonical origin: PocketJS lives under the Pocket Nexus homepage.
 // pocketjs.dev serves the same build; its pages point here as canonical.
 export const SITE_URL = "https://pocketjs.pocket.nexus";
-export const SITE_TITLE = "PocketJS · Create on every screen you love";
+export const SITE_TITLE = "PocketJS · Create UI on every screen you love";
 export const SITE_DESC =
-  "Create on every screen you love. Build apps and games with familiar JavaScript components, from handhelds and desktops to embedded screens.";
+  "Create UI on every screen you love. Build apps with familiar JavaScript components, from handhelds and desktops to embedded screens.";
 // Shared by the standalone homepage and every page rendered through renderPage().
 export const SITE_FOOTER_DESC =
-  "Create on every screen you love. A small runtime for apps and games on handhelds, desktops, and embedded devices.";
+  "Create UI on every screen you love. A small runtime for apps on handhelds, desktops, and embedded devices.";
 export const SITE_FOOTER_DESC_SLOT = "{{SITE_FOOTER_DESC}}";
 export const OG_IMAGE_URL = `${SITE_URL}/og-image.png`;
 
@@ -109,11 +109,14 @@ function header(active: string): string {
     <nav class="nav-links" aria-label="Primary">
       ${link("/docs/overview/", "Docs", "docs")}
       ${link("/blog/", "Blog", "blog")}
+      <a href="https://3d.pocket.nexus/" class="p3d-link">Pocket3D</a>
       <div class="menu">
         <button class="menu-btn" aria-haspopup="true" aria-expanded="false">Resources
           <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="menu-list">
+          <a href="https://3d.pocket.nexus/" class="p3d-item">Pocket3D</a>
+          <a href="https://microts.pocket.nexus/">MicroTS</a>
           <a href="/playground/">Playground</a>
           <a href="/changelog/">Changelog</a>
         </div>

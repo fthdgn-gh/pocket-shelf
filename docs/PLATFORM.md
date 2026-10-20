@@ -104,6 +104,66 @@ Design rules:
   host-input record. The device compares target, ABI, tick rate, viewport,
   density, presentation, and host-profile SHA-256 before exposing JS/PAK spans.
 
+## Generic runtimes and the repack step
+
+A generic runtime is one prebuilt host per device with no app in it. It
+reads `app.pocket` at boot, checks the footer hash, takes the variant for
+its own target and refuses a variant whose host ABI differs from its own.
+A runtime that finds no file, or a file it refuses, shows one line on screen
+that names the fault. The embedded-app build stays: the built-in games and
+the dev loops use it.
+
+The repack step turns a runtime and a game's `.pocket` into the device's
+installation package in TypeScript, with no native tool and no network:
+
+```
+bun tools/runtime.ts psp            # dist/runtime/psp/EBOOT.PBP + runtime.json
+bun tools/runtime.ts vita           # dist/runtime/vita/eboot.bin, LiveArea files + runtime.json
+bun tools/repack.ts --target psp --runtime dist/runtime/psp --pocket game.pocket \
+  --id <id> --title <title> --author <author> --version <version> [--icon icon.png] -o game.zip
+```
+
+`runtime.json` records `target`, `hostAbi`, the PocketJS commit, the device
+profile and each file's size and SHA-256. `tools/repack/<target>.ts` exports
+`repack<Target>({ runtime, pocket, identity })`: the runtime's files as bytes
+by path, the `.pocket` bytes and the identity (id, title, author, version, a
+square PNG icon). `tools/repack/shared/runtime.ts` refuses a runtime for
+another target or with a file that differs from `runtime.json`, a `.pocket`
+whose footer does not verify, one with no variant for the target, a host ABI
+that differs from `runtime.json`, and an app id other than the identity's.
+The package carries the `.pocket` thinned to the target's variant. The other
+shared pieces use Web-platform APIs only (a Worker runs them): `zip.ts`
+(1980-01-01 dates, entries in the given order, `CompressionStream` deflate),
+`png.ts`, `scale.ts`, `palette.ts` (median cut, indexed PNG-8), `sfo.ts`
+(PARAM.SFO) and `crc32.ts`.
+
+| Target | Runtime reads | Package |
+| --- | --- | --- |
+| `3ds-dev` | `romfs:/app.pocket` | `.3dsx` (hosts/3ds/README.md) |
+| `psp` | `app.pocket` in the EBOOT's folder (the module's argv[0] directory) into one kernel block before the arena reserves the rest | `.zip`: `PSP/GAME/Studio<Name>/EBOOT.PBP` (PARAM.SFO with the game's `TITLE` and `MEMSIZE = 1`, ICON0 144×80 from the icon, the runtime's `DATA.PSP` unchanged) and `app.pocket` beside it; a plan that asks for `io.offload` is refused |
+| `vita` | `app0:app.pocket` into one 16-byte-aligned block; no compiled app id | `.vpk`: `sce_sys/param.sfo` (byte for byte what `vita-mksfoex` writes for `tools/vita.ts`: the game's title, title id `P` + 8 hex of SHA-256(id)), the runtime's `eboot.bin` unchanged, `app.pocket`, `sce_sys/icon0.png` 128×128 indexed PNG-8 from the icon, the runtime's LiveArea files |
+| `ipodtouch4-dev` | `app.pocket` in the app bundle | `.ipa`: the runtime's executable under the game's bundle name, an Info.plist with the game's bundle id (the app id), name and version, 57 and 114 px icons, `app.pocket` (docs/IPODTOUCH4.md) |
+| `redmi-1s-dev`, `moto-g-play-dev` | `assets/app.js` and `assets/app.pak` | `.apk`: the runtime's `template.apk` with the package name, versionCode, label, icons and the variant's bundle and pack rewritten, signed v1 + v2 with the Pocket Studio community key in Web Crypto (docs/ANDROID.md) |
+
+**`tools/repack/index.ts` is the entry Pocket Studio's Worker imports.**
+`REPACK_TARGETS` has one row per Studio target (`psp`, `vita`, `3ds`,
+`ipod-touch`, `android`): `repack(input)`, `runtime` (the
+`tools/runtime.ts` name: `psp`, `vita`, `3ds`, `ipod`, `android`),
+`variantTargets` (the `.pocket` targets that target's runtimes boot),
+`extension` (`.zip`, `.vpk`, `.3dsx`, `.ipa`, `.apk`), `contentType` and
+`signed` (Android alone takes `input.signer`). `tools/repack.ts` reads the
+files and calls the same rows. **`tests/repack-worker.test.ts` bundles the
+entry and each target's module with `Bun.build({ target: "browser" })` and
+fails on any Node or Bun built-in module and on any reference to `Bun`,
+`process`, `require`, `__dirname` or `import.meta.dir`**; it also runs the
+bundled Android module and compares its APK with the source module's.
+
+On the PSP the game file takes the place of the embedded build's rodata
+copy: with twenty48 (723 KB file) the arena's free block measured
+**10 KB smaller** than the embedded build, on a PSP under PSPLINK and in
+PPSSPP. `MEMSIZE = 1` gives a PSP-2000 or 3000 started from the XMB the
+52 MB user partition; the PSP-1000 ignores it.
+
 ## Dynamic install & runtime admission
 
 - **Loading**: the eval path already treats bundles as data — the PSP host
