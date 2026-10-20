@@ -71,6 +71,12 @@ cannot be driven. Evidence comes from its log and from files under
   match hardware.
 - `sceAppMgrLaunchAppByUri` is unimplemented: launching a title only works on
   hardware. If the stub reports success, pressing launch there ends the app.
+- **Vita3K lacks some NEON instructions** the Vita has. `saturating_sub` over
+  a `u64` array compiled to `vqsub.u64`; Vita3K logged "Unimplemented
+  instruction" and computed wrong values (the bogus frame times in
+  `frame_stats` before it was rewritten). Check with
+  `arm-vita-eabi-objdump -d <elf> | grep vqsub` when Vita3K shows numbers
+  hardware does not.
 - `Unhandled EXC_BAD_ACCESS` in its log is not fatal by itself. It appears when
   a freed texture's memory is reused for a new upload. A real crash is followed
   by `Game closed`.
@@ -89,11 +95,16 @@ cannot be driven. Evidence comes from its log and from files under
   texture sits at the left and the UI clips it.
 - **The SVG baker** (`framework/compiler/bake-svg.ts`) reads filled `rect`,
   `circle` and `path` only: no strokes, text, arcs or group transforms. Letters
-  in icons are outlines generated from Space Grotesk Bold.
+  in icons are outlines generated from Figtree Bold (`bun run shelf:icons`).
 - **Fractional scale misaligns frames.** A selected tile scaled to 110% put its
-  frame on fractions of a pixel. The grid's selected tile is drawn at 100% and
-  the others at 90%. The frame is four bars, so nothing shows through a
-  see-through icon.
+  frame on fractions of a pixel. Every view draws its selected tile at 100%
+  and scales the others. The selection is a ring (`SelectedFrame`: a 2 px
+  border, radius 3, 3 px clear of the art) with nothing behind the art, so
+  a see-through icon shows the screen. A larger radius drew stepped corners.
+- **A shadow needs a fill.** The core draws `shadow-lg` only for a node with
+  a background, so `TileShadow` fills `#00000001`.
+- **`rounded-full` needs a fixed width and height** in the same class literal;
+  the Launch pill uses `rounded-[13]` on a 26 px height instead.
 - **Monospace** is baked at 12, 14 and 16 px in one weight only.
 - **Do not make tiles focusable.** The framework fires `onPress` of the focused
   node on CIRCLE regardless of the confirm setting, which caused a double
@@ -107,7 +118,15 @@ cannot be driven. Evidence comes from its log and from files under
   dispatch on `state.modal()` in one handler each (`input.ts`).
 - **A D-pad press wraps around the list; a held direction does not.**
   `moveSelection` takes `wrap`, and `input.ts` passes it for the first press
-  only, so holding a direction stops at the end. In the grid, up and down
+  only, so holding a direction stops at the end.
+- **A held direction speeds up on the shelf** (`HOLD_STAGES`, `holdSteps`,
+  `moveSelectionBy` in `navigation.ts`): repeats every 6 frames after 0.4 s,
+  moving 1 item, then 5 once held 1.2 s, then 20 once held 3 s; it still
+  stops at the end. Panels keep the plain repeat. Added 2026-10-20 for
+  RetroArch tabs of thousands of games (one at a time, 3,489 NES games took
+  six minutes); on trial, the user decides whether it stays. A letter jump
+  while holding, and an A-Z strip, were offered and not taken: START was
+  kept free. In the grid, up and down
   keep the column between the first and last rows.
 - **Mount only what is on screen.** Each view windows its list
   (`views/window.ts`) and places items by index. With every title mounted, a
@@ -771,10 +790,43 @@ page holding it, on its row (`parentPage`), and closes the menu from the main
 page. SELECT closes it from any page; it opens again on the main page. `menuChange` in `state.ts` acts on the row's name,
 and `components/menu.tsx` draws each row by name.
 
+## Look (2026-10-20)
+
+- **Top bar** (`components/header.tsx`, 30 high): L, the category names, R,
+  then the status items in `STATUS_W` (128; 112 let Wi-Fi run into the last
+  name). Names are measured in bold so a name keeps its width when it
+  becomes current; the current one is bold over a 14 px accent bar; no
+  counts. The names slide so the current one is centered between L and R
+  at every press. A first version slid only when the current name left the
+  view; on hardware the user saw the names "jumping back and forth". A name
+  that does not fit whole fades out (a class change, so it is animated).
+- **Five views.** Carousel (`views/carousel.tsx`, the default) is the shelf
+  as before. **Home** (`views/home.tsx`, id `home`), after the PS5 home
+  screen, came after it: the selected tile at `HOME_LEFT` at full size with
+  ring and shadow, the next ones at `small` after it, aligned at the top,
+  at 80% opacity (`homeSlot`, `HOME` in `layout.ts`), tweened with
+  `animate` as in the cascade. Under it the title in the `display` role (24
+  px bold), a dim line (platform, category, and the id at "Detailed"), and
+  a Launch pill in the text color. The footer leaves out its Launch hint in
+  Home, except at "Basic", which shows tiles only.
+- **Drawers and the keyboard are floating cards**: 8 px from the edges,
+  radius 12, `shadow-lg`, the heading dim, no accent edge. The active row is
+  the text color at 11% (`1c`), as is the list's selected row.
+- The list keeps six rows with the status bar on, since the status items no
+  longer take a row of their own.
+- **Font: Figtree** (`src/fonts`, OFL), baked into the sans slots, and used
+  by `shelf:icons` and `shelf:art`. The Font setting (Space Grotesk or
+  Hack) was removed: the engine bakes one full family; its monospace slots
+  hold one weight at 12, 14 and 16 px, so a second font there had no bold
+  or large sizes. Compared in the preview: Inter, Figtree, Manrope, Plus
+  Jakarta Sans. Manrope (static instances cut from the variable font) and
+  Plus Jakarta Sans lost their word spaces in the baked atlas ("NeonDrift");
+  not looked into.
+
 ## Status bar
 
-A strip above the category header (`components/status-bar.tsx`): the time on
-the left; Wi-Fi, Bluetooth and the battery on the right. The SELECT menu's
+The status items at the right of the top bar (`StatusItems` in
+`components/status-bar.tsx`): Wi-Fi, Bluetooth, the battery and the time. The SELECT menu's
 "Status bar" group, inside Appearance, holds "Show" (on/off), "Clock" (System, 24-hour,
 12-hour) and "Battery percent" (on/off), all saved in `settings.json`. The
 app reads `__status` (`hosts/vita/src/status.rs`) on the first frame and then
@@ -804,11 +856,10 @@ every 60 frames.
   `/CONFIG/BT/bt_enable`. User-mode code has no call for connected devices.
   The icon shows while it is on. The key read works in Vita3K (it answers 0);
   on hardware it is not verified.
-- **The list shows five rows under the bar.** The screen is 480x272 and six
-  list rows filled it to the pixel; `listRows` in `layout.ts` and `pageSize`
-  take the setting. The carousel and grid fit with the bar. The "Detailed"
-  grid did not (its id line pushed the footer 13 px off screen), so its tiles
-  are 64 px instead of 72 (`GRID` in `layout.ts`).
+- **The "Detailed" grid's tiles are 64 px** instead of 72 (`GRID` in
+  `layout.ts`): under the old separate status strip its id line pushed the
+  footer 13 px off screen. With the status items in the top bar there is
+  room again; the size was left as it is.
 - The preview fakes `__status` as `21 47 1 72 0 80 1`; a shot can give its
   own line (`status`). Shots 80 to 87 cover the bar.
 

@@ -501,7 +501,7 @@ const SHOTS: Shot[] = [
   { name: "01-shelf", steps: tap(BTN.RIGHT, 3) },
   { name: "02-shelf-first", steps: [] },
   { name: "03-shelf-apps", steps: [...tabTo(SYSTEM_ID), BTN.RIGHT] },
-  { name: "04-menu", steps: [...tap(BTN.RIGHT, 2), ...menuTo("font")] },
+  { name: "04-menu", steps: [...tap(BTN.RIGHT, 2), ...menuTo("view")] },
   // SELECT, down to "View", right once: grid.
   { name: "05-grid", steps: [...menuTo("view"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4), BTN.DOWN] },
   { name: "06-list", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 2), BTN.SELECT, ...tap(BTN.DOWN, 2)] },
@@ -578,7 +578,7 @@ const SHOTS: Shot[] = [
   // Dynamic theme: one step left of Midnight. The colors follow the selected title.
   { name: "31-dynamic", steps: [...menuTo("theme"), BTN.LEFT, BTN.SELECT, [0, 30]] },
   { name: "32-dynamic-next", steps: [...menuTo("theme"), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 2), [0, 40]] },
-  { name: "33-dynamic-menu", steps: [...menuTo("theme"), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4), [0, 40], ...menuTo("font")] },
+  { name: "33-dynamic-menu", steps: [...menuTo("theme"), BTN.LEFT, BTN.SELECT, ...tap(BTN.RIGHT, 4), [0, 40], ...menuTo("view")] },
   {
     name: "34-dynamic-list",
     steps: [...menuTo("theme"), BTN.LEFT, ...tap(BTN.DOWN, 2), ...tap(BTN.RIGHT, 2), ...tap(BTN.DOWN, 2), BTN.RIGHT, BTN.SELECT, ...tap(BTN.DOWN, 5), [0, 40]],
@@ -610,11 +610,6 @@ const SHOTS: Shot[] = [
     name: "40-last-played",
     steps: [BTN.CIRCLE, ...tap(BTN.RIGHT, 2), BTN.CIRCLE, BTN.RTRIGGER, BTN.CIRCLE, "restart", ...tap(BTN.LTRIGGER, 2)],
   },
-  // The same tab in the monospace font, the widest of the three.
-  {
-    name: "41-last-played-mono",
-    steps: [BTN.CIRCLE, ...menuTo("font"), BTN.RIGHT, BTN.SELECT, BTN.LTRIGGER],
-  },
   // Square, then "s" and "t" on the keyboard: the field counts the matches.
   { name: "42-search-typing", steps: [BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.UP, ...tap(BTN.RIGHT, 3), BTN.CIRCLE] },
   {
@@ -632,11 +627,6 @@ const SHOTS: Shot[] = [
   {
     name: "45-search-closed",
     steps: [BTN.RTRIGGER, ...tap(BTN.RIGHT, 2), BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.START, BTN.CROSS],
-  },
-  // The footer's five hints in the monospace font, the widest of the three.
-  {
-    name: "46-search-mono",
-    steps: [...menuTo("font"), BTN.RIGHT, BTN.SELECT, BTN.SQUARE, BTN.DOWN, BTN.RIGHT, BTN.CIRCLE, BTN.START],
   },
   // A category named with letters from the accents page, kept across a restart.
   {
@@ -702,6 +692,18 @@ const SHOTS: Shot[] = [
   },
   { name: "c5-cascade-long", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, ...tabTo("homebrew"), [BTN.RIGHT, 300], [0, 30]] },
   { name: "c6-cascade-wrap", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 3), BTN.SELECT, BTN.LEFT, [0, 30]] },
+  // Home, the fifth view: SELECT, down to "View", right four times.
+  { name: "h1-home", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
+  { name: "h2-home-first", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.SELECT] },
+  {
+    name: "h3-home-detailed",
+    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.DOWN, BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 4)],
+  },
+  {
+    name: "h4-home-basic",
+    steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.DOWN, ...tap(BTN.RIGHT, 2), BTN.SELECT, BTN.RIGHT],
+  },
+  { name: "h5-home-retro", steps: [...menuTo("view"), ...tap(BTN.RIGHT, 4), BTN.SELECT, ...tabToConsole(0)] },
   // RetroArch games: one tab per console after the built-ins (SNES, Mega
   // Drive, Arcade), and a PlayStation game in the PSX tab.
   { name: "r1-retro-snes", steps: tabToConsole(0) },
@@ -802,7 +804,6 @@ const SHOTS: Shot[] = [
   { name: "74-diagnostics", steps: [BTN.SELECT, BTN.UP, BTN.CIRCLE] },
   { name: "75-diagnostics-scrolled", steps: [BTN.SELECT, BTN.UP, BTN.CIRCLE, ...tap(BTN.DOWN, 12)] },
   { name: "76-menu-end", steps: [BTN.SELECT, BTN.UP] },
-  { name: "15-mono-font", steps: [...menuTo("font"), BTN.RIGHT, BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
   ...LANGUAGE_SHOTS,
 ];
 

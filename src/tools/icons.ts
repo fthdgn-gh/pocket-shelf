@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 const SRC = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const OUT = join(SRC, "icons");
 
-const font = opentype.parse(readFileSync(join(SRC, "fonts/SpaceGrotesk-Bold.ttf")).buffer as ArrayBuffer);
+const font = opentype.parse(readFileSync(join(SRC, "fonts/Figtree-Bold.ttf")).buffer as ArrayBuffer);
 
 /** Button face. */
 const FACE = "#3d4350";

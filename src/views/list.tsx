@@ -20,15 +20,12 @@ function ListRow(props: { game: Game; state: LauncherState; selected: boolean; i
   const role = () => (props.selected ? "bodyBold" : "body");
   return (
     <View
-      class="absolute left-0 right-0 flex-row items-center gap-2 h-[30] pl-3 pr-3 rounded-lg"
+      class="absolute left-0 right-0 flex-row items-center gap-2 h-[30] pl-3 pr-3 rounded-[8]"
       style={{
         insetT: props.index * ROW_PITCH,
-        bgColor: props.selected ? alpha(theme().accent, "30") : "#00000000",
+        bgColor: props.selected ? alpha(theme().text, "1c") : "#00000000",
       }}
     >
-      <Show when={props.selected}>
-        <View class="absolute left-0 top-[7] w-[3] h-[16] rounded-[1]" style={{ bgColor: theme().accent }} />
-      </Show>
       <TitleArt size="sm" game={props.game} state={props.state} />
       <Text class={props.state.text()[role()]} style={{ textColor: props.selected ? theme().text : theme().dim }}>
         {fitTitle(props.game.title, TITLE_W, fontSlot(props.state.font(), role()))}
@@ -52,7 +49,7 @@ export function ListView(props: { state: LauncherState }) {
   const { state } = props;
   let stripRef: NodeMirror | undefined;
 
-  // Rows on screen: one less while the status bar takes the top of the screen.
+  // Rows on screen.
   const rows = () => listRows(state.statusBarOn());
   // First visible row. Starts so the selection is on screen when the view mounts.
   const [topRow, setTopRow] = createSignal(Math.max(0, untrack(state.selectedIndex) - untrack(rows) + 1));
@@ -70,14 +67,8 @@ export function ListView(props: { state: LauncherState }) {
 
   return (
     <View class="flex-row w-full grow px-4">
-      {/* Six rows of 30 with gaps of 4 are 200 high; five are 166. */}
-      <View
-        class={
-          state.statusBarOn()
-            ? "flex-col grow h-[166] mt-[4] overflow-hidden justify-start"
-            : "flex-col grow h-[200] mt-[4] overflow-hidden justify-start"
-        }
-      >
+      {/* Six rows of 30 with gaps of 4 are 200 high. */}
+      <View class="flex-col grow h-[200] mt-[4] overflow-hidden justify-start">
         <View
           ref={(el) => {
             stripRef = el;

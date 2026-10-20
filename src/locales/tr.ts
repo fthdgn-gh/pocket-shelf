@@ -50,7 +50,6 @@ export const tr: Messages = {
   },
 
   theme: "Tema",
-  font: "Yazı tipi",
   view: "Görünüm",
   details: "Ayrıntılar",
   backdrop: "Arka plan",
@@ -66,7 +65,7 @@ export const tr: Messages = {
   manage: "Yönet",
   confirm: "Onay",
   language: "Dil",
-  views: { carousel: "Şerit", grid: "Izgara", list: "Liste", cascade: "Kademe" },
+  views: { carousel: "Şerit", grid: "Izgara", list: "Liste", cascade: "Kademe", home: "Ana ekran" },
   detailLevels: { basic: "Temel", normal: "Normal", detailed: "Ayrıntılı" },
   themes: {
     midnight: "Gece Yarısı",

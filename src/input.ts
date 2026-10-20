@@ -1,10 +1,12 @@
 import { BTN, type FocusDirection } from "@pocketjs/framework/input";
 import { onButtonPress, onFrame } from "@pocketjs/framework/lifecycle";
-import { moveSelection } from "./navigation.ts";
+import { holdSteps, moveSelection, moveSelectionBy } from "./navigation.ts";
 import type { LauncherState } from "./state.ts";
 
 // A held direction moves once, waits, then repeats. Counted in host frames
-// (60 per second on the Vita): 0.4 s before the first repeat, then 10 per second.
+// (60 per second on the Vita): 0.4 s before the first repeat, then 10 per
+// second. On the shelf each repeat moves further the longer the direction is
+// held (`holdSteps`).
 const REPEAT_DELAY = 24;
 const REPEAT_EVERY = 6;
 
@@ -34,12 +36,14 @@ const DIRECTIONS: readonly [mask: number, direction: FocusDirection, dx: number,
  * framework's focus traversal and its press of the focused node stay idle.
  */
 export function installInput(state: LauncherState): void {
-  const move = (direction: FocusDirection, dx: number, dy: number, repeated: boolean) => {
+  const move = (direction: FocusDirection, dx: number, dy: number, repeated: boolean, steps = 1) => {
     const modal = state.modal();
     if (modal === null) {
       // A press wraps from one end of the list to the other. A held direction
       // stops at the end, so holding it does not run around the list.
-      const next = moveSelection(state.view(), direction, state.selectedIndex(), state.games().length, !repeated);
+      const next = repeated
+        ? moveSelectionBy(state.view(), direction, state.selectedIndex(), state.games().length, steps)
+        : moveSelection(state.view(), direction, state.selectedIndex(), state.games().length, true);
       if (next !== null) state.select(next);
       return;
     }
@@ -67,7 +71,7 @@ export function installInput(state: LauncherState): void {
     }
     heldFrames++;
     if (heldFrames >= REPEAT_DELAY && (heldFrames - REPEAT_DELAY) % REPEAT_EVERY === 0) {
-      move(direction, dx, dy, true);
+      move(direction, dx, dy, true, holdSteps(heldFrames));
     }
   });
 

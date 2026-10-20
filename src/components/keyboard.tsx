@@ -51,12 +51,11 @@ export function KeyboardOverlay(props: { state: LauncherState }) {
         ref={(el) => {
           sheetRef = el;
         }}
-        class="absolute left-0 right-0 bottom-0 flex-col items-center gap-1 pt-3 pb-2"
+        class="absolute left-[8] right-[8] bottom-[8] flex-col items-center gap-1 pt-[10] pb-2 rounded-[12] shadow-lg"
         style={{ bgColor: theme().panel, translateY: 80 }}
       >
-        <View class="absolute top-0 left-0 right-0 h-[2]" style={{ bgColor: theme().accent }} />
         <View class="flex-row w-[416] px-[2]">
-          <Text class={state.text().label} style={{ textColor: theme().accent }}>
+          <Text class={state.text().label} style={{ textColor: theme().dim }}>
             {upper(state.keyboardHeading(), state.language())}
           </Text>
         </View>

@@ -1,6 +1,5 @@
 import { For } from "solid-js";
 import { LANGUAGES } from "../i18n.ts";
-import { FONTS } from "../text.ts";
 import { BUILD, buildLabel } from "../updates.ts";
 import { MENU_VISIBLE, type LauncherState, type MenuItem } from "../state.ts";
 import { hints, Prompt, type IconName } from "./icons.tsx";
@@ -32,8 +31,6 @@ export function MenuOverlay(props: { state: LauncherState }) {
         return { label: t().updates, step: "right" };
       case "theme":
         return { label: t().theme, value: t().themes[state.theme().id], step: "both" };
-      case "font":
-        return { label: t().font, value: FONTS.find((entry) => entry.id === state.font())?.name ?? "", step: "both" };
       case "view":
         return { label: t().view, value: t().views[state.view()], step: "both" };
       case "details":

@@ -19,12 +19,11 @@ const WIFI: Record<"night" | "day", IconName[]> = {
 };
 
 /**
- * The strip above the category header: the time on the left; Wi-Fi,
- * Bluetooth and the battery on the right. A reading the host cannot give is
- * left out. Wi-Fi shows only while connected, Bluetooth only while it is
- * switched on.
+ * The right end of the top bar: Wi-Fi, Bluetooth, the battery and the time.
+ * A reading the host cannot give is left out. Wi-Fi shows only while
+ * connected, Bluetooth only while it is switched on.
  */
-export function StatusBar(props: { state: LauncherState }) {
+export function StatusItems(props: { state: LauncherState }) {
   const { state } = props;
   const theme = state.theme;
   const status = state.status;
@@ -39,21 +38,19 @@ export function StatusBar(props: { state: LauncherState }) {
     return formatClock(now.hour, now.minute, format === "system" ? now.clock24 : format === "24");
   };
   return (
-    <View class="flex-row items-center justify-between w-full h-[16] shrink-0 px-4 pt-[3]">
-      <Text class={state.text().smallBold} style={{ textColor: theme().dim }}>
+    <View class="flex-row items-center gap-[8] shrink-0">
+      <Show when={wifi() > 0}>
+        <Icon name={WIFI[ink()][wifiLevel(wifi())]!} />
+      </Show>
+      <Show when={status()?.bluetooth}>
+        <Icon name={ink() === "day" ? "bluetoothDay" : "bluetooth"} />
+      </Show>
+      <Show when={battery() !== null}>
+        <Battery state={state} percent={battery() ?? 0} charging={status()?.charging ?? false} />
+      </Show>
+      <Text class={state.text().bodyBold} style={{ textColor: theme().text }}>
         {clock()}
       </Text>
-      <View class="flex-row items-center gap-[6]">
-        <Show when={wifi() > 0}>
-          <Icon name={WIFI[ink()][wifiLevel(wifi())]!} />
-        </Show>
-        <Show when={status()?.bluetooth}>
-          <Icon name={ink() === "day" ? "bluetoothDay" : "bluetooth"} />
-        </Show>
-        <Show when={battery() !== null}>
-          <Battery state={state} percent={battery() ?? 0} charging={status()?.charging ?? false} />
-        </Show>
-      </View>
     </View>
   );
 }

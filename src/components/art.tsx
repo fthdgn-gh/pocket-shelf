@@ -23,6 +23,22 @@ const SIZES = {
     image: "w-[100] h-[100]",
     text: "text-2xl text-white font-bold",
   },
+  // Home row tile, one size per detail level (see HOME in layout.ts).
+  homeBasic: {
+    box: "relative w-[128] h-[128] items-center justify-center",
+    image: "w-[128] h-[128]",
+    text: "text-4xl text-white font-bold",
+  },
+  homeNormal: {
+    box: "relative w-[96] h-[96] items-center justify-center",
+    image: "w-[96] h-[96]",
+    text: "text-4xl text-white font-bold",
+  },
+  homeDetailed: {
+    box: "relative w-[88] h-[88] items-center justify-center",
+    image: "w-[88] h-[88]",
+    text: "text-2xl text-white font-bold",
+  },
   // Cascade tile, one size per detail level (see CASCADE in layout.ts).
   cascadeBasic: {
     box: "relative w-[144] h-[144] items-center justify-center",
@@ -135,18 +151,23 @@ export function TitleArt(props: { game: Game; size: ArtSize; state: LauncherStat
 }
 
 /**
- * The frame around the selected tile: four bars, 3 px outside the art on each
- * side. Nothing is drawn behind the art, so a see-through icon shows the
- * screen (or its box) and not the frame's color.
+ * The ring around the selected tile: a thin rounded line in the text color,
+ * 3 px clear of the art on each side. Nothing is drawn behind the art, so a
+ * see-through icon shows the screen (or its box), not the ring's color.
  */
 export function SelectedFrame(props: { state: LauncherState }) {
-  const color = () => ({ bgColor: props.state.theme().accent });
   return (
-    <>
-      <View class="absolute left-[-3] right-[-3] top-[-3] h-[3]" style={color()} />
-      <View class="absolute left-[-3] right-[-3] bottom-[-3] h-[3]" style={color()} />
-      <View class="absolute left-[-3] top-0 bottom-0 w-[3]" style={color()} />
-      <View class="absolute right-[-3] top-0 bottom-0 w-[3]" style={color()} />
-    </>
+    <View
+      class="absolute left-[-5] right-[-5] top-[-5] bottom-[-5] rounded-[3] border-2"
+      style={{ borderColor: props.state.theme().text }}
+    />
   );
+}
+
+/**
+ * A soft shadow under the selected tile. The engine draws a shadow only for a
+ * node with a fill, so the fill is all but clear.
+ */
+export function TileShadow() {
+  return <View class="absolute inset-0 shadow-lg" style={{ bgColor: "#00000001" }} />;
 }

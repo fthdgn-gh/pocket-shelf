@@ -22,7 +22,6 @@ import { DiagnosticsOverlay } from "./components/diagnostics.tsx";
 import { EditorOverlay } from "./components/editor.tsx";
 import { Footer } from "./components/footer.tsx";
 import { Header } from "./components/header.tsx";
-import { StatusBar } from "./components/status-bar.tsx";
 import { hints, Prompt, withButton } from "./components/icons.tsx";
 import { KeyboardOverlay } from "./components/keyboard.tsx";
 import { MenuOverlay } from "./components/menu.tsx";
@@ -38,6 +37,7 @@ import { createLauncherState } from "./state.ts";
 import { fontSlot } from "./text.ts";
 import { CarouselView } from "./views/carousel.tsx";
 import { CascadeView } from "./views/cascade.tsx";
+import { HomeView } from "./views/home.tsx";
 import { GridView } from "./views/grid.tsx";
 import { ListView } from "./views/list.tsx";
 
@@ -77,9 +77,6 @@ function Shelf() {
         <Backdrop state={state} />
       ))}
 
-      <Show when={state.statusBarOn()}>
-        <StatusBar state={state} />
-      </Show>
       {timed("header", () => (
         <Header state={state} />
       ))}
@@ -128,6 +125,9 @@ function Shelf() {
           </Show>
           <Show when={state.view() === "cascade"}>
             <CascadeView state={state} />
+          </Show>
+          <Show when={state.view() === "home"}>
+            <HomeView state={state} />
           </Show>
         </Show>
       </Show>

@@ -178,8 +178,8 @@ set to `true` (Settings ▸ Secrets and variables ▸ Actions ▸ Variables).
 
 ## License
 
-[MIT](./LICENSE), the same as PocketJS. Fonts: Space Grotesk (SIL OFL 1.1),
-Hack (MIT) and Inter (SIL OFL, in [`assets/fonts/`](./assets/fonts/)). See
+[MIT](./LICENSE), the same as PocketJS. Fonts: Figtree (SIL OFL 1.1) and
+Inter (SIL OFL, in [`assets/fonts/`](./assets/fonts/)). See
 [`src/fonts/NOTICE.md`](./src/fonts/NOTICE.md).
 
 The updater app in [`src/updater/`](./src/updater/) (`POCKTUPDR`, which

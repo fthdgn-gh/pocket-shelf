@@ -50,7 +50,6 @@ export const de: Messages = {
   },
 
   theme: "Design",
-  font: "Schrift",
   view: "Ansicht",
   details: "Details",
   backdrop: "Hintergrund",
@@ -66,7 +65,7 @@ export const de: Messages = {
   manage: "Verwalten",
   confirm: "Bestätigen",
   language: "Sprache",
-  views: { carousel: "Karussell", grid: "Raster", list: "Liste", cascade: "Kaskade" },
+  views: { carousel: "Karussell", grid: "Raster", list: "Liste", cascade: "Kaskade", home: "Startseite" },
   detailLevels: { basic: "Einfach", normal: "Normal", detailed: "Ausführlich" },
   themes: {
     midnight: "Mitternacht",
