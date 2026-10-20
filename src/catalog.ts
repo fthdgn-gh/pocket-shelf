@@ -1,6 +1,7 @@
 import { getOps } from "@pocketjs/framework/host";
 import { appTable } from "@pocketjs/framework/launcher";
 import { categoryOf, type Platform } from "./categories.ts";
+import { consoleCategory } from "./consoles.ts";
 import type { Game } from "./types.ts";
 
 /** How many tints titles cycle through (see TINT_ART and TINT_AMBIENT in components/art.tsx). */
@@ -117,7 +118,7 @@ interface ScanHost {
 const scanHost = (): ScanHost => getOps() as unknown as ScanHost;
 
 /** What a scan of the installed titles is reading (hosts/vita/src/installed.rs). */
-export type ScanPhase = "apps" | "system" | "psm" | "psp" | "images";
+export type ScanPhase = "apps" | "system" | "psm" | "psp" | "images" | "retro";
 
 export type ScanProgress =
   | { state: "running"; done: number; total: number; phase: ScanPhase }
@@ -142,7 +143,7 @@ export function startScan(): boolean {
   return (scanHost().__scanStart?.() ?? 0) === 1;
 }
 
-const PHASES: readonly ScanPhase[] = ["apps", "system", "psm", "psp", "images"];
+const PHASES: readonly ScanPhase[] = ["apps", "system", "psm", "psp", "images", "retro"];
 
 /** Where the scan stands, read from the host's `running <done> <total> <phase>` or `done <count> <ms>`. */
 export function scanProgress(): ScanProgress {
@@ -159,11 +160,22 @@ export function scanProgress(): ScanProgress {
   return { state: "idle" };
 }
 
-const GENRES: Record<Platform, string> = { vita: "PS Vita", psm: "PS Mobile", psp: "PSP", psx: "PSX" };
+const GENRES: Record<Platform, string> = {
+  vita: "PS Vita",
+  psm: "PS Mobile",
+  psp: "PSP",
+  psx: "PSX",
+  retro: "RetroArch",
+};
+
+/** The id a title shows in the "Detailed" views: "RetroArch" for a RetroArch game, whose id is a hash. */
+export function shownId(game: Game): string {
+  return game.console === undefined ? game.id : GENRES.retro;
+}
 
 /** The platform an entry names; Vita for an entry with none or an unknown one. */
 function platformOf(value: unknown): Platform {
-  return value === "psm" || value === "psp" || value === "psx" ? value : "vita";
+  return value === "psm" || value === "psp" || value === "psx" || value === "retro" ? value : "vita";
 }
 
 /**
@@ -176,18 +188,21 @@ export function loadCatalog(): Catalog {
   if (table?.kind !== "native") return { native: false, games: [] };
   const apps = table.apps.filter((app) => isListed(app.id));
   const games: Game[] = apps.map((app, index) => {
-    // The Vita host adds the platform to each entry, and `adrenaline` to a
-    // PSP or PS1 title without a bubble (hosts/vita/src/installed.rs).
-    const extra = app as { platform?: unknown; adrenaline?: unknown };
+    // The Vita host adds the platform to each entry, `adrenaline` to a PSP or
+    // PS1 title without a bubble, and `console` to a RetroArch game
+    // (hosts/vita/src/installed.rs).
+    const extra = app as { platform?: unknown; adrenaline?: unknown; console?: unknown };
     const platform = platformOf(extra.platform);
+    const database = platform === "retro" && typeof extra.console === "string" ? extra.console : undefined;
     const game: Game = {
       title: cleanTitle(app.title),
       id: app.id,
       genre: GENRES[platform],
-      category: categoryOf(app.id, platform),
+      category: database === undefined ? categoryOf(app.id, platform) : consoleCategory(database).id,
       tint: index % TINT_COUNT,
     };
     if (extra.adrenaline === true) game.adrenaline = true;
+    if (database !== undefined) game.console = database;
     return game;
   });
   return { native: true, games };

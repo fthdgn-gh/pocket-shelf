@@ -201,6 +201,7 @@ export const en = {
     psm: "PlayStation Mobile",
     psp: "PSP and PSX games",
     images: "Disc images",
+    retro: "RetroArch playlists",
   },
   scanDone: "{count} titles found in {seconds} s.",
 

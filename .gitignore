@@ -52,3 +52,6 @@ hosts/web/pocket_text.wasm
 
 # Pocket Shelf build identity, written by src/tools/build-info.ts
 src/build-info.json
+
+# Local sample data, such as RetroArch playlists read by src/tools/retroarch-test.sh
+.samples/

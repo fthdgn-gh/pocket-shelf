@@ -26,6 +26,11 @@ export interface Game {
   tint: number;
   /** A PSP or PS1 title with no bubble, started through Adrenaline. */
   adrenaline?: boolean;
+  /**
+   * A RetroArch game: the console's database name from RetroArch's playlist
+   * (`Nintendo - Game Boy`). Its `id` is the host's (`ra` and seven digits).
+   */
+  console?: string;
 }
 
 /** How the status bar's clock is written: the system setting, or a fixed 12- or 24-hour clock. */

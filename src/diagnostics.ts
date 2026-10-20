@@ -5,6 +5,7 @@
 interface TimingHost {
   __startupMarks?(): string;
   __scanReport?(): string;
+  __frameStats?(): string;
   __processMs?(): number;
   __bootLog?(): string;
 }
@@ -51,6 +52,50 @@ export interface DiagnosticEntry {
   value: string;
 }
 
+// Frame timing: the gap between one frame's start and the next, measured
+// from the time the Diagnostics screen was last opened (or the start). At 60
+// frames a second a frame is 16.7 ms; a gap over 20 ms is a dropped frame,
+// which shows as a stutter.
+const SLOW_FRAME_MS = 20;
+let lastFrame = 0;
+let frames = 0;
+let slowFrames = 0;
+let longestFrame = 0;
+
+/** Call once per frame. */
+export function frameTick(): void {
+  const time = now();
+  if (lastFrame > 0) {
+    const gap = time - lastFrame;
+    frames++;
+    if (gap > SLOW_FRAME_MS) slowFrames++;
+    if (gap > longestFrame) longestFrame = gap;
+  }
+  lastFrame = time;
+}
+
+/**
+ * The frames since the last call (or the start), then starts counting again:
+ * how many, how many took over 20 ms, and the longest. Read when the
+ * Diagnostics screen opens, so each opening shows the time since the one
+ * before.
+ */
+export function takeFrameEntries(): DiagnosticEntry[] {
+  const entries = [
+    { label: "Frames", value: `${frames}` },
+    { label: "Frames over 20 ms", value: `${slowFrames}` },
+    { label: "Longest frame", value: `${longestFrame} ms` },
+    // The host's split of the same frames (hosts/vita/src/frame_stats.rs):
+    // each part's average and longest time, then the QuickJS heap.
+    ...pairs(host().__frameStats?.() ?? ""),
+  ];
+  frames = 0;
+  slowFrames = 0;
+  longestFrame = 0;
+  lastFrame = 0;
+  return entries;
+}
+
 /**
  * The startup timing, in the order it happened. "Host" entries say when a
  * phase finished, in milliseconds since the process started; "App begin" is
@@ -74,7 +119,11 @@ export function startupEntries(): DiagnosticEntry[] {
  * read the saved list instead of scanning.
  */
 function scanEntries(): DiagnosticEntry[] {
-  const report = host().__scanReport?.() ?? "";
+  return pairs(host().__scanReport?.() ?? "");
+}
+
+/** Entries from a host report of `Label=value` pairs separated by commas. */
+function pairs(report: string): DiagnosticEntry[] {
   if (!report) return [];
   return report.split(",").flatMap((pair) => {
     const [key, value] = pair.split("=");

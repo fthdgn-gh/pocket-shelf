@@ -185,6 +185,7 @@ export const tr: Messages = {
     psm: "PlayStation Mobile",
     psp: "PSP ve PSX oyunları",
     images: "Disk görüntüleri",
+    retro: "RetroArch oynatma listeleri",
   },
   scanDone: "{seconds} sn içinde {count} başlık bulundu.",
 
