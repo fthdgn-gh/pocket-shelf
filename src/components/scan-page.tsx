@@ -4,7 +4,7 @@ import { onFrame } from "@pocketjs/framework/lifecycle";
 import { scanProgress, startScan, type ScanProgress } from "../catalog.ts";
 import { DEFAULT_LANGUAGE, fill, MESSAGES } from "../i18n.ts";
 import { loadSettings } from "../settings.ts";
-import { DEFAULT_FONT, textClasses } from "../text.ts";
+import { textClasses } from "../text.ts";
 import { DEFAULT_THEME, themeById } from "../themes.ts";
 import { ProgressBar } from "./progress.tsx";
 
@@ -22,7 +22,7 @@ export function ScanPage(props: { onDone: () => void }) {
   const settings = loadSettings() ?? {};
   const t = MESSAGES[settings.language ?? DEFAULT_LANGUAGE];
   const theme = themeById(settings.theme ?? DEFAULT_THEME);
-  const text = textClasses(settings.font ?? DEFAULT_FONT);
+  const text = textClasses();
   const [progress, setProgress] = createSignal<ScanProgress>({ state: "idle" });
   const started = startScan();
   let finished = 0;

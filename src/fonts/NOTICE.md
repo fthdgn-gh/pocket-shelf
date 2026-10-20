@@ -1,11 +1,11 @@
 # Fonts
 
-Faces baked into Pocket Shelf by `bun run shelf:build` and chosen in the SELECT
-menu. Space Grotesk fills the engine's sans slots, Hack fills the monospace
-slots, and Inter (assets/fonts) supplies symbols neither one has.
+Figtree is baked into Pocket Shelf by `bun run shelf:build`; it fills the
+engine's sans slots. `src/tools/icons.ts` and `src/tools/art.ts` draw the
+letters in the button icons and the LiveArea pictures with Figtree Bold.
+Inter (assets/fonts) supplies symbols Figtree does not have.
 
-- Hack (Regular, Bold): MIT license, https://github.com/source-foundry/Hack
-- Space Grotesk (Regular, Bold): SIL Open Font License 1.1,
-  https://github.com/floriankarsten/space-grotesk
+- Figtree (Regular, Bold): SIL Open Font License 1.1, `OFL-Figtree.txt`,
+  https://github.com/erikdkennedy/figtree
 
 Keep each font's license file next to it when you add one.

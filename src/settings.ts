@@ -1,6 +1,5 @@
 import { readFileSync, writeFileSync } from "@pocketjs/framework/fs";
 import { LANGUAGES, type Language } from "./i18n.ts";
-import { FONTS, type FontId } from "./text.ts";
 import { THEMES, type ThemeId } from "./themes.ts";
 import { DETAIL_LEVELS, VIEW_MODES } from "./navigation.ts";
 import type { ClockFormat, ConfirmMode, DetailLevel, ViewMode } from "./types.ts";
@@ -9,7 +8,6 @@ import { UPDATE_CHANNELS, type UpdateChannel } from "./updates.ts";
 export interface Settings {
   language: Language;
   theme: ThemeId;
-  font: FontId;
   view: ViewMode;
   detail: DetailLevel;
   confirm: ConfirmMode;
@@ -45,7 +43,6 @@ export function loadSettings(): Partial<Settings> | null {
     const result: Partial<Settings> = {};
     if (LANGUAGES.some((item) => item.id === raw.language)) result.language = raw.language;
     if (THEMES.some((theme) => theme.id === raw.theme)) result.theme = raw.theme;
-    if (FONTS.some((item) => item.id === raw.font)) result.font = raw.font;
     if (VIEW_MODES.includes(raw.view as ViewMode)) result.view = raw.view;
     if (DETAIL_LEVELS.includes(raw.detail as DetailLevel)) result.detail = raw.detail;
     if (raw.confirm === "circle" || raw.confirm === "cross") result.confirm = raw.confirm;

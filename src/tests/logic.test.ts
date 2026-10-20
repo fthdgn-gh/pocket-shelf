@@ -13,13 +13,15 @@ import {
   GRID_COLUMNS,
   GRID_ROWS,
   LIST_ROWS,
-  LIST_ROWS_UNDER_STATUS,
+  HOME,
+  HOME_LEFT,
   SHELF,
   carouselLayout,
+  homeSlot,
   cascadeSlot,
 } from "../layout.ts";
 import { MENU, menuPath, parentPage, type MenuPage } from "../menu-items.ts";
-import { iconRadius, moveSelection, pageSize } from "../navigation.ts";
+import { HOLD_STAGES, holdSteps, iconRadius, moveSelection, moveSelectionBy, pageSize } from "../navigation.ts";
 import { filesInUse, withoutFiles } from "../overrides.ts";
 import { RECENT_MAX, pushRecent } from "../recent.ts";
 import { missingArt } from "../scrape.ts";
@@ -107,12 +109,34 @@ describe("moveSelection", () => {
   });
 });
 
+describe("holding a direction", () => {
+  test("moves further the longer it is held", () => {
+    expect(holdSteps(24)).toBe(1);
+    expect(holdSteps(71)).toBe(1);
+    expect(holdSteps(72)).toBe(5);
+    expect(holdSteps(179)).toBe(5);
+    expect(holdSteps(180)).toBe(20);
+    expect(holdSteps(10_000)).toBe(HOLD_STAGES.at(-1)!.steps);
+  });
+
+  test("moveSelectionBy takes several steps and stops at an end without wrapping", () => {
+    expect(moveSelectionBy("carousel", "right", 0, 100, 5)).toBe(5);
+    expect(moveSelectionBy("carousel", "right", 97, 100, 20)).toBe(99);
+    expect(moveSelectionBy("carousel", "right", 99, 100, 20)).toBeNull();
+    expect(moveSelectionBy("list", "up", 3, 100, 20)).toBe(0);
+    // In the grid, up and down move whole rows.
+    expect(moveSelectionBy("grid", "down", 2, 100, 5)).toBe(2 + 5 * GRID_COLUMNS);
+    expect(moveSelectionBy("home", "left", 10, 100, 5)).toBe(5);
+  });
+});
+
 describe("paging and icon loading", () => {
   test("L and R jump one screen of items", () => {
     expect(pageSize("carousel")).toBe(1);
     expect(pageSize("grid")).toBe(GRID_COLUMNS * GRID_ROWS);
     expect(pageSize("list")).toBe(LIST_ROWS);
-    expect(pageSize("list", true)).toBe(LIST_ROWS_UNDER_STATUS);
+    // The status items share the top bar, so the list keeps its rows.
+    expect(pageSize("list", true)).toBe(LIST_ROWS);
   });
 
   test("icons load for at least the visible items around the selection", () => {
@@ -454,6 +478,21 @@ describe("layout", () => {
       expect(tile + gap - selectedHalf - neighborHalf).toBeGreaterThan(0);
       // The row has 8 px of padding under the tiles for the frame.
       expect(tile * 1.25 + 3 * 1.25).toBeLessThanOrEqual(row - 8);
+    }
+  });
+
+  test("the home row keeps the selected tile at the left and the rest after it", () => {
+    for (const detail of ["basic", "normal", "detailed"] as const) {
+      const { tile, small, gap } = HOME[detail];
+      expect(homeSlot(detail, 0)).toEqual({ x: HOME_LEFT, scale: 1, opacity: 1 });
+      const next = homeSlot(detail, 1);
+      // The next tile clears the selected one's ring (5 px) by the gap.
+      expect(next.x).toBe(HOME_LEFT + tile + gap);
+      expect(next.x - (HOME_LEFT + tile + 5)).toBeGreaterThan(0);
+      expect(next.scale * tile).toBeCloseTo(small);
+      expect(homeSlot(detail, 2).x - next.x).toBe(small + gap);
+      // Tiles before the selection are hidden.
+      expect(homeSlot(detail, -1).opacity).toBe(0);
     }
   });
 });

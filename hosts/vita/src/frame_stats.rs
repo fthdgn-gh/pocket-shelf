@@ -47,11 +47,24 @@ pub fn now_us() -> u64 {
 }
 
 /// Record one frame: the time stamps at its start and after each part.
+///
+/// The parts are worked out one at a time as signed differences. Written with
+/// `saturating_sub` over the array, the loop compiled to NEON `vqsub.u64`,
+/// which Vita3K does not implement: it logged the instruction and the times
+/// it recorded were wrong.
 pub fn record(start: u64, marks: [u64; PARTS]) {
-    // A frame longer than this is a clock that jumped, not a frame.
-    const BOGUS_US: u64 = 10_000_000;
-    if marks.iter().any(|mark| mark.saturating_sub(start) > BOGUS_US || *mark < start) {
-        return;
+    // A part longer than this is a clock that jumped, not a frame.
+    const BOGUS_US: i64 = 10_000_000;
+    let mut spent = [0u64; PARTS];
+    let mut previous = start as i64;
+    for part in 0..PARTS {
+        let mark = core::hint::black_box(marks[part]) as i64;
+        let delta = mark - previous;
+        if !(0..=BOGUS_US).contains(&delta) {
+            return;
+        }
+        spent[part] = delta as u64;
+        previous = mark;
     }
     let Ok(mut stats) = STATS.lock() else {
         return;
@@ -61,12 +74,11 @@ pub fn record(start: u64, marks: [u64; PARTS]) {
         return;
     }
     stats.frames += 1;
-    let mut previous = start;
-    for (part, mark) in marks.into_iter().enumerate() {
-        let spent = mark.saturating_sub(previous);
-        stats.sum[part] += spent;
-        stats.max[part] = stats.max[part].max(spent);
-        previous = mark;
+    for part in 0..PARTS {
+        stats.sum[part] += spent[part];
+        if spent[part] > stats.max[part] {
+            stats.max[part] = spent[part];
+        }
     }
 }
 

@@ -36,7 +36,7 @@ const MANIFEST = (await Bun.file(join(SRC, "../pocket.json")).json()) as { title
 // Credits the manifest has no field for: src/about.json.
 const ABOUT = (await Bun.file(join(SRC, "about.json")).json()) as { author?: string };
 
-GlobalFonts.registerFromPath(join(SRC, "fonts/SpaceGrotesk-Bold.ttf"), "Shelf Bold");
+GlobalFonts.registerFromPath(join(SRC, "fonts/Figtree-Bold.ttf"), "Shelf Bold");
 
 const BG_TOP = "#14204a";
 const BG_BOTTOM = "#02040c";

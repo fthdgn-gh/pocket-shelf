@@ -37,7 +37,7 @@ export function Backdrop(props: { state: LauncherState }) {
   const { state } = props;
   const theme = state.theme;
   // Views whose tiles leave most of the screen uncovered.
-  const open = () => state.view() === "carousel" || state.view() === "cascade";
+  const open = () => state.view() === "carousel" || state.view() === "cascade" || state.view() === "home";
   return (
     <Show when={state.backdrop()}>
       <Show when={state.backdropUnder()} keyed>

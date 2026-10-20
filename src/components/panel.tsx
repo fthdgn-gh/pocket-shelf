@@ -8,14 +8,22 @@ import { fontSlot } from "../text.ts";
 import { alpha } from "../themes.ts";
 import { Icon, type IconName } from "./icons.tsx";
 
+// A card floating `DRAWER_MARGIN` from the right, top and bottom edges.
+const DRAWER_MARGIN = 8;
 const DRAWER = {
-  narrow: { width: 232, panel: "absolute top-0 right-0 bottom-0 w-[232] flex-col gap-[3] pl-4 pr-3 py-3" },
-  wide: { width: 284, panel: "absolute top-0 right-0 bottom-0 w-[284] flex-col gap-[3] pl-4 pr-3 py-3" },
+  narrow: {
+    width: 232,
+    panel: "absolute top-[8] right-[8] bottom-[8] w-[232] flex-col gap-[2] px-3 py-[10] rounded-[12] shadow-lg",
+  },
+  wide: {
+    width: 284,
+    panel: "absolute top-[8] right-[8] bottom-[8] w-[284] flex-col gap-[2] px-3 py-[10] rounded-[12] shadow-lg",
+  },
 } as const;
 
 /**
- * A panel that slides in from the right edge over a dimmed screen. The SELECT
- * menu, the title editor, the art picker and the category manager use it.
+ * A rounded card that slides in from the right over a dimmed screen. The
+ * SELECT menu, the title editor, the art picker and the category manager use it.
  */
 export function Drawer(props: {
   state: LauncherState;
@@ -38,13 +46,14 @@ export function Drawer(props: {
           panelRef = el;
         }}
         class={shape.panel}
-        style={{ bgColor: props.state.theme().panel, translateX: shape.width }}
+        style={{ bgColor: props.state.theme().panel, translateX: shape.width + DRAWER_MARGIN }}
       >
-        <View class="absolute top-0 left-0 bottom-0 w-[2]" style={{ bgColor: props.state.theme().accent }} />
-        <Text class={props.state.text().label} style={{ textColor: props.state.theme().accent }}>
-          {upper(props.title, props.state.language())}
-        </Text>
-        <View class="h-[4] shrink-0" />
+        <View class="pl-2 shrink-0">
+          <Text class={props.state.text().label} style={{ textColor: props.state.theme().dim }}>
+            {upper(props.title, props.state.language())}
+          </Text>
+        </View>
+        <View class="h-[2] shrink-0" />
         {props.children}
       </View>
     </View>
@@ -69,8 +78,8 @@ export function OptionRow(props: {
   const arrows = () => (props.active ? props.step : undefined);
   return (
     <View
-      class="flex-row items-center justify-between w-full h-[26] shrink-0 px-2 rounded-md"
-      style={{ bgColor: props.active ? alpha(theme().accent, "30") : "#00000000" }}
+      class="flex-row items-center justify-between w-full h-[26] shrink-0 px-2 rounded-[8]"
+      style={{ bgColor: props.active ? alpha(theme().text, "1c") : "#00000000" }}
     >
       <Text
         class={props.active ? props.state.text().bodyBold : props.state.text().body}
@@ -102,7 +111,7 @@ export function Spacer() {
 }
 
 // Text room in a wide drawer: its width less the padding on both sides.
-const NOTE_W = DRAWER.wide.width - 28;
+const NOTE_W = DRAWER.wide.width - 24;
 
 /**
  * Dim text at the bottom of a wide drawer. Text does not wrap by itself, so

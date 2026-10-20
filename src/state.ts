@@ -57,7 +57,7 @@ import { DEFAULT_CHANNEL, UPDATE_CHANNELS, type UpdateChannel } from "./updates.
 import { searchTitles } from "./search.ts";
 import { CLOCK_FORMATS, loadSettings, saveSettings } from "./settings.ts";
 import { DETAIL_LEVELS, VIEW_MODES, iconRadius, pageSize } from "./navigation.ts";
-import { DEFAULT_FONT, FONTS, textClasses, type FontId } from "./text.ts";
+import { DEFAULT_FONT, textClasses } from "./text.ts";
 import { MENU, isMenuPage, menuPath, parentPage, type MenuItem, type MenuPage } from "./menu-items.ts";
 import { readStatus, sameStatus, type Status } from "./status.ts";
 import { DEFAULT_THEME, THEMES, dynamicTheme, themeById, type ThemeId } from "./themes.ts";
@@ -285,7 +285,8 @@ export function createLauncherState(catalog: Catalog) {
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [launchingTitle, setLaunchingTitle] = createSignal<string | null>(null);
   const [themeId, setThemeId] = createSignal<ThemeId>(saved?.theme ?? DEFAULT_THEME);
-  const [font, setFont] = createSignal<FontId>(saved?.font ?? DEFAULT_FONT);
+  // One font since the Font setting was removed; read through a function as before.
+  const font = () => DEFAULT_FONT;
   const [detail, setDetail] = createSignal<DetailLevel>(saved?.detail ?? "normal");
   const [view, setViewMode] = createSignal<ViewMode>(saved?.view ?? "carousel");
   const [confirmMode, setConfirmMode] = createSignal<ConfirmMode>(saved?.confirm ?? "circle");
@@ -313,7 +314,6 @@ export function createLauncherState(catalog: Catalog) {
     saveSettings({
       language: language(),
       theme: themeId(),
-      font: font(),
       view: view(),
       detail: detail(),
       confirm: confirmMode(),
@@ -732,9 +732,6 @@ export function createLauncherState(catalog: Catalog) {
     switch (item) {
       case "theme":
         setThemeId((id) => cycle(THEMES.map((theme) => theme.id), id, delta));
-        break;
-      case "font":
-        setFont((id) => cycle(FONTS.map((entry) => entry.id), id, delta));
         break;
       case "view":
         setView(cycle(VIEW_MODES, view(), delta));

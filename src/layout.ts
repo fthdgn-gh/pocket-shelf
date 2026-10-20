@@ -4,6 +4,41 @@
 import type { DetailLevel } from "./types.ts";
 
 /**
+ * Home row geometry per detail level, after the PS5 home screen: the selected
+ * tile stands at `HOME_LEFT` at `tile` and the ones after it follow at
+ * `small`, `gap` apart, all aligned at the top. The less text sits under the
+ * row, the larger the tiles.
+ */
+export const HOME: Record<DetailLevel, { tile: number; small: number; gap: number }> = {
+  basic: { tile: 128, small: 84, gap: 12 },
+  normal: { tile: 96, small: 64, gap: 12 },
+  detailed: { tile: 88, small: 56, gap: 12 },
+};
+export const HOME_LEFT = 20;
+/** Tiles mounted after the selected one; about four and a half are on screen. */
+export const HOME_AFTER = 6;
+
+export interface HomeSlot {
+  /** Left edge (a tile scales from its top left corner). */
+  x: number;
+  scale: number;
+  opacity: number;
+}
+
+/** Where a home tile `offset` places after the selected one sits (negative: before it, off screen). */
+export function homeSlot(detail: DetailLevel, offset: number): HomeSlot {
+  const { tile, small, gap } = HOME[detail];
+  const scale = small / tile;
+  if (offset === 0) return { x: HOME_LEFT, scale: 1, opacity: 1 };
+  if (offset < 0) return { x: HOME_LEFT + offset * (small + gap), scale, opacity: 0 };
+  return {
+    x: HOME_LEFT + tile + gap + (offset - 1) * (small + gap),
+    scale,
+    opacity: offset > HOME_AFTER - 1 ? 0 : 0.8,
+  };
+}
+
+/**
  * Shelf (carousel) geometry per detail level. The less text sits under the
  * shelf, the larger the tiles: `tile` is a tile's side, `gap` the space
  * between tiles, and `row` the height of the row the tiles stand in (the
@@ -32,12 +67,13 @@ export const LIST_ROW_H = 30;
 export const LIST_GAP = 4;
 /** Rows that fit in the list viewport. */
 export const LIST_ROWS = 6;
-/** Rows that fit while the status bar takes the top of the screen. */
-export const LIST_ROWS_UNDER_STATUS = 5;
 
-/** List rows that fit, with or without the status bar. */
-export function listRows(statusBar: boolean): number {
-  return statusBar ? LIST_ROWS_UNDER_STATUS : LIST_ROWS;
+/**
+ * List rows that fit. The status items share the top bar with the
+ * categories, so the status bar setting no longer takes a row.
+ */
+export function listRows(_statusBar: boolean): number {
+  return LIST_ROWS;
 }
 
 export interface CarouselLayout {
@@ -115,12 +151,11 @@ export function cascadeSlot(detail: DetailLevel, offset: number): CascadeSlot {
   };
 }
 
-// Category header: a badge on each side (24 wide, 12 from the edge, 6 gap)
-// around a clipped strip of fixed-width tabs. A tab holds the category's name
-// and, after `TAB_COUNT_GAP`, its number of titles in a badge with
-// `TAB_COUNT_PAD` on each side of the digits.
-export const TAB_W = 112;
-export const TAB_COUNT_GAP = 4;
-export const TAB_COUNT_PAD = 4;
-export const TAB_GAP = 4;
-export const HEADER_SIDE = 42;
+// Top bar: 16 px of padding, L and R (24 wide, 6 gap each: `PILL_ROOM`)
+// around the category names, and the status items at the right in
+// `STATUS_W`. Names are at most `TAB_MAX` wide, `TAB_GAP` apart.
+export const BAR_SIDE = 16;
+export const PILL_ROOM = 24 + 6;
+export const STATUS_W = 128;
+export const TAB_MAX = 120;
+export const TAB_GAP = 16;

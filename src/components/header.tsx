@@ -1,87 +1,93 @@
-import { createEffect, For, Show, untrack } from "solid-js";
+import { createEffect, createMemo, For, Show, untrack } from "solid-js";
 import { Text, View, type NodeMirror } from "@pocketjs/framework/components";
 import { animate } from "@pocketjs/framework/animation";
 import { getOps, hostViewport } from "@pocketjs/framework/host";
 import { fitTitle } from "../catalog.ts";
 import { fontSlot } from "../text.ts";
 import { SCREEN_W } from "../../contracts/spec/spec.ts";
-import { HEADER_SIDE, TAB_COUNT_GAP, TAB_COUNT_PAD, TAB_GAP, TAB_W } from "../layout.ts";
+import { BAR_SIDE, PILL_ROOM, STATUS_W, TAB_GAP, TAB_MAX } from "../layout.ts";
 import type { LauncherState } from "../state.ts";
-import { alpha } from "../themes.ts";
 import { Icon } from "./icons.tsx";
+import { StatusItems } from "./status-bar.tsx";
 
 /**
- * Category header: the L and R buttons on the sides, the category names between
- * them, each followed by its number of titles. The strip slides so the current
- * category sits in the center, marked by a bar under its name.
+ * The top bar: the L and R buttons around the category names, the current
+ * one in bold over a short accent bar, then the status items at the right.
+ * The names slide so the current one sits in the middle between L and R, the
+ * same way at every press; a name that does not fit whole fades out.
  */
 export function Header(props: { state: LauncherState }) {
   const { state } = props;
   let stripRef: NodeMirror | undefined;
 
   const viewportW = untrack(() => hostViewport(getOps())?.w ?? SCREEN_W);
-  const stripX = () => {
+  // The names are measured in bold, so a name keeps its width when it becomes current.
+  const slot = () => fontSlot(state.font(), "bodyBold");
+  const labels = createMemo(() => state.categories().map((item) => fitTitle(item.label, TAB_MAX, slot())));
+  const widths = createMemo(() => labels().map((label) => getOps().measureText(label, slot())));
+  const lefts = createMemo(() => {
+    let x = 0;
+    return widths().map((width) => {
+      const left = x;
+      x += width + TAB_GAP;
+      return left;
+    });
+  });
+  // The room for the names: the bar less its padding, L and R, and the status items.
+  const room = () => viewportW - BAR_SIDE * 2 - PILL_ROOM * 2 - (state.statusBarOn() ? STATUS_W : 0);
+  const scroll = createMemo(() => {
     const index = Math.max(0, state.categories().findIndex((item) => item.id === state.categoryId()));
-    const center = (viewportW - HEADER_SIDE * 2) / 2;
-    return center - TAB_W / 2 - index * (TAB_W + TAB_GAP);
-  };
+    return (lefts()[index] ?? 0) + (widths()[index] ?? 0) / 2 - room() / 2;
+  });
 
   createEffect(() => {
-    const x = stripX();
+    const x = -scroll();
     if (stripRef) animate(stripRef, "translateX", x, { dur: 220, easing: "out" });
   });
+
+  const shown = (index: number) => {
+    const left = (lefts()[index] ?? 0) - scroll();
+    return left >= 0 && left + (widths()[index] ?? 0) <= room();
+  };
 
   const many = () => state.categories().length > 1;
 
   return (
-    <View class="flex-row items-center gap-[6] w-full h-[34] shrink-0 px-3">
+    <View class="flex-row items-center w-full h-[30] shrink-0 px-4 gap-[6]">
       <View class="w-[24] h-[16] shrink-0">
         <Show when={many()}>
           <Icon name="l" />
         </Show>
       </View>
-      <View class="flex-row grow h-[34] overflow-hidden justify-start items-center">
+      <View class="relative grow h-[30] overflow-hidden">
         <View
           ref={(el) => {
             stripRef = el;
           }}
-          class="flex-row items-center gap-1 shrink-0"
-          style={{ translateX: untrack(stripX) }}
+          class="absolute left-0 top-0 h-[30]"
+          style={{ translateX: -untrack(scroll) }}
         >
           <For each={state.categories()}>
-            {(item) => {
+            {(item, index) => {
               const active = () => state.categoryId() === item.id;
-              const count = () => String(state.categoryCount(item.id));
-              // The name gets what the count's badge leaves of the tab.
-              const labelW = () =>
-                TAB_W -
-                2 -
-                TAB_COUNT_GAP -
-                TAB_COUNT_PAD * 2 -
-                getOps().measureText(count(), fontSlot(state.font(), "smallBold"));
               return (
-                <View class="flex-col items-center justify-center gap-[3] w-[112] h-[30] shrink-0">
-                  <View class="flex-row items-center justify-center gap-1">
-                    <Text
-                      class={active() ? state.text().bodyBold : state.text().body}
-                      style={{ textColor: active() ? state.theme().text : state.theme().dim }}
-                    >
-                      {fitTitle(item.label, labelW(), fontSlot(state.font(), active() ? "bodyBold" : "body"))}
-                    </Text>
-                    <View
-                      class="flex-row items-center justify-center h-[14] px-1 rounded-[7] shrink-0"
-                      style={{ bgColor: active() ? alpha(state.theme().accent, "30") : state.theme().line }}
-                    >
-                      <Text
-                        class={state.text().smallBold}
-                        style={{ textColor: active() ? state.theme().accent : state.theme().dim }}
-                      >
-                        {count()}
-                      </Text>
-                    </View>
-                  </View>
+                // A class change, not a style change, so the fade is animated.
+                <View
+                  class={
+                    shown(index())
+                      ? "absolute top-0 h-[30] flex-col items-center justify-center gap-[3] opacity-100 transition-opacity duration-200"
+                      : "absolute top-0 h-[30] flex-col items-center justify-center gap-[3] opacity-0 transition-opacity duration-200"
+                  }
+                  style={{ insetL: lefts()[index()] ?? 0, width: widths()[index()] ?? 0 }}
+                >
+                  <Text
+                    class={active() ? state.text().bodyBold : state.text().body}
+                    style={{ textColor: active() ? state.theme().text : state.theme().dim }}
+                  >
+                    {labels()[index()] ?? ""}
+                  </Text>
                   <View
-                    class="w-[20] h-[2] rounded-[1]"
+                    class="w-[14] h-[2] rounded-[1]"
                     style={{ bgColor: active() ? state.theme().accent : "#00000000" }}
                   />
                 </View>
@@ -95,6 +101,11 @@ export function Header(props: { state: LauncherState }) {
           <Icon name="r" />
         </Show>
       </View>
+      <Show when={state.statusBarOn()}>
+        <View class="flex-row justify-end shrink-0" style={{ width: STATUS_W - 6 }}>
+          <StatusItems state={state} />
+        </View>
+      </Show>
     </View>
   );
 }

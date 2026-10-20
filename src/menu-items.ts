@@ -8,7 +8,6 @@ export type MenuPage = "main" | "appearance" | "status" | "library" | "updates";
 export type MenuItem =
   | MenuPage
   | "theme"
-  | "font"
   | "view"
   | "details"
   | "backdrop"
@@ -27,7 +26,7 @@ export type MenuItem =
   | "diagnostics";
 export const MENU: Record<MenuPage, readonly MenuItem[]> = {
   main: ["appearance", "library", "updates", "confirm", "language", "diagnostics"],
-  appearance: ["theme", "font", "view", "details", "backdrop", "iconBox", "status"],
+  appearance: ["theme", "view", "details", "backdrop", "iconBox", "status"],
   status: ["statusBar", "clock", "batteryPercent"],
   library: ["categories", "fetchArt", "cleanArt", "rescan"],
   updates: ["updateChannel", "checkUpdates"],

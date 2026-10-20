@@ -58,7 +58,6 @@ export const en = {
 
   // SELECT menu
   theme: "Theme",
-  font: "Font",
   view: "View",
   details: "Details",
   backdrop: "Backdrop",
@@ -74,7 +73,7 @@ export const en = {
   manage: "Manage",
   confirm: "Confirm",
   language: "Language",
-  views: { carousel: "Carousel", grid: "Grid", list: "List", cascade: "Cascade" },
+  views: { carousel: "Carousel", grid: "Grid", list: "List", cascade: "Cascade", home: "Home" },
   detailLevels: { basic: "Basic", normal: "Normal", detailed: "Detailed" },
   themes: {
     midnight: "Midnight",
