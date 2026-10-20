@@ -14,12 +14,19 @@ and its Vita host.
 - Version 0.1.0
 
 <p align="center">
-  <img src="./src/screenshots/carousel.png" width="720" alt="Pocket Shelf's carousel view on the PS Mobile tab: the selected title's icon enlarged in an accent frame, its name below, the tabs, status bar and button hints along the edges." />
+  <img src="./src/screenshots/home.png" width="720" alt="Pocket Shelf's Home view on the Games tab in the Dynamic theme: the selected title's icon large at the left in a white ring, the next titles smaller after it, the title's name, platform and category, and a Launch button, over the title's backdrop." />
 </p>
 
-| Cascade | Grid | List |
+| Carousel | Cascade | Grid |
 | --- | --- | --- |
-| ![The cascade view on the PSP tab: the selected title's icon large at the left in an accent frame, the next titles shrinking and darkening to the right, its name below.](./src/screenshots/cascade.png) | ![The grid view on the Games tab: two rows of five title icons with the selected one framed, its name and title id below.](./src/screenshots/grid.png) | ![The list view on the Homebrew tab: title rows with small icons, the selected row highlighted over its backdrop.](./src/screenshots/list.png) |
+| ![The carousel view: the selected title's icon enlarged in the middle of a row, its name below.](./src/screenshots/carousel.png) | ![The cascade view: the selected title's icon large at the left, the next titles shrinking and darkening to the right, its name below.](./src/screenshots/cascade.png) | ![The grid view: two rows of five title icons with the selected one in a white ring, its name below.](./src/screenshots/grid.png) |
+
+| List | RetroArch | Menu |
+| --- | --- | --- |
+| ![The list view: title rows with small icons, the selected row highlighted.](./src/screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist, its console in the detail line.](./src/screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, details, backdrop, icon box and status bar.](./src/screenshots/menu.png) |
+
+The screens are rendered by `bun run shelf:preview` with sample titles; the
+colored tiles with initials stand in for game icons.
 
 ## Features
 
@@ -151,15 +158,20 @@ Install the release build on hardware. The debug executable is 105 MB, and
 the system reads it from the memory card on every launch.
 
 `shelf:preview` runs the PocketJS engine compiled to WebAssembly. When
-`hosts/web/pocketjs.wasm` is missing, the first run builds it with
-`cargo build --target wasm32-unknown-unknown`, which needs Rust's WebAssembly
-target. Add it once:
+`hosts/web/pocketjs.wasm` is missing, the first run builds it from
+`engine/wasm` with `cargo build --release --target wasm32-unknown-unknown`.
+That crate pins no toolchain, so it builds with your default one (stable),
+which needs Rust's WebAssembly target. Add it once:
 
 ```sh
 rustup target add wasm32-unknown-unknown
 ```
 
-`bun run bootstrap` also installs it, along with the stable toolchain.
+Without it the build stops with "missing target? run: rustup target add
+wasm32-unknown-unknown". Delete `hosts/web/pocketjs.wasm` to rebuild it after
+the engine changes, for example after merging PocketJS: an existing file is
+used as it is. The Vita host builds with its own pinned nightly toolchain
+instead (see [`hosts/vita/README.md`](./hosts/vita/README.md)).
 
 The Adrenaline plugin is committed as `src/vita/psp/pocketshelf.prx`. To
 rebuild it after changing `src/psp-boot/`, run `bun run shelf:plugin`, which

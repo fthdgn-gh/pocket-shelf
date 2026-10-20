@@ -49,6 +49,12 @@ natively: `rustc --edition 2021 --test hosts/vita/src/accent.rs -o /tmp/t && /tm
 
 ## Seeing the app
 
+**README screenshots** (`src/screenshots/`) are preview renders since
+2026-10-21, at the user's request, captioned as such in the README: Home
+(shot `31-dynamic`), Carousel (`k1-carousel`), Cascade (`c1-cascade`), Grid
+(`05-grid`), List (`06-list`), RetroArch (`h5-home-retro`), Menu
+(`04-menu`). Render the shots and copy them over after a visible change.
+
 **Preview (`src/tools/preview.ts`).** Renders the real bundle in the wasm
 simulator and writes frames to `.pocket-build/validation/shelf-preview/`
 (ignored by git). It fakes the Vita host: a title table (including a
@@ -773,7 +779,11 @@ and **Check for updates**. The install works on hardware.
 (`sync/pocketjs-<version>`), then check: `shelf:check`, `shelf:test`,
 `retroarch-test.sh`, a release build (its `param.sfo` must still hold
 `POCKTSHLF`, "Pocket Shelf" and `APP_VER`), every preview shot against the
-renders from before the merge, and a start in Vita3K.
+renders from before the merge, and a start in Vita3K. **Delete
+`hosts/web/pocketjs.wasm` before the preview comparison:** the preview builds
+the engine only when the file is missing, so an old file renders the old
+engine. At the 0.15.0 merge the comparison first ran on the engine from
+2026-10-01; rebuilt, 200 of 203 shots still matched (the rest are timings).
 
 - **Conflicts to expect:** `pocket.json` (keep ours: the root manifest is
   Pocket Shelf, upstream's is the Hero demo), `README.md` (ours is Pocket
@@ -807,8 +817,7 @@ it). `cascadeSlot` gives each offset's place. **Transitions follow class
 changes only, not `style` props**, so the tiles are tweened with `animate`
 (240 ms) when the offset changes; a tile mounts in its place. One tile before
 the selection stays mounted and slides off the left. Preview shots `c1` to
-`c6`. Confirmed on hardware (2026-10-07, beta.2), screenshot
-`src/screenshots/cascade.png`. **The shade covers the whole square**, so on an
+`c6`. Confirmed on hardware (2026-10-07, beta.2). **The shade covers the whole square**, so on an
 icon with clear bars (PSP icons fitted into the square) it shows as a dark box
 above and below the picture.
 
