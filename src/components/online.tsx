@@ -3,6 +3,7 @@ import { Image, View } from "@pocketjs/framework/components";
 import { dataFolder } from "../art-files.ts";
 import { fitTitle } from "../catalog.ts";
 import { ASSET_KINDS, ONLINE_ROWS } from "../online.ts";
+import { SCRAPER_NAMES } from "../scrapers.ts";
 import type { LauncherState } from "../state.ts";
 import type { AssetKind } from "../steamgriddb.ts";
 import { fontSlot } from "../text.ts";
@@ -16,7 +17,7 @@ const PREVIEW: Record<AssetKind, string> = {
   backdrop: "w-[212] h-[120] shrink-0",
 };
 
-/** SteamGridDB: search a game, then step through its icons and backdrops. */
+/** SteamGridDB or libretro: search a game, then step through its icons and backdrops. */
 export function OnlineOverlay(props: { state: LauncherState }) {
   const { state } = props;
   const online = state.online;
@@ -45,7 +46,7 @@ export function OnlineOverlay(props: { state: LauncherState }) {
   };
 
   return (
-    <Drawer state={state} title="SteamGridDB" size="wide">
+    <Drawer state={state} title={SCRAPER_NAMES[state.editorScraper()]} size="wide">
       <Switch>
         <Match when={online.step() === "key"}>
           <OptionRow state={state} active label={t().enterKey} step="right" />

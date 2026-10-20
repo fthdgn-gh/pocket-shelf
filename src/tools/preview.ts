@@ -227,6 +227,24 @@ let pluginLocked = false;
 const NO_BUBBLE = new Set(["ULUS10041", "SCUS94163"]);
 let dataFolder: { write(path: string, data: string, mode: number): number } | undefined;
 
+/**
+ * The names the fake libretro server lists for every console: the fake
+ * RetroArch games' playlist labels as No-Intro writes them, so a plain label
+ * ("Pixel Quest") is matched by its words, and a few look-alikes.
+ */
+const LIBRETRO_NAMES = [
+  "Star Knight Saga (USA)",
+  "Star Knight Saga (Japan)",
+  "Pixel Quest (USA)",
+  "Pixel Quest (Europe)",
+  "Pixel Quest 2 (USA)",
+  "Turbo Hedgehog (World)",
+  "Slug Brigade",
+  "Maze Muncher",
+  "Monkey Escape (USA)",
+  "Crystal Quest (USA)",
+];
+
 /** The API key the preview "saved": the fake SteamGridDB accepts this one only. */
 const PREVIEW_KEY = "0123456789abcdef0123456789abcdef";
 
@@ -274,12 +292,22 @@ function installNet(ops: Record<string, unknown>): void {
     requests.set(next, { polls: 0, status, text, size: text.length });
     return next++;
   };
-  ops.__netSave = (_url: string, path: string): number => {
+  ops.__netSave = (url: string, path: string): number => {
+    // libretro's thumbnail server: a console's box art listing becomes its
+    // names, as the host keeps them. Every console has the names of the fake
+    // RetroArch games in No-Intro's style, and a few more.
+    if (path.startsWith("libretro/")) {
+      dataFolder?.write(path, JSON.stringify(`${LIBRETRO_NAMES.join("\n")}\n`), 0);
+      requests.set(next, { polls: 0, status: 200, text: "", size: 900 * 1024 });
+      return next++;
+    }
     // The download lands in the data folder, so the pickers list it.
     dataFolder?.write(path, JSON.stringify("PNG"), 0);
-    requests.set(next, { polls: 0, status: 200, text: "", size: 480 * 1024 });
+    requests.set(next, { polls: 0, status: url.includes("/Named_Titles/") ? 404 : 200, text: "", size: 480 * 1024 });
     return next++;
   };
+  // A box art saved fitted into a square icon, as the host does.
+  ops.__netSaveIcon = (url: string, path: string): number => (ops.__netSave as (url: string, path: string) => number)(url, path);
   ops.__netState = (id: number): string => {
     const request = requests.get(id);
     if (!request) return "error unknown request";
@@ -654,39 +682,39 @@ const SHOTS: Shot[] = [
   },
   // SELECT, down to "Fetch artwork": the titles to fetch for, the run, its end.
   { name: "49-scrape-setup", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE] },
-  { name: "50-scrape-all", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE, BTN.LEFT, BTN.DOWN] },
+  { name: "50-scrape-all", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE, BTN.LEFT, ...tap(BTN.DOWN, 2)] },
   // Start with no API key: the drawer asks for one, and the keyboard says
   // what it is typing.
-  { name: "50b-scrape-no-key", steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE] },
-  { name: "50c-scrape-key-keyboard", steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, BTN.CIRCLE] },
+  { name: "50b-scrape-no-key", steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE] },
+  { name: "50c-scrape-key-keyboard", steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.CIRCLE] },
   {
     name: "51-scrape-running",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 90]],
   },
   {
     name: "52-scrape-done",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900]],
   },
   {
     name: "53-scrape-stopped",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 90], BTN.CROSS],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 90], BTN.CROSS],
   },
   // "All" after a run: every title is fetched for once more.
   {
     name: "56-scrape-replace",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, BTN.DOWN, BTN.RIGHT],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.RIGHT],
   },
   // After a run every title of the category has a file: nothing is left to fetch.
   {
     name: "54-scrape-again",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE],
   },
-  { name: "55-scrape-shelf", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, [0, 40]] },
+  { name: "55-scrape-shelf", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, [0, 40]] },
   // A press past an end of the list continues at the other end, in each view.
   { name: "57-wrap-shelf", steps: [BTN.LEFT, [0, 30]] },
   { name: "58-wrap-shelf-back", steps: [BTN.LEFT, [0, 30], BTN.RIGHT, [0, 30]] },
@@ -707,6 +735,25 @@ const SHOTS: Shot[] = [
   },
   { name: "c5-cascade-long", steps: [...menuTo("view"), ...viewTo("cascade"), BTN.SELECT, ...tabTo("homebrew"), [BTN.RIGHT, 300], [0, 30]] },
   { name: "c6-cascade-wrap", steps: [...menuTo("view"), ...viewTo("cascade"), BTN.SELECT, BTN.LEFT, [0, 30]] },
+  // Fetch artwork's source: Auto, libretro or SteamGridDB.
+  { name: "s1-scrape-source", key: true, steps: [...menuTo("fetchArt"), BTN.CIRCLE, BTN.DOWN] },
+  // From the SNES tab, Auto fetches RetroArch games from libretro, with no key.
+  { name: "s2-scrape-libretro-running", steps: [...tabToConsole(0), ...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]] },
+  { name: "s3-scrape-libretro-done", steps: [...tabToConsole(0), ...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 600]] },
+  { name: "s4-scrape-libretro-shelf", steps: [...tabToConsole(0), ...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 600], ...tap(BTN.CROSS, 3), [0, 40]] },
+  // The editor of a RetroArch game: "Find artwork" on libretro, switchable to SteamGridDB.
+  { name: "s5-editor-libretro", steps: [...tabToConsole(0), BTN.TRIANGLE, ...tap(BTN.DOWN, 5)] },
+  { name: "s6-online-libretro-names", steps: [...tabToConsole(0), BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE, [0, 30]] },
+  { name: "s7-online-libretro-icon", steps: [...tabToConsole(0), BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40]] },
+  { name: "s8-online-libretro-title-404", steps: [...tabToConsole(0), BTN.TRIANGLE, ...tap(BTN.DOWN, 5), BTN.CIRCLE, [0, 30], BTN.CIRCLE, [0, 40], BTN.RIGHT, [0, 40]] },
+  // The scraper is a setting: Auto, SteamGridDB, libretro.
+  { name: "s9-editor-scraper-libretro", steps: [BTN.TRIANGLE, ...tap(BTN.DOWN, 5), ...tap(BTN.RIGHT, 2)] },
+  // libretro for a PSX game: the PlayStation folder's names.
+  { name: "s10-online-libretro-psx", steps: [...tabTo(PSX_ID), BTN.TRIANGLE, ...tap(BTN.DOWN, 5), ...tap(BTN.RIGHT, 2), BTN.CIRCLE, [0, 30]] },
+  // libretro for a Vita game: the server has no folder for it.
+  { name: "s11-online-libretro-vita", steps: [BTN.TRIANGLE, ...tap(BTN.DOWN, 5), ...tap(BTN.RIGHT, 2), BTN.CIRCLE, [0, 30]] },
+  // Fetch artwork opens on the choice made in the editor.
+  { name: "s12-scrape-source-kept", steps: [BTN.TRIANGLE, ...tap(BTN.DOWN, 5), ...tap(BTN.RIGHT, 2), BTN.CROSS, ...menuTo("fetchArt"), BTN.CIRCLE, BTN.DOWN] },
   // Carousel, the default view until 2026-10-21.
   { name: "k1-carousel", steps: [...menuTo("view"), ...viewTo("carousel"), BTN.SELECT, ...tap(BTN.RIGHT, 3)] },
   {
@@ -739,18 +786,18 @@ const SHOTS: Shot[] = [
   {
     name: "63-picker-title",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]],
   },
   // Triangle: every file of the folder.
   {
     name: "64-picker-all",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), [0, 40]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, BTN.TRIANGLE, ...tap(BTN.DOWN, 2), [0, 40]],
   },
   {
     name: "65-picker-backdrop",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 40]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], ...tap(BTN.CROSS, 3), BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 4), BTN.CIRCLE, [0, 40]],
   },
   // The fixed rows preview too: "Default" is the title's own icon.
   { name: "66-picker-default", steps: [BTN.RIGHT, BTN.TRIANGLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 40]] },
@@ -790,24 +837,24 @@ const SHOTS: Shot[] = [
   {
     name: "67-clean-unused",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE],
   },
   // "All", then "Delete" once: the question before the files go.
   {
     name: "68-clean-ask",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, BTN.CIRCLE],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, BTN.CIRCLE],
   },
   {
     name: "69-clean-done",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2)],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2)],
   },
   // The titles are back on their own icons.
   {
     name: "70-clean-shelf",
     key: true,
-    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 2), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2), ...tap(BTN.CROSS, 3), BTN.RIGHT, [0, 40]],
+    steps: [...menuTo("fetchArt"), BTN.CIRCLE, ...tap(BTN.DOWN, 3), BTN.CIRCLE, [0, 900], BTN.CROSS, BTN.DOWN, BTN.CIRCLE, BTN.RIGHT, BTN.DOWN, ...tap(BTN.CIRCLE, 2), ...tap(BTN.CROSS, 3), BTN.RIGHT, [0, 40]],
   },
   // Rescan titles: before, and after a scan that finds one more title.
   { name: "71-rescan", steps: [...menuTo("rescan"), BTN.CIRCLE] },

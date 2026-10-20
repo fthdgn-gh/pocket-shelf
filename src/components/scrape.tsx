@@ -4,7 +4,8 @@ import { dataFolder } from "../art-files.ts";
 import { fitTitle } from "../catalog.ts";
 import { fill } from "../i18n.ts";
 import type { LauncherState } from "../state.ts";
-import { START_ROW } from "../scrape.ts";
+import { MODE_ROW, SOURCE_ROW, START_ROW } from "../scrape.ts";
+import { SCRAPER_NAMES, type ScraperId } from "../scrapers.ts";
 import { fontSlot } from "../text.ts";
 import { hints, Prompt } from "./icons.tsx";
 import { Drawer, Note, OptionRow, Spacer } from "./panel.tsx";
@@ -15,6 +16,13 @@ export function ScrapeOverlay(props: { state: LauncherState }) {
   const scrape = state.scrape;
   const t = state.t;
   const fit = (text: string, width: number) => fitTitle(text, width, fontSlot(state.font(), "bodyBold"));
+  // What the setup's choices do: per source, missing pictures or all of them.
+  const help = () => {
+    const all = scrape.replace();
+    if (scrape.source() === "libretro") return all ? t().scrapeHelpLibretroAll : t().scrapeHelpLibretro;
+    if (scrape.source() === "auto") return all ? t().scrapeHelpAutoAll : t().scrapeHelpAuto;
+    return all ? t().scrapeHelpAll : t().scrapeHelp;
+  };
   // What the run has found so far, under the title it is on.
   const Counts = () => (
     <>
@@ -36,7 +44,14 @@ export function ScrapeOverlay(props: { state: LauncherState }) {
           />
           <OptionRow
             state={state}
-            active={scrape.row() === 1}
+            active={scrape.row() === SOURCE_ROW}
+            label={t().scrapeSource}
+            value={scrape.source() === "auto" ? t().sourceAuto : SCRAPER_NAMES[scrape.source() as ScraperId]}
+            step="both"
+          />
+          <OptionRow
+            state={state}
+            active={scrape.row() === MODE_ROW}
             label={t().scrapeMode}
             value={scrape.replace() ? t().everything : t().onlyMissing}
             step="both"
@@ -49,7 +64,7 @@ export function ScrapeOverlay(props: { state: LauncherState }) {
             step="right"
           />
           <Spacer />
-          <Note state={state}>{scrape.status() || (scrape.replace() ? t().scrapeHelpAll : t().scrapeHelp)}</Note>
+          <Note state={state}>{scrape.status() || help()}</Note>
           <Prompt
             state={state}
             parts={hints(

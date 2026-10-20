@@ -7,6 +7,7 @@ import { getOps } from "@pocketjs/framework/host";
 interface NetHost {
   __netGet?(url: string, authorization: string): number;
   __netSave?(url: string, path: string): number;
+  __netSaveIcon?(url: string, path: string): number;
   __netState?(id: number): string;
   __netText?(id: number): string;
   __netClose?(id: number): void;
@@ -57,7 +58,8 @@ export function getText(url: string, authorization: string, done: (result: NetRe
 
 /**
  * Download a PNG to `path` under the data folder (`art/...` or
- * `backdrops/...`). A status other than 200 writes no file.
+ * `backdrops/...`), or a libretro thumbnail listing's names to
+ * `libretro/<console>.txt`. A status other than 200 writes no file.
  */
 export function saveFile(
   url: string,
@@ -85,4 +87,18 @@ export function pumpNet(): void {
     host().__netClose?.(entry.id);
     entry.done(result);
   }
+}
+
+/**
+ * Download a PNG and save it fitted whole into a 128 px square, to
+ * `art/<name>.png` under the data folder: a RetroArch box art, 512 px wide and
+ * hundreds of kilobytes, as a tile's icon of a few.
+ */
+export function saveIcon(
+  url: string,
+  path: string,
+  done: (result: NetResult) => void,
+  progress?: (received: number, total: number) => void,
+): () => void {
+  return track(host().__netSaveIcon?.(url, path), done, progress);
 }
