@@ -201,6 +201,12 @@ git push origin <tag>
 The nightly schedule is off until the repository variable `SHELF_NIGHTLY` is
 set to `true` (Settings ▸ Secrets and variables ▸ Actions ▸ Variables).
 
+## Contributors
+
+- [Fatih Doğan](https://github.com/fthdgn-gh): author and maintainer.
+- [Claude](https://github.com/claude) ([Claude Code](https://claude.com/claude-code)),
+  Anthropic's AI model: co-author of the code and documentation.
+
 ## Credits
 
 - [PocketJS](https://github.com/pocket-stack/pocketjs) by Yifeng "Evan" Wang
