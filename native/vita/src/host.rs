@@ -231,13 +231,13 @@ impl Host for VitaHost {
         crate::status::read()
     }
 
-    fn scan(&mut self) {
+    fn scan(&mut self, force: bool) {
         let sender = self.answer_sender.clone();
         spawn("shelf-scan", move || unsafe {
             let started = now_us();
             // The saved list when there is one; else a full scan, which
             // saves it (installed.rs).
-            if installed::titles_ready() {
+            if !force && installed::titles_ready() {
                 log_line("titles: read the saved list");
             } else if installed::scan_start() {
                 loop {

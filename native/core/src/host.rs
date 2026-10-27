@@ -133,7 +133,9 @@ pub trait Host {
     fn list(&mut self, dir: &str) -> Vec<String>;
     fn status(&mut self) -> Status;
     /// Start listing the installed titles; answered with [`Event::Titles`].
-    fn scan(&mut self);
+    /// The saved list is read when there is one, unless `force` (Rescan
+    /// titles), which scans and reports [`Event::Scan`] meanwhile.
+    fn scan(&mut self, force: bool);
     /// Ask for a picture; answered with [`Event::Picture`].
     fn request(&mut self, key: PictureKey);
     /// Take back a request not yet started (an icon scrolled past); it may

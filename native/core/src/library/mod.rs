@@ -29,6 +29,15 @@ use overrides::{OverrideStore, TitleOverride, USE_ICON};
 
 use crate::host::{Host, TitleInfo};
 
+/// PNG files in a folder of the data folder (any case, not hidden), sorted
+/// by lowercase name (`listPng` in `art-files.ts`).
+pub fn list_png(host: &mut dyn Host, dir: &str) -> Vec<String> {
+    let mut names: Vec<String> =
+        host.list(dir).into_iter().filter(|name| !name.starts_with('.') && name.to_lowercase().ends_with(".png")).collect();
+    names.sort_by_key(|n| n.to_lowercase());
+    names
+}
+
 /// PNG files in `art/` (any case, not hidden), by lowercase name without
 /// `.png`.
 fn art_index(host: &mut dyn Host) -> FxHashMap<String, String> {
@@ -72,6 +81,8 @@ pub struct Library {
     games: Vec<Game>,
     /// Indexes into `games` per category id.
     by_category: FxHashMap<Arc<str>, Vec<usize>>,
+    /// Index of each title by id.
+    index: FxHashMap<Arc<str>, usize>,
 }
 
 impl Library {
@@ -92,6 +103,7 @@ impl Library {
             categories: Vec::new(),
             games: Vec::new(),
             by_category: FxHashMap::default(),
+            index: FxHashMap::default(),
         };
         library.rebuild();
         library
@@ -120,54 +132,97 @@ impl Library {
             smart_categories().into_iter().chain(builtin_categories()).chain(retro).chain(self.config.custom.iter().cloned()).collect();
         self.categories = order_categories(&items, &self.config.order);
 
-        // `<title id>.png`, then `<title>.png`, any case. With no art files,
-        // nothing is looked up.
         let mut key = String::new();
-        let art_files = &self.art;
-        let mut find_art = |names: [&str; 3]| {
-            if art_files.is_empty() {
-                return None;
-            }
-            names.iter().find_map(|name| {
-                lowercase_into(name, &mut key);
-                art_files.get(&key).cloned()
-            })
-        };
-        self.games = self
-            .base
-            .iter()
-            .map(|game| {
-                let change = self.overrides.titles.get(&*game.id);
-                let title: Arc<str> = change.and_then(|c| c.title.as_deref()).map_or_else(|| game.title.clone(), Arc::from);
-                let chosen = change.and_then(|c| c.art.clone());
-                let force_icon = chosen.as_deref() == Some(USE_ICON);
-                let art = if force_icon { None } else { chosen.clone().or_else(|| find_art([&game.id, &game.title, &title])) };
-                let Some(change) = change else { return Game { art_auto: art.is_some(), art, ..game.clone() } };
-                // A category that was deleted falls back to the title's own.
-                let category = change
-                    .category
-                    .as_deref()
-                    .filter(|wanted| self.categories.iter().any(|c| c.id == *wanted))
-                    .map_or_else(|| game.category.clone(), Arc::from);
-                Game {
-                    title,
-                    category,
-                    favorite: change.favorite,
-                    art_auto: !force_icon && chosen.is_none() && art.is_some(),
-                    art,
-                    art_icon: force_icon,
-                    backdrop: change.backdrop.clone(),
-                    ..game.clone()
-                }
-            })
-            .collect();
-
+        self.games = self.base.iter().map(|game| self.with_changes(game, &mut key)).collect();
+        self.index.clear();
         self.by_category.clear();
         for (index, game) in self.games.iter().enumerate() {
+            self.index.insert(game.id.clone(), index);
             self.by_category.entry(game.category.clone()).or_default().push(index);
         }
     }
 
+    /// A host title with the user's changes and its art file. `key` is a
+    /// buffer for the art lookups.
+    fn with_changes(&self, game: &Game, key: &mut String) -> Game {
+        // `<title id>.png`, then `<title>.png`, any case. With no art files,
+        // nothing is looked up.
+        let mut find_art = |names: [&str; 3]| {
+            if self.art.is_empty() {
+                return None;
+            }
+            names.iter().find_map(|name| {
+                lowercase_into(name, key);
+                self.art.get(key.as_str()).cloned()
+            })
+        };
+        let change = self.overrides.titles.get(&*game.id);
+        let title: Arc<str> = change.and_then(|c| c.title.as_deref()).map_or_else(|| game.title.clone(), Arc::from);
+        let chosen = change.and_then(|c| c.art.clone());
+        let force_icon = chosen.as_deref() == Some(USE_ICON);
+        let art = if force_icon { None } else { chosen.clone().or_else(|| find_art([&game.id, &game.title, &title])) };
+        let Some(change) = change else { return Game { art_auto: art.is_some(), art, ..game.clone() } };
+        // A category that was deleted falls back to the title's own.
+        let category = change
+            .category
+            .as_deref()
+            .filter(|wanted| self.categories.iter().any(|c| c.id == *wanted))
+            .map_or_else(|| game.category.clone(), Arc::from);
+        Game {
+            title,
+            category,
+            favorite: change.favorite,
+            art_auto: !force_icon && chosen.is_none() && art.is_some(),
+            art,
+            art_icon: force_icon,
+            backdrop: change.backdrop.clone(),
+            ..game.clone()
+        }
+    }
+
+    /// Change one title's changes and recompute that title alone: a full
+    /// rebuild took 38 ms on hardware with 5,905 titles.
+    pub fn patch(&mut self, id: &str, edit: impl FnOnce(&mut TitleOverride)) {
+        let mut change = self.overrides.titles.get(id).cloned().unwrap_or_default();
+        edit(&mut change);
+        self.overrides.set(id, change);
+        let Some(&index) = self.index.get(id) else { return };
+        let mut key = String::new();
+        let game = self.with_changes(&self.base[index], &mut key);
+        let old = std::mem::replace(&mut self.games[index], game);
+        if old.category != self.games[index].category {
+            if let Some(list) = self.by_category.get_mut(&old.category) {
+                list.retain(|&i| i != index);
+            }
+            // Kept in the host's order.
+            let list = self.by_category.entry(self.games[index].category.clone()).or_default();
+            let at = list.partition_point(|&i| i < index);
+            list.insert(at, index);
+        }
+    }
+
+    /// The title as the host listed it, before the user's changes.
+    pub fn base_game(&self, id: &str) -> Option<&Game> {
+        self.index.get(id).map(|&i| &self.base[i])
+    }
+
+    /// The title with the user's changes.
+    pub fn game(&self, id: &str) -> Option<&Game> {
+        self.index.get(id).map(|&i| &self.games[i])
+    }
+
+    /// Read `art/` again (the art picker, the editor); titles are recomputed
+    /// only when the files changed. Returns the PNG names, sorted.
+    pub fn reload_art(&mut self, host: &mut dyn Host) -> Vec<String> {
+        let art = art_index(host);
+        let mut names: Vec<String> = art.values().cloned().collect();
+        names.sort_by_key(|n| n.to_lowercase());
+        if art != self.art {
+            self.art = art;
+            self.rebuild();
+        }
+        names
+    }
     /// The host's titles without the user's changes.
     pub fn base(&self) -> &[Game] {
         &self.base
@@ -267,7 +322,7 @@ pub(crate) mod testing {
         fn status(&mut self) -> Status {
             Status::default()
         }
-        fn scan(&mut self) {}
+        fn scan(&mut self, _: bool) {}
         fn request(&mut self, _: PictureKey) {}
         fn poll(&mut self, _: &mut Vec<Event>) {}
         fn log(&mut self, _: &str) {}
@@ -348,6 +403,26 @@ mod tests {
         assert_eq!(game("PCSB00245").art.as_deref(), Some("Neon Drift.png"));
         assert_eq!(game("VITASHELL").art, None);
         assert!(game("VITASHELL").art_icon);
+    }
+
+    #[test]
+    fn a_patch_gives_what_a_full_rebuild_gives() {
+        let mut library = library(&[("categories.json", r#"{"custom":[{"id":"mine","label":"Mine"}],"order":[],"hidden":[]}"#)]);
+        library.patch("PCSB00245", |c| c.category = Some("mine".into()));
+        library.patch("VITASHELL", |c| {
+            c.title = Some("Shell".into());
+            c.favorite = true;
+        });
+        library.patch("PCSA00069", |c| c.category = Some("homebrew".into()));
+        library.patch("PCSA00069", |c| c.category = None);
+        let patched: Vec<Game> = library.games().to_vec();
+        let tabs: Vec<(String, Vec<usize>)> = library.all_categories().iter().map(|c| (c.id.clone(), library.titles_of(&c.id))).collect();
+        library.rebuild();
+        assert_eq!(library.games(), &patched[..]);
+        for (id, titles) in tabs {
+            assert_eq!(library.titles_of(&id), titles, "{id}");
+        }
+        assert_eq!(library.titles_of("mine").len(), 1);
     }
 
     #[test]

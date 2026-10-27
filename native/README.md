@@ -125,14 +125,21 @@ back. The VPK carries `psp/pocketshelf.prx`, which an Adrenaline launch
 copies to the memory stick.
 
 **The SELECT menu** (`menu.rs`, `components/menu.tsx`) holds every setting
-on the current app's pages and saves each change. Its Categories, Rescan
-and Diagnostics rows open their panels later in phase 4; Fetch artwork,
-Clean up artwork and Check for updates in phase 5. **Search** (`keyboard.rs`):
+on the current app's pages and saves each change; Fetch artwork, Clean up
+artwork and Check for updates arrive in phase 5. **The title editor**
+(TRIANGLE, `editor.rs`): favorite, category, title (keyboard), box art and
+backdrop pickers with a preview and the decode check, the scraper choice,
+reset (the favorite stays). **The category manager** (Library ▸
+Categories): new, rename, delete (pressed twice; titles go back to their
+own category), hide and show, reorder with L and R. **Rescan titles** scans
+again with its progress in the drawer and reads the per-title files again;
+**Diagnostics** lists the frame timing since it opened and this start's
+marks (`tools.rs`). A change to one title recomputes that title alone
+(`Library::patch`). **Search** (`keyboard.rs`):
 SQUARE opens the keyboard (three pages, the accents page led by the
 language's own letters), Done shows the results in a Search tab in front,
 the other face button on that tab closes it and returns to the title
-selected before. Until the editor takes the button, TRIANGLE adds or
-removes 5,000 test titles.
+selected before.
 
 **Languages**: `locales.rs` is generated from the current app's
 `src/locales/*.ts` (`bun run next:locales`, `tools/locales.ts`), one
@@ -148,7 +155,8 @@ Desktop shots: `02`–`06` Home (views and details are set through the menu), `1
 List, `40`–`42` Cascade, `50`–`53` tabs, `60`–`63` themes, `70`–`72` the scan
 page, `80`–`82` saved data, `90` test titles, `91` launching, `92`–`93` the
 Adrenaline drawer, `100`–`105` the SELECT menu, `110`–`115` the keyboard and
-search, `64`–`66` Turkish and German.
+search, `120`–`134` the editor, pickers and category manager, `140`–`150`
+rescan and Diagnostics, `64`–`66` Turkish and German.
 
 ## Timing
 

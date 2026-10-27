@@ -4,11 +4,13 @@
 
 pub mod art;
 pub mod chrome;
+mod editor;
 pub mod keyboard;
 pub mod layout;
 pub mod menu;
 pub mod navigation;
 pub mod panel;
+mod tools;
 pub mod tween;
 mod views;
 
@@ -26,6 +28,8 @@ use crate::library::catalog::{Game, TINT_COLORS};
 use crate::library::categories::{cycle_category, Category, RECENT_ID, SEARCH_ID};
 use crate::library::recent::{push_recent, RECENT_FILE, RECENT_MAX};
 use crate::library::settings::SETTINGS_FILE;
+#[cfg(test)]
+use crate::library::categories::CATEGORIES_FILE;
 use crate::library::overrides::NO_BACKDROP;
 use crate::library::settings::{ConfirmMode, DetailLevel, Settings, ViewMode};
 use crate::library::Library;
@@ -153,8 +157,6 @@ pub struct Shelf {
     frame: u32,
     now: u64,
     launching: Option<String>,
-    /// Test titles added (TRIANGLE, until the editor takes the button).
-    stress: bool,
     /// The backdrop is to be cleared at the next draw.
     clear_pending: bool,
     /// The Adrenaline drawer: the plugin's state, and whether turning it on
@@ -168,6 +170,18 @@ pub struct Shelf {
     found: Option<(String, usize)>,
     /// Where the selection was when the search opened; closing it goes back.
     before_search: Option<(String, Option<String>)>,
+    editor: Option<editor::Editor>,
+    picker: Option<editor::Picker>,
+    categories: Option<editor::Categories>,
+    /// A picker confirm that waited for its file to decode, now due.
+    pending_picker_confirm: bool,
+    rescan: Option<tools::Rescan>,
+    /// Diagnostics' highlighted row while open, and its lines (the app's
+    /// frame timing and startup marks, filled while it is open).
+    diagnostics: Option<usize>,
+    pub diagnostics_lines: Vec<(String, String)>,
+    /// Diagnostics opened: the app resets its frame timing.
+    pub reset_stats: bool,
 }
 
 impl Shelf {
@@ -206,7 +220,6 @@ impl Shelf {
             frame: 0,
             now: 0,
             launching: None,
-            stress: false,
             clear_pending: false,
             adrenaline: None,
             drawer: panel::slide(),
@@ -214,6 +227,14 @@ impl Shelf {
             keyboard: None,
             found: None,
             before_search: None,
+            editor: None,
+            picker: None,
+            categories: None,
+            pending_picker_confirm: false,
+            rescan: None,
+            diagnostics: None,
+            diagnostics_lines: Vec::new(),
+            reset_stats: false,
         };
         shelf.tab = shelf.settings.category.clone().unwrap_or_default();
         shelf.refresh();
@@ -266,6 +287,11 @@ impl Shelf {
 
     /// The host's answer for a picture: an icon or box art, or a backdrop.
     pub fn picture(&mut self, gfx: &mut Gfx, key: PictureKey, picture: Option<Picture>) {
+        // The picker's preview: a backdrop is its own; an icon or box art
+        // also goes to the art cache below.
+        if self.picker_picture(gfx, &key, &picture) {
+            return;
+        }
         if matches!(key, PictureKey::Icon(_) | PictureKey::Art(_)) {
             self.art.answer(gfx, &key, picture);
             return;
@@ -304,7 +330,7 @@ impl Shelf {
 
 /// The value `delta` steps from `current` in `all`, wrapping (`cycle` in
 /// `state.ts`).
-fn cycle_by<T: Copy + PartialEq>(all: &[T], current: T, delta: i32) -> T {
+pub(super) fn cycle_by<T: Copy + PartialEq>(all: &[T], current: T, delta: i32) -> T {
     let at = all.iter().position(|&v| v == current).unwrap_or(0) as i32;
     all[(at + delta).rem_euclid(all.len() as i32) as usize]
 }
@@ -358,10 +384,30 @@ impl Shelf {
                 done = true;
             }
             if done {
-                self.commit_keyboard();
+                self.commit_keyboard(host);
             } else if pressed & cancel != 0 {
                 self.keyboard = None;
             }
+        } else if self.rescan.is_some() {
+            self.rescan_input(host, pressed & confirm != 0, pressed & cancel != 0);
+        } else if self.diagnostics.is_some() {
+            self.diagnostics_input(step, pressed & cancel != 0);
+        } else if self.picker.is_some() {
+            self.picker_input(host, step, pressed & confirm != 0, pressed & cancel != 0, pressed & TRIANGLE != 0);
+        } else if self.editor.is_some() {
+            self.editor_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
+        } else if self.categories.is_some() {
+            let shoulder = if pressed & L != 0 { -1 } else if pressed & R != 0 { 1 } else { 0 };
+            self.categories_input(
+                host,
+                step,
+                pressed & confirm != 0,
+                pressed & cancel != 0,
+                pressed & TRIANGLE != 0,
+                pressed & SQUARE != 0,
+                pressed & START != 0,
+                shoulder,
+            );
         } else if self.adrenaline.is_some() {
             // The Adrenaline drawer takes the buttons while it is open.
             if pressed & confirm != 0 {
@@ -418,9 +464,8 @@ impl Shelf {
             if pressed & SQUARE != 0 {
                 self.open_search();
             }
-            // Until the title editor takes the button: 5,000 test titles.
             if pressed & TRIANGLE != 0 {
-                self.toggle_stress(host);
+                self.open_editor(host);
             }
         }
 
@@ -439,6 +484,10 @@ impl Shelf {
                 self.ask_backdrop(host);
             }
         }
+        if std::mem::take(&mut self.pending_picker_confirm) {
+            self.picker_confirm(host);
+        }
+        self.picker_frame(host);
         self.request_icons(host);
         self.blend_dynamic();
         request
@@ -452,14 +501,15 @@ impl Shelf {
     }
 
     /// The keyboard's Done: the text goes to what it was typed for.
-    fn commit_keyboard(&mut self) {
+    fn commit_keyboard(&mut self, host: &mut dyn Host) {
         let Some(keyboard) = self.keyboard.take() else { return };
         let text = keyboard.text.trim().to_string();
-        match keyboard.target {
+        match &keyboard.target {
             keyboard::Target::Library => self.apply_search(&text),
-            // The editor, the category manager (this phase) and SteamGridDB
-            // (phase 5) take theirs when they arrive.
-            _ => {}
+            keyboard::Target::Title => self.commit_title(host, &text),
+            keyboard::Target::NewCategory | keyboard::Target::Category(_) => self.commit_category(host, &keyboard.target, &text),
+            // SteamGridDB's search and key arrive in phase 5.
+            keyboard::Target::Search | keyboard::Target::ApiKey => {}
         }
     }
 
@@ -579,8 +629,20 @@ impl Shelf {
                 self.refresh();
                 self.tab = tab;
             }
-            // Panels of phase 4 and 5, not yet in this build.
-            Item::Categories | Item::FetchArt | Item::CleanArt | Item::Rescan | Item::CheckUpdates | Item::Diagnostics => return,
+            Item::Categories => {
+                self.open_categories();
+                return;
+            }
+            Item::Rescan => {
+                self.open_rescan();
+                return;
+            }
+            Item::Diagnostics => {
+                self.open_diagnostics();
+                return;
+            }
+            // Fetch artwork, Clean up artwork and updates arrive in phase 5.
+            Item::FetchArt | Item::CleanArt | Item::CheckUpdates => return,
         }
         if self.settings.status_bar {
             self.status = host.status();
@@ -603,23 +665,6 @@ impl Shelf {
             self.selected = 0;
             self.refresh();
         }
-    }
-
-    fn toggle_stress(&mut self, host: &mut dyn Host) {
-        use crate::host::TitleInfo;
-        use crate::library::catalog::load_catalog;
-        self.stress = !self.stress;
-        let started = host.time_us();
-        let games: Vec<Game> = if self.stress {
-            let tests: Vec<TitleInfo> = (1..=5000)
-                .map(|n| TitleInfo { id: format!("TEST{n:05}"), title: format!("Test Title {n}"), platform: "vita".into(), adrenaline: false, console: None })
-                .collect();
-            self.library.base().iter().cloned().chain(load_catalog(&tests)).collect()
-        } else {
-            self.library.base().iter().filter(|g| !g.id.starts_with("TEST")).cloned().collect()
-        };
-        self.set_titles(games, false);
-        host.log(&format!("library: {} titles in {} us", self.library.games().len(), host.time_us() - started));
     }
 
     /// Save the settings with the current selection (`persist` in
@@ -835,8 +880,24 @@ impl Shelf {
         if let Some((state, failed)) = self.adrenaline {
             self.draw_adrenaline(gfx, state, failed);
         }
+        // Panels in the current app's order, the later on top.
         if self.menu.open {
             self.draw_menu(gfx);
+        }
+        if self.categories.is_some() {
+            self.draw_categories(gfx);
+        }
+        if self.editor.is_some() {
+            self.draw_editor(gfx);
+        }
+        if self.rescan.is_some() {
+            self.draw_rescan(gfx);
+        }
+        if self.diagnostics.is_some() {
+            self.draw_diagnostics(gfx);
+        }
+        if self.picker.is_some() {
+            self.draw_picker(gfx);
         }
         if self.keyboard.is_some() {
             self.draw_keyboard(gfx);
@@ -1202,7 +1263,7 @@ mod tests {
         fn status(&mut self) -> Status {
             Status::default()
         }
-        fn scan(&mut self) {}
+        fn scan(&mut self, _: bool) {}
         fn request(&mut self, key: PictureKey) {
             if matches!(key, PictureKey::Backdrop { .. }) {
                 self.backdrops.push(key);
@@ -1353,6 +1414,70 @@ mod tests {
         assert_ne!(shelf.tab, SEARCH_ID);
         assert!(shelf.tabs.iter().all(|c| c.id != SEARCH_ID));
         assert_eq!(shelf.selected_game().map(|g| g.id.to_string()), before);
+    }
+
+    fn type_text(shelf: &mut Shelf, host: &mut TestHost, text: &str) {
+        shelf.keyboard.as_mut().expect("keyboard open").text = text.into();
+        press(shelf, host, START);
+    }
+
+    #[test]
+    fn the_editor_saves_a_favorite_a_name_and_resets_to_the_defaults() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        press(&mut shelf, &mut host, R); // Games: PCSA00069
+        press(&mut shelf, &mut host, TRIANGLE);
+        press(&mut shelf, &mut host, CIRCLE); // Favorite on
+        assert!(host.files.0.contains_key("titles/PCSA00069.json"));
+        // Title row: type a name.
+        press(&mut shelf, &mut host, DOWN);
+        press(&mut shelf, &mut host, DOWN);
+        press(&mut shelf, &mut host, CIRCLE);
+        type_text(&mut shelf, &mut host, "Daze");
+        assert_eq!(&*shelf.library.game("PCSA00069").unwrap().title, "Daze");
+        let saved = String::from_utf8(host.files.0["titles/PCSA00069.json"].clone()).unwrap();
+        assert_eq!(saved, "{\n  \"title\": \"Daze\",\n  \"favorite\": true\n}\n");
+        // Reset keeps the favorite mark only.
+        for _ in 0..4 {
+            press(&mut shelf, &mut host, DOWN);
+        }
+        press(&mut shelf, &mut host, CIRCLE);
+        let game = shelf.library.game("PCSA00069").unwrap();
+        assert!(game.favorite && &*game.title == "Title PCSA00069");
+        // Favorite off as well: no changes left, the file is deleted.
+        press(&mut shelf, &mut host, DOWN);
+        press(&mut shelf, &mut host, CIRCLE);
+        assert!(!host.files.0.contains_key("titles/PCSA00069.json"));
+    }
+
+    #[test]
+    fn the_category_manager_creates_renames_hides_and_deletes() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        shelf.open_categories();
+        // New category through the keyboard.
+        press(&mut shelf, &mut host, TRIANGLE);
+        type_text(&mut shelf, &mut host, "Retro Picks");
+        assert!(shelf.library.config.custom.iter().any(|c| c.id == "retro-picks" && c.label == "Retro Picks"));
+        let saved = String::from_utf8(host.files.0[CATEGORIES_FILE].clone()).unwrap();
+        assert!(saved.contains("\"retro-picks\""), "{saved}");
+        // A name another category has is refused.
+        press(&mut shelf, &mut host, CIRCLE);
+        type_text(&mut shelf, &mut host, "games");
+        assert_eq!(shelf.categories.as_ref().unwrap().note, shelf.t().name_taken);
+        // Move a title into it, then delete it: the title goes back.
+        shelf.library.patch("PCSA00069", |c| c.category = Some("retro-picks".into()));
+        press(&mut shelf, &mut host, SQUARE);
+        assert!(shelf.categories.as_ref().unwrap().armed.is_some());
+        press(&mut shelf, &mut host, SQUARE);
+        assert!(shelf.library.config.custom.is_empty());
+        assert_eq!(&*shelf.library.game("PCSA00069").unwrap().category, "games");
+        // Hide a built-in one, and show it again.
+        let row = 1 + shelf.library.all_categories().iter().position(|c| c.id == "homebrew").unwrap();
+        shelf.categories.as_mut().unwrap().row = row;
+        press(&mut shelf, &mut host, START);
+        assert!(shelf.library.config.hidden.contains(&"homebrew".to_string()));
+        assert!(shelf.tabs.iter().all(|c| c.id != "homebrew"));
+        press(&mut shelf, &mut host, START);
+        assert!(shelf.library.config.hidden.is_empty());
     }
 
     #[test]
