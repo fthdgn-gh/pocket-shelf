@@ -131,6 +131,7 @@ impl Shelf {
         let Some(game) = self.selected_game() else { return };
         let id = game.id.to_string();
         self.library.reload_art(host);
+        self.art.forget_missing();
         self.editor = Some(Editor { id, row: 0, note: String::new() });
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);
@@ -322,6 +323,7 @@ impl Shelf {
     fn open_picker(&mut self, host: &mut dyn Host, backdrop: bool) {
         let Some(game) = self.editor_game() else { return };
         let folder = if backdrop { list_png(host, "backdrops") } else { self.library.reload_art(host) };
+        self.art.forget_missing();
         self.picker = Some(Picker {
             backdrop,
             folder,

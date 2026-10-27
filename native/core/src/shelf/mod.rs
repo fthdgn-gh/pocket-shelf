@@ -185,8 +185,12 @@ pub struct Shelf {
     pub reset_stats: bool,
     /// Find artwork, and its backdrop preview's texture.
     online: Option<crate::online::flow::Online>,
-    /// Each preview's texture: icon, backdrop.
+    /// Each preview's texture: icon, backdrop; the icon's accent.
     online_tex: [Option<TexId>; 2],
+    online_accent: Option<u32>,
+    /// Pictures to hand to the tile cache at the next draw (it has the
+    /// textures): a box art just used, from its preview.
+    pending_art: Vec<(PictureKey, TexId, Option<u32>)>,
     /// libretro's box art names per console (Find and Fetch artwork).
     listings: crate::online::flow::Listings,
     /// Textures to free at the next draw.
@@ -246,6 +250,8 @@ impl Shelf {
             reset_stats: false,
             online: None,
             online_tex: [None, None],
+            online_accent: None,
+            pending_art: Vec::new(),
             listings: Default::default(),
             pending_free: Vec::new(),
         };
@@ -892,6 +898,9 @@ impl Shelf {
         }
         for tex in self.pending_free.drain(..) {
             gfx.textures.free(tex);
+        }
+        for (key, tex, accent) in std::mem::take(&mut self.pending_art) {
+            self.art.insert(gfx, key, tex, accent);
         }
         // Free the backdrops kept beyond the newest few; they are not drawn.
         while self.kept.len() > BACKDROPS_KEPT {

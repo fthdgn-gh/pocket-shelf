@@ -50,13 +50,27 @@ impl Shelf {
                     let Some(id) = self.editor.as_ref().map(|e| e.id.clone()) else { continue };
                     match kind {
                         AssetKind::Icon => {
+                            // The preview's picture goes to the tile cache:
+                            // the file may still be on its way to the card,
+                            // and a read before it lands would cache "no
+                            // picture" (the tile showed initials).
+                            if let Some(tex) = self.online_tex[0].take() {
+                                self.pending_art.push((PictureKey::Art(file.clone()), tex, self.online_accent));
+                            }
                             // The new file has to be in the art index first.
                             self.library.reload_art(host);
+                            self.art.forget_missing();
                             self.library.patch(&id, |c| c.art = Some(file));
                         }
                         AssetKind::Backdrop => {
+                            // The preview goes on screen as the backdrop, for
+                            // the same reason as an icon.
+                            let key = PictureKey::Backdrop { id: id.clone(), file: file.clone() };
+                            if let Some(tex) = self.online_tex[1].take() {
+                                self.wanted = Some(key.clone());
+                                self.show_backdrop(super::Shown { key, tex, ready_at: None });
+                            }
                             self.library.patch(&id, |c| c.backdrop = Some(file));
-                            self.backdrop_wait = 1;
                         }
                     }
                     if !self.library.overrides.save(host) {
@@ -119,6 +133,9 @@ impl Shelf {
         }
         if let Some(p) = picture {
             self.online_tex[slot] = Some(gfx.add_texture(p.w, p.h, Format::Rgba8, p.rgba.clone(), true));
+            if slot == 0 {
+                self.online_accent = p.accent;
+            }
         }
         true
     }
@@ -172,7 +189,13 @@ impl Shelf {
                 let kind = KINDS[online.row.min(1)];
                 let slot = online.row.min(1);
                 if online.shown[slot] {
-                    let tex = self.online_tex[slot];
+                    // A picture used is the tile cache's or the screen's now;
+                    // it shows from there.
+                    let used = online.current(kind).map(|c| c.file.clone());
+                    let tex = self.online_tex[slot].or_else(|| match kind {
+                        AssetKind::Icon => used.and_then(|f| self.art.texture(&PictureKey::Art(f))),
+                        AssetKind::Backdrop => self.backdrop.as_ref().filter(|b| matches!(&b.key, PictureKey::Backdrop { file, .. } if Some(file) == used.as_ref())).map(|b| b.tex),
+                    });
                     if let Some(tex) = tex.filter(|&t| gfx.textures.ready(t)) {
                         let (w, h) = if kind == AssetKind::Icon { (96.0, 96.0) } else { (212.0, 120.0) };
                         let rect = Rect::new(drawer.x + (drawer.w - w) / 2.0, top + (128.0 - h) / 2.0, w, h);
