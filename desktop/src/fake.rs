@@ -476,6 +476,20 @@ impl Host for FakeHost {
         self.later.push(Event::Picture(key, picture));
     }
 
+    /// A scan report as the Vita host joins it (PSM, PSP and PS1,
+    /// RetroArch), shaped like a real one.
+    fn scan_report(&mut self) -> String {
+        "PSM folders=2,PSM source=app.db,PSP stick=ux0:/pspemu,PSP folders=3,PSP titles=2,PSP skipped=1,\
+         skip=NPUZ00001 noEboot,ISO files=2,ISO titles=2,RetroArch playlists=9,RetroArch titles=5709,RetroArch skipped=102"
+            .into()
+    }
+
+    fn boot_log(&mut self) -> String {
+        "age=4s path=ms0:/PSP/GAME/SCUS94163/EBOOT.PBP boot psx\ntrigger=after sceVshCommonGui\ndriver=3 (default) EBOOT.BIN\n\
+         age=3s path=ms0:/ISO/Racing/Ridge Racer.cso boot iso"
+            .into()
+    }
+
     fn build(&self) -> shelf_core::updates::BuildInfo {
         shelf_core::updates::BuildInfo { version: "0.1.0".into(), channel: "beta".into(), commit: String::new() }
     }

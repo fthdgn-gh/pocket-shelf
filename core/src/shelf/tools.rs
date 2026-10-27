@@ -47,6 +47,16 @@ impl Shelf {
         }
     }
 
+    /// A rescan the user asked for could not start.
+    pub fn scan_failed(&mut self) {
+        let t = self.t();
+        if let Some(rescan) = &mut self.rescan {
+            rescan.running = false;
+            rescan.progress = None;
+            rescan.note = t.scan_failed.to_string();
+        }
+    }
+
     /// A rescan finished: the new list, and the per-title files read again
     /// (one may have been edited by hand).
     pub fn rescanned(&mut self, host: &mut dyn Host, games: Vec<Game>, ms: u32) {

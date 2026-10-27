@@ -108,7 +108,7 @@ impl TileAnim {
 /// What a frame asks the platform to do after it is drawn.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Request {
-    /// Start this title (phase 3's launch, `installed::launch`).
+    /// Start this title (`installed::launch`).
     Launch(String),
     /// Start the updater app, which installs the downloaded release.
     Updater,
@@ -1467,6 +1467,18 @@ mod tests {
         let game = shelf.library.game("PCSA00069").unwrap();
         assert_eq!((game.art.clone(), game.backdrop.clone()), (None, None));
         assert_eq!(shelf.library.game("VITASHELL").unwrap().art, None);
+    }
+
+    #[test]
+    fn a_rescan_that_cannot_start_says_so() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        shelf.open_rescan();
+        shelf.rescan_input(&mut host, true, false);
+        assert!(shelf.rescan.as_ref().unwrap().running);
+        shelf.scan_failed();
+        let rescan = shelf.rescan.as_ref().unwrap();
+        assert!(!rescan.running);
+        assert_eq!(rescan.note, shelf.t().scan_failed);
     }
 
     fn press(shelf: &mut Shelf, host: &mut TestHost, button: u32) -> Option<Request> {

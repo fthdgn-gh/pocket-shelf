@@ -56,6 +56,9 @@ pub struct App {
     frame: u32,
     /// What the last frame asks the platform to do once it is shown.
     pub request: Option<Request>,
+    /// Diagnostics' lines from the scan report and the boot log, read when
+    /// the screen opens.
+    report_lines: Vec<(String, String)>,
     /// Startup marks for Diagnostics, µs of process time and ms.
     loaded_ms: u64,
     titles_ms: u32,
@@ -85,6 +88,7 @@ impl App {
             events: Vec::new(),
             frame: 0,
             request: None,
+            report_lines: Vec::new(),
             loaded_ms: 0,
             titles_ms: 0,
             titles_at: 0,
@@ -147,6 +151,11 @@ impl App {
                         shelf.picture(gfx, key, picture);
                     }
                 }
+                Event::ScanFailed => {
+                    if let Some(shelf) = &mut self.shelf {
+                        shelf.scan_failed();
+                    }
+                }
                 Event::Listing(folder, listing) => {
                     if let Some(shelf) = &mut self.shelf {
                         shelf.listing(host, folder, listing);
@@ -205,6 +214,10 @@ impl App {
             // Diagnostics counts frames from when it opens.
             if std::mem::take(&mut shelf.reset_stats) {
                 self.stats.reset();
+                // The scan's findings and the boot log, read once per opening.
+                let mut lines = crate::report::pairs(&host.scan_report());
+                lines.extend(crate::report::boot(&host.boot_log()));
+                self.report_lines = lines;
             }
         }
     }
@@ -227,8 +240,11 @@ impl App {
             ("Title list".into(), format!("{} ms", self.titles_ms)),
             ("Titles on screen".into(), ms(self.titles_at)),
             ("Library rebuild".into(), format!("{:.1} ms", self.rebuild_us as f32 / 1000.0)),
-            ("Build".into(), format!("{} (next)", env!("CARGO_PKG_VERSION"))),
         ]
+        .into_iter()
+        .chain(self.shelf.as_ref().map(|shelf| ("Build".to_string(), crate::updates::build_label(&shelf.build))))
+        .chain(self.report_lines.iter().cloned())
+        .collect()
     }
 
     pub fn draw(&mut self, gfx: &mut Gfx) {

@@ -341,6 +341,16 @@ impl Host for VitaHost {
         crate::platform::update::take_result()
     }
 
+    fn scan_report(&mut self) -> String {
+        use crate::platform::{psm, pspemu};
+        let parts = unsafe { [psm::report(), pspemu::report(), installed::retro_report()] };
+        parts.iter().filter(|part| !part.is_empty()).cloned().collect::<Vec<_>>().join(",")
+    }
+
+    fn boot_log(&mut self) -> String {
+        crate::platform::pspemu::boot_log()
+    }
+
     fn status(&mut self) -> Status {
         crate::status::read()
     }
@@ -353,7 +363,15 @@ impl Host for VitaHost {
             // saves it (installed.rs).
             if !force && installed::titles_ready() {
                 log_line("titles: read the saved list");
-            } else if installed::scan_start() {
+            } else if !installed::scan_start() {
+                // A rescan the user asked for says so; at a start, the saved
+                // list (if any) is used.
+                log_line("titles: the scan could not start");
+                if force {
+                    let _ = sender.send(Event::ScanFailed);
+                    return;
+                }
+            } else {
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(50));
                     let state = installed::scan_state();

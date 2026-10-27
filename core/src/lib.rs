@@ -16,6 +16,7 @@ pub mod i18n;
 pub mod library;
 pub mod locales;
 pub mod online;
+pub mod report;
 pub mod shapes;
 pub mod shelf;
 pub mod stats;

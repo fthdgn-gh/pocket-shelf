@@ -113,6 +113,9 @@ pub enum Event {
     Titles(Vec<Game>, u32),
     /// A picture asked for with [`Host::request`]; `None` when there is none.
     Picture(PictureKey, Option<Picture>),
+    /// A rescan the user asked for could not start (no scan thread); the
+    /// titles stay as they were.
+    ScanFailed,
     /// A console's libretro names asked for with [`Host::listing`]; `None`
     /// when its file is missing or empty.
     Listing(String, Option<crate::online::libretro::Listing>),
@@ -244,6 +247,17 @@ pub trait Host {
     /// [`Listing::parse`](crate::online::libretro::Listing::parse) off the
     /// frame; answered with [`Event::Listing`] under `folder`.
     fn listing(&mut self, _folder: &str) {}
+
+    /// What the last title scan found, as `Label=value` pairs separated by
+    /// commas (PSM, PSP and PS1, disc images, RetroArch); "" when this start
+    /// read the saved list. Shown on the Diagnostics screen.
+    fn scan_report(&mut self) -> String {
+        String::new()
+    }
+    /// The Adrenaline boot plugin's last log lines, newest last.
+    fn boot_log(&mut self) -> String {
+        String::new()
+    }
 
     // --- The app's own update (`updates.rs`, the Vita's `update.rs`) -------
 

@@ -110,9 +110,9 @@ pub enum Target {
     NewCategory,
     /// A category's new name.
     Category(String),
-    /// SteamGridDB's search term (phase 5).
+    /// SteamGridDB's search term.
     Search,
-    /// The SteamGridDB API key (phase 5).
+    /// The SteamGridDB API key.
     ApiKey,
     /// The library search (square).
     Library,

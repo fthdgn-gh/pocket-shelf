@@ -183,7 +183,7 @@ Desktop shots: `02`–`06` Home (views and details are set through the menu), `1
 List, `40`–`42` Cascade, `50`–`53` tabs, `60`–`63` themes, `70`–`72` the scan
 page, `80`–`82` saved data, `90` test titles, `91` launching, `92`–`93` the
 Adrenaline drawer, `100`–`105` the SELECT menu, `110`–`115` the keyboard and
-search, `120`–`134` the editor, pickers and category manager, `140`–`150`
+search, `120`–`134` the editor, pickers and category manager, `140`–`152`
 rescan and Diagnostics, `160`–`164` the status items' layout, `170`–`177`
 Find artwork, `180`–`186` Fetch and Clean up artwork, `190`–`196` updates,
 `64`–`66` Turkish and German.
