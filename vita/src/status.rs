@@ -1,6 +1,5 @@
 //! The status bar's readings: local time, the system's clock format,
-//! battery and Bluetooth (from the PocketJS host). Wi-Fi comes with
-//! the network module.
+//! battery, Wi-Fi and Bluetooth (from the PocketJS host).
 
 use shelf_core::host::Status;
 use vitasdk_sys::*;
@@ -30,6 +29,24 @@ unsafe fn clock_24() -> Option<bool> {
     Some(value == SCE_SYSTEM_PARAM_TIME_FORMAT_24HR as i32)
 }
 
+/// Wi-Fi: `None` when the network stack is not up, 0 when not connected,
+/// else the signal in percent (at least 1). The shelf shows the symbol only
+/// while connected.
+unsafe fn wifi() -> Option<u8> {
+    if !crate::platform::net::ensure_stack() {
+        return None;
+    }
+    let mut state = 0;
+    if sceNetCtlInetGetState(&mut state) < 0 || state != SCE_NETCTL_STATE_CONNECTED as i32 {
+        return Some(0);
+    }
+    let mut info: SceNetCtlInfo = core::mem::zeroed();
+    if sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_RSSI_PERCENTAGE as i32, &mut info) < 0 {
+        return Some(100);
+    }
+    Some((info.rssi_percentage as u32).clamp(1, 100) as u8)
+}
+
 unsafe fn bluetooth() -> Option<bool> {
     let mut value = 0;
     if sceRegMgrGetKeyInt(c"/CONFIG/BT".as_ptr(), c"bt_enable".as_ptr(), &mut value) < 0 {
@@ -49,7 +66,7 @@ pub fn read() -> Status {
             clock24: clock_24(),
             battery: (0..=100).contains(&battery).then_some(battery as u8),
             charging: scePowerIsBatteryCharging() != 0,
-            wifi: None,
+            wifi: wifi(),
             bluetooth: bluetooth(),
         }
     }
