@@ -761,8 +761,12 @@ mod tests {
         let Ok(folder) = std::env::var("RETROARCH_SAMPLES") else {
             return;
         };
+        // The samples are not in git; a checkout without them (CI) skips.
+        let Ok(entries) = fs::read_dir(&folder) else {
+            return;
+        };
         let mut count = 0;
-        for entry in fs::read_dir(&folder).unwrap().flatten() {
+        for entry in entries.flatten() {
             let path = entry.path().to_string_lossy().into_owned();
             if !path.ends_with(".lpl") {
                 continue;
