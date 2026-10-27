@@ -99,6 +99,21 @@ impl Art {
         true
     }
 
+    /// Hand a picture already decoded (Find artwork's preview of the box
+    /// art just used) to the cache under `key`, so the tile shows it without
+    /// reading back the file being written.
+    pub fn insert(&mut self, gfx: &mut Gfx, key: PictureKey, tex: TexId, accent: Option<u32>) {
+        let boxed = box_colors(accent).map(|(top, bottom)| gfx.gradient_sized(top, bottom, 32));
+        self.requested.remove(&key);
+        self.loaded.insert(key, Some(Loaded { tex, color: accent.map(|a| a & 0xffffff), boxed }));
+    }
+
+    /// Forget the art files that did not decode, after the art folder was
+    /// read again: one may have been written since.
+    pub fn forget_missing(&mut self) {
+        self.loaded.retain(|key, loaded| loaded.is_some() || !matches!(key, PictureKey::Art(_)));
+    }
+
     /// The texture of a loaded icon or box art, by its request.
     pub fn texture(&self, key: &PictureKey) -> Option<TexId> {
         self.loaded.get(key).and_then(|l| l.as_ref()).map(|l| l.tex)
@@ -228,6 +243,30 @@ mod want_tests {
         fn enable_plugin(&mut self) -> bool {
             true
         }
+    }
+
+    #[test]
+    fn a_handed_picture_needs_no_read_and_failed_reads_are_retried() {
+        let infos = [TitleInfo { id: "PCSA00001".into(), title: "T".into(), platform: "vita".into(), adrenaline: false, console: None }];
+        let mut game = load_catalog(&infos).remove(0);
+        game.art = Some("PCSA00001-9.png".into());
+        let (mut art, mut host, mut gfx) = (Art::default(), Recorder::default(), Gfx::new(2.0));
+        // A read that came before the file landed: cached as no picture.
+        art.want(&mut host, std::iter::once(&game));
+        art.answer(&mut gfx, &PictureKey::Art("PCSA00001-9.png".into()), None);
+        art.want(&mut host, std::iter::once(&game));
+        assert_eq!(host.asked.len(), 1);
+        // The folder read again: the failure is forgotten and asked again.
+        art.forget_missing();
+        art.want(&mut host, std::iter::once(&game));
+        assert_eq!(host.asked.len(), 2);
+        // A picture handed over is used as it is.
+        let tex = gfx.add_texture(1, 1, Format::Rgba8, vec![0; 4], true);
+        art.insert(&mut gfx, PictureKey::Art("PCSA00001-9.png".into()), tex, Some(0xff0000));
+        art.want(&mut host, std::iter::once(&game));
+        assert_eq!(host.asked.len(), 2);
+        assert_eq!(art.texture(&PictureKey::Art("PCSA00001-9.png".into())), Some(tex));
+        assert_eq!(art.color(&game), Some(0xff0000));
     }
 
     #[test]
