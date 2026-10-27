@@ -50,6 +50,11 @@ jobs:
           # ~/.cargo/bin in it, so cargo-vita is restored rather than built.
           shared-key: shelf-vpk
           cache-bin: true
+          # The key names the Vita toolchain (`key` below). The default hash
+          # of the runner's own Rust install flips between runner images
+          # (8ad8a653, d4976175), and a run missed the cache the run before
+          # it saved; cargo rebuilds what a different compiler made anyway.
+          add-rust-environment-hash-key: false
           workspaces: |
             vita -> target
             core -> target
