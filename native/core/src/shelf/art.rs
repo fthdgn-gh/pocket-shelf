@@ -99,6 +99,11 @@ impl Art {
         true
     }
 
+    /// The texture of a loaded icon or box art, by its request.
+    pub fn texture(&self, key: &PictureKey) -> Option<TexId> {
+        self.loaded.get(key).and_then(|l| l.as_ref()).map(|l| l.tex)
+    }
+
     /// A title's color for the Dynamic theme: its picture's, once loaded.
     pub fn color(&self, game: &Game) -> Option<u32> {
         self.loaded.get(&source(game)).and_then(|l| l.as_ref()).and_then(|l| l.color)
@@ -205,7 +210,7 @@ mod want_tests {
         fn status(&mut self) -> crate::host::Status {
             Default::default()
         }
-        fn scan(&mut self) {}
+        fn scan(&mut self, _: bool) {}
         fn request(&mut self, key: PictureKey) {
             self.asked.push(key);
         }

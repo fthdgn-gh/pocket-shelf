@@ -238,9 +238,15 @@ const SCAN_PHASES: [(ScanPhase, u32); 5] =
 
 impl FakeHost {
     pub fn new() -> Self {
+        // Pictures in the data folder, as the preview has them: box art named
+        // after a title, one file that does not decode, a backdrop.
+        let files = ["art/PCSA00069-48213.png", "art/Neon Drift.png", "art/broken-art.png", "backdrops/PCSA00069-777.png"]
+            .into_iter()
+            .map(|path| (path.to_string(), Vec::new()))
+            .collect();
         FakeHost {
             titles: sample_titles(),
-            files: HashMap::new(),
+            files,
             // The preview's `21 47 1 72 0 80 1`.
             status: Status { hour: 21, minute: 47, clock24: Some(true), battery: Some(72), charging: false, wifi: Some(80), bluetooth: Some(true) },
             next: Vec::new(),
@@ -337,8 +343,8 @@ impl Host for FakeHost {
         self.status
     }
 
-    fn scan(&mut self) {
-        if self.first_start {
+    fn scan(&mut self, force: bool) {
+        if self.first_start || force {
             self.scanning = Some(self.frame);
         } else {
             self.later.push(Event::Titles(load_catalog(&self.titles), 120));
@@ -350,7 +356,10 @@ impl Host for FakeHost {
             // The retro library's games have no box art.
             PictureKey::Icon(id) if id.starts_with("rq") => None,
             PictureKey::Icon(id) => self.index(id).map(|i| icon(i, &self.titles[i].title)),
-            PictureKey::Art(_) => None,
+            // A box art file decodes as a sample icon, unless it stands for a
+            // damaged file.
+            PictureKey::Art(name) if name.starts_with("broken") => None,
+            PictureKey::Art(name) => Some(icon(name.len() % 7 + 3, name)),
             PictureKey::Backdrop { id, .. } => self.index(id).map(backdrop),
         };
         self.later.push(Event::Picture(key, picture));

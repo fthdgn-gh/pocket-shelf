@@ -56,6 +56,12 @@ pub struct App {
     frame: u32,
     /// What the last frame asks the platform to do once it is shown.
     pub request: Option<Request>,
+    /// Startup marks for Diagnostics, µs of process time and ms.
+    loaded_ms: u64,
+    titles_ms: u32,
+    titles_at: u64,
+    rebuild_us: u64,
+    first_frame_at: u64,
     pub stats: FrameStats,
     pub quit: bool,
 }
@@ -79,6 +85,11 @@ impl App {
             events: Vec::new(),
             frame: 0,
             request: None,
+            loaded_ms: 0,
+            titles_ms: 0,
+            titles_at: 0,
+            rebuild_us: 0,
+            first_frame_at: 0,
             stats: FrameStats::default(),
             quit: false,
         }
@@ -105,9 +116,11 @@ impl App {
         let count = events.len();
         for event in events.drain(..) {
             match event {
-                Event::Scan { done, total, phase } => {
-                    self.scan = Some(Scan { done, total, phase: Some(phase), finished: None });
-                }
+                Event::Scan { done, total, phase } => match &mut self.shelf {
+                    // With titles on screen it is a rescan: its drawer shows it.
+                    Some(shelf) if self.titled => shelf.scan_progress(done, total, phase),
+                    _ => self.scan = Some(Scan { done, total, phase: Some(phase), finished: None }),
+                },
                 Event::Titles(titles, ms) => {
                     host.log(&format!("titles {} in {ms} ms", titles.len()));
                     if let Some(scan) = &mut self.scan {
@@ -117,8 +130,15 @@ impl App {
                     }
                     if let Some(shelf) = &mut self.shelf {
                         let started = host.time_us();
-                        shelf.set_titles(titles, !self.titled);
-                        host.log(&format!("library: {} titles in {} us", shelf.games().len(), host.time_us() - started));
+                        if self.titled {
+                            shelf.rescanned(host, titles, ms);
+                        } else {
+                            shelf.set_titles(titles, true);
+                            self.titles_ms = ms;
+                            self.titles_at = host.time_us();
+                        }
+                        self.rebuild_us = host.time_us() - started;
+                        host.log(&format!("library: {} titles in {} us", shelf.games().len(), self.rebuild_us));
                     }
                     self.titled = true;
                 }
@@ -143,12 +163,14 @@ impl App {
             self.theme = theme_by_id(settings.theme);
             self.language = settings.language;
             let library = Library::load(host);
-            host.log(&format!("library loaded in {} ms", (host.time_us() - now) / 1000));
+            self.loaded_ms = (host.time_us() - now) / 1000;
+            self.first_frame_at = now;
+            host.log(&format!("library loaded in {} ms", self.loaded_ms));
             // The first status reading is slow on hardware (about 25 ms), so
             // it is taken here, in the frame that loads the library.
             let status = host.status();
             self.shelf = Some(Shelf::new(settings, library, status));
-            host.scan();
+            host.scan(false);
         }
         self.frame += 1;
         self.request = None;
@@ -168,7 +190,33 @@ impl App {
         }
         if let Some(shelf) = &mut self.shelf {
             self.request = shelf.update(host, pad, now);
+            // Diagnostics counts frames from when it opens.
+            if std::mem::take(&mut shelf.reset_stats) {
+                self.stats.reset();
+            }
         }
+    }
+
+    /// Diagnostics' lines (`components/diagnostics.tsx`): frame timing
+    /// since the screen opened, then this start's timing and the library.
+    fn diagnostics(&self, gfx: &Gfx) -> Vec<(String, String)> {
+        let s = &self.stats;
+        let ms = |us: u64| format!("{} ms", us / 1000);
+        vec![
+            ("Frames".into(), s.frames.to_string()),
+            ("Frames over 20 ms".into(), s.slow.to_string()),
+            ("CPU per frame".into(), format!("{:.1} / {:.1} ms", s.cpu_ms(), s.longest_cpu_us as f32 / 1000.0)),
+            ("Frame time".into(), format!("{:.1} / {:.1} ms", s.frame_ms(), s.longest_frame_us as f32 / 1000.0)),
+            ("Textures".into(), format!("{} KB", gfx.textures.live_bytes() / 1024)),
+            ("Glyph atlas restarts".into(), gfx.atlas_resets().to_string()),
+            ("Titles".into(), self.len().to_string()),
+            ("App code begins".into(), ms(self.first_frame_at)),
+            ("Library loaded".into(), format!("{} ms", self.loaded_ms)),
+            ("Title list".into(), format!("{} ms", self.titles_ms)),
+            ("Titles on screen".into(), ms(self.titles_at)),
+            ("Library rebuild".into(), format!("{:.1} ms", self.rebuild_us as f32 / 1000.0)),
+            ("Build".into(), format!("{} (next)", env!("CARGO_PKG_VERSION"))),
+        ]
     }
 
     pub fn draw(&mut self, gfx: &mut Gfx) {
@@ -182,7 +230,14 @@ impl App {
             }
             return;
         }
+        let lines = match &self.shelf {
+            Some(shelf) if shelf.diagnostics_open() => Some(self.diagnostics(gfx)),
+            _ => None,
+        };
         if let Some(shelf) = &mut self.shelf {
+            if let Some(lines) = lines {
+                shelf.diagnostics_lines = lines;
+            }
             shelf.draw(gfx);
         }
     }

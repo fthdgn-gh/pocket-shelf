@@ -243,9 +243,12 @@ pub enum Button {
     /// (change).
     DpadVertical,
     DpadHorizontal,
-    /// The L and R shoulder buttons, 24 wide.
+    /// The L and R shoulder buttons, 24 wide; both, side by side.
     ShoulderL,
     ShoulderR,
+    ShoulderLR,
+    /// A plus (a row that adds something).
+    Plus,
 }
 
 impl Button {
@@ -282,6 +285,18 @@ impl Button {
                 shoulder(gfx, self == Button::ShoulderL, x, y);
                 24.0
             }
+            Button::ShoulderLR => {
+                shoulder(gfx, true, x, y);
+                shoulder(gfx, false, x + 28.0, y);
+                52.0
+            }
+            Button::Plus => {
+                // `plus.svg`.
+                let ink = Color::rgb(0x8b95a7);
+                gfx.fill(Rect::new(x + 7.0, y + 3.5, 2.0, 9.0), ink);
+                gfx.fill(Rect::new(x + 3.5, y + 7.0, 9.0, 2.0), ink);
+                16.0
+            }
             Button::Select | Button::Start => {
                 let label = if self == Button::Select { "SELECT" } else { "START" };
                 let width = (gfx.measure(Role::Tiny, label) + 12.0).round();
@@ -312,8 +327,9 @@ pub fn hints(gfx: &mut Gfx, theme: &Theme, items: &[(Button, &str)], mut x: f32,
 /// Width of one hint: its button, a gap and its label.
 fn hint_width(gfx: &mut Gfx, button: Button, label: &str) -> f32 {
     let button_w = match button {
-        Button::Face(_) | Button::DpadVertical | Button::DpadHorizontal => 16.0,
+        Button::Face(_) | Button::DpadVertical | Button::DpadHorizontal | Button::Plus => 16.0,
         Button::ShoulderL | Button::ShoulderR => 24.0,
+        Button::ShoulderLR => 52.0,
         Button::Select | Button::Start => {
             let text = if button == Button::Select { "SELECT" } else { "START" };
             (gfx.measure(Role::Tiny, text) + 12.0).round()
@@ -357,6 +373,16 @@ fn hint_lines(gfx: &mut Gfx, items: &[(Button, &str)], max_w: f32) -> (Vec<f32>,
     }
     lines.push(start..items.len());
     (widths, lines)
+}
+
+/// A dim line with a button's symbol where `{button}` is
+/// (`withButton`), from `x`, centered on `cy`.
+pub fn text_with_button(gfx: &mut Gfx, theme: &Theme, text: &str, button: Button, x: f32, cy: f32) {
+    let baseline = (cy - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
+    let (before, after) = text.split_once("{button}").unwrap_or((text, ""));
+    let mut x = gfx.text(Role::Small, x, baseline, theme.dim, before.trim_end()) + 4.0;
+    x += button.draw(gfx, x, cy - 8.0) + 4.0;
+    gfx.text(Role::Small, x, baseline, theme.dim, after.trim_start());
 }
 
 /// What the footer draws from.
