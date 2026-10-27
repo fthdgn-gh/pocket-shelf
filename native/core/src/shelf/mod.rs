@@ -4,10 +4,11 @@
 
 pub mod art;
 pub mod chrome;
+pub mod keyboard;
 pub mod layout;
+pub mod menu;
 pub mod navigation;
 pub mod panel;
-pub mod texts;
 pub mod tween;
 mod views;
 
@@ -160,6 +161,13 @@ pub struct Shelf {
     /// failed.
     adrenaline: Option<(PluginState, bool)>,
     drawer: Tween,
+    menu: menu::Menu,
+    keyboard: Option<keyboard::Keyboard>,
+    /// The library search's count for the typed text, worked out when the
+    /// text changes (searching 5,900 titles every frame would not fit one).
+    found: Option<(String, usize)>,
+    /// Where the selection was when the search opened; closing it goes back.
+    before_search: Option<(String, Option<String>)>,
 }
 
 impl Shelf {
@@ -202,6 +210,10 @@ impl Shelf {
             clear_pending: false,
             adrenaline: None,
             drawer: panel::slide(),
+            menu: menu::Menu::default(),
+            keyboard: None,
+            found: None,
+            before_search: None,
         };
         shelf.tab = shelf.settings.category.clone().unwrap_or_default();
         shelf.refresh();
@@ -210,6 +222,11 @@ impl Shelf {
 
     pub fn games(&self) -> &[Game] {
         self.library.games()
+    }
+
+    /// The texts of the chosen language.
+    pub fn t(&self) -> &'static crate::locales::Messages {
+        crate::i18n::messages(self.settings.language)
     }
 
     fn game(&self, index: usize) -> Option<&Game> {
@@ -223,7 +240,8 @@ impl Shelf {
     /// The tabs and the current tab's titles, after the library changed;
     /// the first tab when the current one is gone.
     fn refresh(&mut self) {
-        self.tabs = self.library.tabs();
+        let t = self.t();
+        self.tabs = self.library.tabs().into_iter().map(|c| Category { label: crate::i18n::category_label(t, &c), ..c }).collect();
         if !self.tabs.iter().any(|c| c.id == self.tab) {
             self.tab = self.tabs.first().map(|c| c.id.clone()).unwrap_or_default();
             self.selected = 0;
@@ -284,11 +302,11 @@ impl Shelf {
     }
 }
 
-/// The view after `view` in the View row's order, and the same for details
-/// and themes (until the SELECT menu, phase 4, sets them).
-fn next<T: Copy + PartialEq>(all: &[T], current: T) -> T {
-    let at = all.iter().position(|&v| v == current).unwrap_or(0);
-    all[(at + 1) % all.len()]
+/// The value `delta` steps from `current` in `all`, wrapping (`cycle` in
+/// `state.ts`).
+fn cycle_by<T: Copy + PartialEq>(all: &[T], current: T, delta: i32) -> T {
+    let at = all.iter().position(|&v| v == current).unwrap_or(0) as i32;
+    all[(at + delta).rem_euclid(all.len() as i32) as usize]
 }
 
 impl Shelf {
@@ -303,65 +321,107 @@ impl Shelf {
         let pressed = pad & !self.previous;
         self.previous = pad;
         let before = (self.tab.clone(), self.selected_game().map(|g| (g.id.clone(), g.backdrop.clone())));
-
-        // The Adrenaline drawer takes the buttons while it is open.
-        if self.adrenaline.is_some() {
-            let (confirm, cancel) = if self.settings.confirm == ConfirmMode::Circle { (CIRCLE, CROSS) } else { (CROSS, CIRCLE) };
-            self.held.update(None);
-            if pressed & confirm != 0 {
-                return self.adrenaline_confirm(host);
-            }
-            if pressed & cancel != 0 {
-                self.adrenaline = None;
-            }
-            return None;
-        }
-
+        let (confirm, cancel) = if self.settings.confirm == ConfirmMode::Circle { (CIRCLE, CROSS) } else { (CROSS, CIRCLE) };
         let direction = [(LEFT, Direction::Left), (RIGHT, Direction::Right), (UP, Direction::Up), (DOWN, Direction::Down)]
             .into_iter()
             .find(|(bit, _)| pad & bit != 0)
             .map(|(_, d)| d);
-        let count = self.list.len();
-        let target = match self.held.update(direction) {
-            // A press wraps; a held direction stops at the ends.
-            Some(Step::Press(d)) => move_selection(self.settings.view, d, self.selected, count, true),
-            Some(Step::Repeat(d, steps)) => move_selection_by(self.settings.view, d, self.selected, count, steps),
-            None => None,
-        };
-        if let Some(index) = target {
-            self.select(index);
-        }
-        if pressed & L != 0 {
-            self.change_category(-1);
-        }
-        if pressed & R != 0 {
-            self.change_category(1);
-        }
-        // The other face button closes the search (phase 4).
-        let confirm = if self.settings.confirm == ConfirmMode::Circle { CIRCLE } else { CROSS };
+        let step = self.held.update(direction);
         let mut request = None;
-        if pressed & confirm != 0 {
-            request = self.launch_selected(host);
-        }
-        // Until the SELECT menu (phase 4): SELECT the view, START the
-        // details, SQUARE the theme, TRIANGLE 5,000 test titles.
-        if pressed & SELECT != 0 {
-            self.settings.view = next(ViewMode::ALL, self.settings.view);
-            self.placed = None;
-            self.persist(host);
-        }
-        if pressed & START != 0 {
-            self.settings.detail = next(DetailLevel::ALL, self.settings.detail);
-            self.placed = None;
-            self.persist(host);
-        }
-        if pressed & SQUARE != 0 {
-            self.settings.theme = next(&ThemeId::ALL, self.settings.theme);
-            self.dynamic = None;
-            self.persist(host);
-        }
-        if pressed & TRIANGLE != 0 {
-            self.toggle_stress(host);
+
+        if let Some(keyboard) = &mut self.keyboard {
+            // The keyboard takes every button but SELECT; a held direction
+            // repeats over the keys.
+            match step {
+                Some(Step::Press(d)) | Some(Step::Repeat(d, _)) => match d {
+                    Direction::Left => keyboard.step(-1, 0),
+                    Direction::Right => keyboard.step(1, 0),
+                    Direction::Up => keyboard.step(0, -1),
+                    Direction::Down => keyboard.step(0, 1),
+                },
+                None => {}
+            }
+            let mut done = false;
+            if pressed & confirm != 0 {
+                done = keyboard.press();
+            }
+            if pressed & SQUARE != 0 {
+                keyboard.backspace();
+            }
+            if pressed & L != 0 {
+                keyboard.toggle_shift();
+            }
+            if pressed & R != 0 {
+                keyboard.next_page();
+            }
+            if pressed & START != 0 {
+                done = true;
+            }
+            if done {
+                self.commit_keyboard();
+            } else if pressed & cancel != 0 {
+                self.keyboard = None;
+            }
+        } else if self.adrenaline.is_some() {
+            // The Adrenaline drawer takes the buttons while it is open.
+            if pressed & confirm != 0 {
+                request = self.adrenaline_confirm(host);
+            } else if pressed & cancel != 0 {
+                self.adrenaline = None;
+            }
+        } else if pressed & SELECT != 0 {
+            // SELECT opens the menu, and closes it from any page.
+            if self.menu.open {
+                self.menu.open = false;
+            } else {
+                self.menu.open();
+                self.drawer = panel::slide();
+                self.drawer.set(1.0, now);
+            }
+        } else if self.menu.open {
+            match step {
+                Some(Step::Press(Direction::Up)) | Some(Step::Repeat(Direction::Up, _)) => self.menu.step_row(-1),
+                Some(Step::Press(Direction::Down)) | Some(Step::Repeat(Direction::Down, _)) => self.menu.step_row(1),
+                // A held direction scrolls rows; it does not step a value.
+                Some(Step::Press(Direction::Left)) => self.menu_change(host, -1),
+                Some(Step::Press(Direction::Right)) => self.menu_change(host, 1),
+                _ => {}
+            }
+            if pressed & confirm != 0 {
+                self.menu_change(host, 1);
+            } else if pressed & cancel != 0 {
+                self.menu.back();
+            }
+        } else {
+            let count = self.list.len();
+            let target = match step {
+                // A press wraps; a held direction stops at the ends.
+                Some(Step::Press(d)) => move_selection(self.settings.view, d, self.selected, count, true),
+                Some(Step::Repeat(d, steps)) => move_selection_by(self.settings.view, d, self.selected, count, steps),
+                None => None,
+            };
+            if let Some(index) = target {
+                self.select(index);
+            }
+            if pressed & L != 0 {
+                self.change_category(-1);
+            }
+            if pressed & R != 0 {
+                self.change_category(1);
+            }
+            if pressed & confirm != 0 {
+                request = self.launch_selected(host);
+            }
+            if pressed & cancel != 0 {
+                self.close_search();
+            }
+            if pressed & SQUARE != 0 {
+                self.open_search();
+            }
+            // Until the title editor takes the button: 5,000 test titles.
+            if pressed & TRIANGLE != 0 {
+                self.toggle_stress(host);
+            }
         }
 
         let after = (self.tab.clone(), self.selected_game().map(|g| (g.id.clone(), g.backdrop.clone())));
@@ -384,6 +444,149 @@ impl Shelf {
         request
     }
 
+    /// Open the keyboard for `target`, starting from `text`.
+    fn open_keyboard(&mut self, target: keyboard::Target, text: &str) {
+        self.keyboard = Some(keyboard::Keyboard::new(target, text, self.settings.language));
+        self.drawer = panel::slide();
+        self.drawer.set(1.0, self.now);
+    }
+
+    /// The keyboard's Done: the text goes to what it was typed for.
+    fn commit_keyboard(&mut self) {
+        let Some(keyboard) = self.keyboard.take() else { return };
+        let text = keyboard.text.trim().to_string();
+        match keyboard.target {
+            keyboard::Target::Library => self.apply_search(&text),
+            // The editor, the category manager (this phase) and SteamGridDB
+            // (phase 5) take theirs when they arrive.
+            _ => {}
+        }
+    }
+
+    /// Square: type a search term; on the search tab, start from it.
+    fn open_search(&mut self) {
+        let term = if self.tab == SEARCH_ID { self.library.search_term.clone() } else { String::new() };
+        self.open_keyboard(keyboard::Target::Library, &term);
+    }
+
+    /// Show the titles `term` finds in the search tab, in front of the
+    /// others; an empty term closes the search.
+    fn apply_search(&mut self, term: &str) {
+        if term.is_empty() {
+            self.clear_search();
+            return;
+        }
+        if self.tab != SEARCH_ID {
+            self.before_search = Some((self.tab.clone(), self.selected_game().map(|g| g.id.to_string())));
+        }
+        self.library.search_term = term.to_string();
+        self.tab = SEARCH_ID.into();
+        self.selected = 0;
+        self.refresh();
+        self.launching = None;
+    }
+
+    /// Close the search and go back to the title selected before it.
+    fn clear_search(&mut self) {
+        if self.library.search_term.is_empty() {
+            return;
+        }
+        let back = self.before_search.take();
+        let searching = self.tab == SEARCH_ID;
+        self.library.search_term.clear();
+        let mut title = None;
+        if searching {
+            // The tab it came from (the first tab when that one is gone).
+            let (tab, id) = back.unwrap_or_default();
+            self.tab = tab;
+            self.selected = 0;
+            title = id;
+        }
+        self.refresh();
+        if let Some(id) = title {
+            if let Some(index) = self.list.iter().position(|&i| *self.library.games()[i].id == id) {
+                self.selected = index;
+            }
+        }
+        self.launching = None;
+    }
+
+    /// The other face button on the shelf: leave the search tab.
+    fn close_search(&mut self) {
+        if self.tab == SEARCH_ID {
+            self.clear_search();
+        }
+    }
+
+    /// How many titles the keyboard's text finds, worked out once per text.
+    fn found_count(&mut self, text: &str) -> usize {
+        if let Some((cached, count)) = &self.found {
+            if cached == text {
+                return *count;
+            }
+        }
+        let count = crate::library::search::search(self.library.games(), text, |g| (&g.title, &g.id)).len();
+        self.found = Some((text.to_string(), count));
+        count
+    }
+
+    /// Step the highlighted menu row's value, or open the group or panel it
+    /// names (`menuChange` in `state.ts`). A changed setting is saved.
+    fn menu_change(&mut self, host: &mut dyn Host, delta: i32) {
+        use menu::Item;
+        let step = |all: &[_], current| cycle_by(all, current, delta);
+        let s = &mut self.settings;
+        match self.menu.item() {
+            Item::Open(page) => {
+                if delta > 0 {
+                    self.menu.show(page, None);
+                }
+                return;
+            }
+            Item::Theme => {
+                s.theme = step(&ThemeId::ALL, s.theme);
+                self.dynamic = None;
+            }
+            Item::View => {
+                s.view = cycle_by(ViewMode::ALL, s.view, delta);
+                self.placed = None;
+            }
+            Item::Details => {
+                s.detail = cycle_by(DetailLevel::ALL, s.detail, delta);
+                self.placed = None;
+            }
+            Item::Backdrop => {
+                s.backdrop = !s.backdrop;
+                // On: the selected title's backdrop is asked for; off: gone.
+                self.backdrop_wait = if s.backdrop { BACKDROP_DELAY } else { 0 };
+                if !s.backdrop {
+                    self.wanted = None;
+                    self.clear_pending = true;
+                }
+            }
+            Item::IconBox => s.icon_box = !s.icon_box,
+            Item::StatusBar => s.status_bar = !s.status_bar,
+            Item::Clock => s.clock = cycle_by(crate::library::settings::ClockFormat::ALL, s.clock, delta),
+            Item::BatteryPercent => s.battery_percent = !s.battery_percent,
+            Item::UpdateChannel => s.updates = cycle_by(crate::library::settings::UpdateChannel::ALL, s.updates, delta),
+            Item::Confirm => {
+                s.confirm = if s.confirm == ConfirmMode::Circle { ConfirmMode::Cross } else { ConfirmMode::Circle };
+            }
+            Item::Language => {
+                s.language = cycle_by(crate::library::settings::Language::ALL, s.language, delta);
+                // Built-in tab names come in the new language.
+                let tab = self.tab.clone();
+                self.refresh();
+                self.tab = tab;
+            }
+            // Panels of phase 4 and 5, not yet in this build.
+            Item::Categories | Item::FetchArt | Item::CleanArt | Item::Rescan | Item::CheckUpdates | Item::Diagnostics => return,
+        }
+        if self.settings.status_bar {
+            self.status = host.status();
+        }
+        self.persist(host);
+    }
     fn select(&mut self, index: usize) {
         if index != self.selected {
             self.selected = index;
@@ -504,7 +707,12 @@ impl Shelf {
     /// Ask for the selected title's backdrop, or clear it for a title set
     /// to none.
     fn ask_backdrop(&mut self, host: &mut dyn Host) {
-        let Some(game) = self.selected_game() else { return };
+        let Some(game) = self.selected_game() else {
+            // No title selected (a search that found nothing): no backdrop.
+            self.wanted = None;
+            self.clear_pending = true;
+            return;
+        };
         if game.backdrop.as_deref() == Some(NO_BACKDROP) {
             self.wanted = None;
             // Cleared at the next draw, which has the textures.
@@ -614,6 +822,7 @@ impl Shelf {
         self.header.draw(gfx, &input);
         self.draw_view(gfx);
         let footer = FooterInput {
+            t: self.t(),
             theme: &theme,
             settings: &self.settings,
             own_launch: self.settings.view == ViewMode::Home && self.settings.detail != DetailLevel::Basic,
@@ -626,6 +835,223 @@ impl Shelf {
         if let Some((state, failed)) = self.adrenaline {
             self.draw_adrenaline(gfx, state, failed);
         }
+        if self.menu.open {
+            self.draw_menu(gfx);
+        }
+        if self.keyboard.is_some() {
+            self.draw_keyboard(gfx);
+        }
+    }
+
+    /// The on-screen keyboard (`components/keyboard.tsx`): a card rising
+    /// from the bottom edge with what is typed, the keys and the hints.
+    fn draw_keyboard(&mut self, gfx: &mut Gfx) {
+        use crate::gfx::Rect;
+        use crate::text::Role;
+        use keyboard::{Action, Page, Target};
+        let theme = self.theme;
+        let t = self.t();
+        let Some(kb) = &self.keyboard else { return };
+        let (target, text, page, shift, row, col) = (kb.target.clone(), kb.text.clone(), kb.page, kb.shift, kb.row, kb.col);
+        let rows = kb.rows();
+        // The page key and the R hint name the page the next press leads to.
+        let next_page = match page {
+            Page::Letters => t.symbols,
+            Page::Symbols => "Áçñ",
+            Page::Accents => t.key_letters,
+        };
+        let k = &t.keyboard_for;
+        let heading = match target {
+            Target::Title => k.title,
+            Target::NewCategory => k.new_category,
+            Target::Category(_) => k.category,
+            Target::Library => k.library,
+            Target::Search => k.search,
+            Target::ApiKey => k.api_key,
+        };
+        let note = if target == Target::Library && !text.trim().is_empty() {
+            let count = self.found_count(&text).to_string();
+            crate::i18n::fill(t.found, &[("count", &count)])
+        } else {
+            String::new()
+        };
+        let confirm = chrome::Button::confirm(self.settings.confirm);
+        let cancel = chrome::Button::cancel(self.settings.confirm);
+        let hints = [
+            (confirm, t.key),
+            (chrome::Button::Face(crate::shapes::Symbol::Square), t.key_delete),
+            (chrome::Button::ShoulderL, t.shift),
+            (chrome::Button::ShoulderR, next_page),
+            (chrome::Button::Start, t.done),
+            (cancel, t.cancel),
+        ];
+
+        // The card's height from its content: the heading, the field, the
+        // key rows and the hints, 4 apart, 10 above and 8 below.
+        let label_h = gfx.line_height(Role::Label);
+        let hints_h = chrome::hints_height(gfx, &hints, 456.0);
+        let height = 10.0 + label_h + 4.0 + 26.0 + 4.0 + 2.0 + 4.0 + 5.0 * 24.0 + 4.0 * 4.0 + 4.0 + 2.0 + 4.0 + hints_h + 8.0;
+        let slide = self.drawer.at(self.now);
+        gfx.fill(Rect::new(0.0, 0.0, crate::W, crate::H), theme.scrim.alpha(slide.min(1.0)));
+        let card = Rect::new(8.0, crate::H - 8.0 - height + (1.0 - slide) * 80.0, crate::W - 16.0, height);
+        gfx.shadow(card, 12.0, 8.0, crate::gfx::BLACK.with_a(80));
+        gfx.round_rect(card, 12.0, 0.0, theme.panel);
+        let left = (crate::W - 416.0) / 2.0;
+        let mut y = card.y + 10.0;
+        gfx.text_top(Role::Label, left + 2.0, y, theme.dim, &crate::i18n::upper(heading, self.settings.language));
+        y += label_h + 4.0;
+        // The field: text longer than it shows its end, where the caret is;
+        // a note at its right end takes its width from the text.
+        let field = Rect::new(left, y, 416.0, 26.0);
+        gfx.round_rect(field, 6.0, 0.0, theme.tile);
+        let note_w = if note.is_empty() { 0.0 } else { gfx.measure(Role::Small, &note) + 12.0 };
+        let shown = gfx.fit_tail(Role::BodyBold, &format!("{text}_"), 396.0 - note_w);
+        let mid = |gfx: &mut Gfx, role: Role| (field.y + 13.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
+        let base = mid(gfx, Role::BodyBold);
+        gfx.text(Role::BodyBold, field.x + 10.0, base, theme.text, &shown);
+        if !note.is_empty() {
+            let base = mid(gfx, Role::Small);
+            gfx.text_right(Role::Small, field.right() - 10.0, base, theme.dim, &note);
+        }
+        y += 26.0 + 4.0 + 2.0 + 4.0;
+        for (r, keys) in rows.iter().enumerate() {
+            let width: f32 = keys.iter().map(|k| if k.wide() { 80.0 } else { 38.0 }).sum::<f32>() + 4.0 * (keys.len() - 1) as f32;
+            let mut x = ((crate::W - width) / 2.0).round();
+            for (c, key) in keys.iter().enumerate() {
+                let w = if key.wide() { 80.0 } else { 38.0 };
+                let active = r == row && c == col;
+                gfx.round_rect(Rect::new(x, y, w, 24.0), 6.0, 0.0, if active { theme.accent } else { theme.tile });
+                let label: String = match key.action {
+                    Action::Char => (if shift { key.upper } else { key.lower }).to_string(),
+                    Action::Symbols => next_page.to_string(),
+                    Action::Shift => t.shift.to_string(),
+                    Action::Space => t.key_space.to_string(),
+                    Action::Delete => t.key_delete.to_string(),
+                    Action::Done => t.done.to_string(),
+                };
+                let role = if active { Role::SmallBold } else { Role::Small };
+                let base = (y + 12.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
+                gfx.text_centered(role, x + w / 2.0, base, if active { theme.panel } else { theme.text }, &label);
+                x += w + 4.0;
+            }
+            y += 24.0 + 4.0;
+        }
+        y += 2.0 + 4.0;
+        chrome::hints_centered(gfx, &theme, &hints, crate::W / 2.0, y, 456.0);
+    }
+
+    /// A menu row's label, value or symbol, and arrows
+    /// (`components/menu.tsx`).
+    fn menu_row(&self, item: menu::Item) -> (&'static str, Option<String>, Option<chrome::Button>, panel::Step) {
+        use crate::library::settings::{ClockFormat, ScrapeSource, UpdateChannel as Channel};
+        use menu::{Item, Page};
+        use panel::Step::{Both, Right};
+        let (t, s) = (self.t(), &self.settings);
+        let on_off = |on: bool| Some(if on { t.on } else { t.off }.to_string());
+        let page = |p: Page| match p {
+            Page::Main => t.menu,
+            Page::Appearance => t.appearance,
+            Page::Status => t.status_bar,
+            Page::Library => t.library,
+            Page::Updates => t.updates,
+        };
+        match item {
+            Item::Open(p) => (page(p), None, None, Right),
+            Item::Theme => {
+                let th = &t.themes;
+                let name = match s.theme {
+                    ThemeId::Midnight => th.midnight,
+                    ThemeId::Aurora => th.aurora,
+                    ThemeId::Sakura => th.sakura,
+                    ThemeId::Ember => th.ember,
+                    ThemeId::Daylight => th.daylight,
+                    ThemeId::Dynamic => th.dynamic,
+                };
+                (t.theme, Some(name.into()), None, Both)
+            }
+            Item::View => {
+                let v = &t.views;
+                let name = match s.view {
+                    ViewMode::Home => v.home,
+                    ViewMode::Carousel => v.carousel,
+                    ViewMode::Grid => v.grid,
+                    ViewMode::List => v.list,
+                    ViewMode::Cascade => v.cascade,
+                };
+                (t.view, Some(name.into()), None, Both)
+            }
+            Item::Details => {
+                let d = &t.detail_levels;
+                let name = match s.detail {
+                    DetailLevel::Basic => d.basic,
+                    DetailLevel::Normal => d.normal,
+                    DetailLevel::Detailed => d.detailed,
+                };
+                (t.details, Some(name.into()), None, Both)
+            }
+            Item::Backdrop => (t.backdrop, on_off(s.backdrop), None, Both),
+            Item::IconBox => (t.icon_box, on_off(s.icon_box), None, Both),
+            Item::StatusBar => (t.show_status_bar, on_off(s.status_bar), None, Both),
+            Item::Clock => {
+                let c = &t.clock_formats;
+                let name = match s.clock {
+                    ClockFormat::System => c.system,
+                    ClockFormat::H24 => c.h24,
+                    ClockFormat::H12 => c.h12,
+                };
+                (t.clock, Some(name.into()), None, Both)
+            }
+            Item::BatteryPercent => (t.battery_percent, on_off(s.battery_percent), None, Both),
+            Item::Categories => (t.categories_row, Some(t.manage.into()), None, Right),
+            Item::FetchArt => {
+                let source = match s.scraper {
+                    ScrapeSource::Auto => t.source_auto,
+                    ScrapeSource::SteamGridDb => "SteamGridDB",
+                    ScrapeSource::Libretro => "libretro",
+                };
+                (t.fetch_art, Some(source.into()), None, Right)
+            }
+            Item::CleanArt => (t.clean_art, None, None, Right),
+            Item::Rescan => (t.rescan, None, None, Right),
+            Item::UpdateChannel => {
+                let u = &t.update_channels;
+                let name = match s.updates {
+                    Channel::Stable => u.stable,
+                    Channel::Beta => u.beta,
+                    Channel::Nightly => u.nightly,
+                    Channel::Off => u.off,
+                };
+                (t.update_channel, Some(name.into()), None, Both)
+            }
+            // This build's version, as `buildLabel` shows a local build's.
+            Item::CheckUpdates => (t.check_updates, Some(format!("{} (next)", env!("CARGO_PKG_VERSION"))), None, Right),
+            Item::Confirm => (t.confirm, None, Some(chrome::Button::confirm(s.confirm)), Both),
+            Item::Language => {
+                // Each language under its own name, whatever the current one.
+                let name = crate::i18n::LANGUAGES.iter().find(|(l, _)| *l == s.language).map_or("", |(_, n)| n);
+                (t.language, Some(name.into()), None, Both)
+            }
+            Item::Diagnostics => (t.diagnostics, None, None, Right),
+        }
+    }
+
+    /// The SELECT menu: the main page, or the group opened from it.
+    fn draw_menu(&mut self, gfx: &mut Gfx) {
+        let theme = self.theme;
+        let t = self.t();
+        let title = self.menu_row(menu::Item::Open(self.menu.page)).0;
+        let heading = crate::i18n::upper(title, self.settings.language);
+        let slide = self.drawer.at(self.now);
+        let mut drawer = panel::Drawer::open(gfx, &theme, &heading, panel::Size::Wide, slide);
+        let items = menu::items(self.menu.page);
+        let first = self.menu.first_visible();
+        for (index, item) in items.iter().enumerate().skip(first).take(menu::VISIBLE) {
+            let (label, value, icon, step) = self.menu_row(*item);
+            drawer.row(gfx, label, value.as_deref(), icon, index == self.menu.row, step);
+        }
+        let cancel = chrome::Button::cancel(self.settings.confirm);
+        let back = if self.menu.page == menu::Page::Main { t.close } else { t.back };
+        drawer.hints(gfx, &[(chrome::Button::DpadVertical, t.navigate), (chrome::Button::DpadHorizontal, t.change), (cancel, back)]);
     }
 
     /// Shown when a title with no bubble is started and Adrenaline would not
@@ -635,20 +1061,31 @@ impl Shelf {
         let theme = self.theme;
         let title = self.selected_game().map(|g| g.title.to_string()).unwrap_or_default();
         let slide = self.drawer.at(self.now);
-        let mut drawer = panel::Drawer::open(gfx, &theme, texts::ADR_TITLE, panel::Size::Wide, slide);
+        let t = self.t();
+        let heading = crate::i18n::upper(t.adr_title, self.settings.language);
+        let mut drawer = panel::Drawer::open(gfx, &theme, &heading, panel::Size::Wide, slide);
         let can_fix = matches!(state, PluginState::Missing | PluginState::Off);
-        let action = if state == PluginState::Off { texts::ADR_TURN_ON } else { texts::ADR_ADD };
+        let action = if state == PluginState::Off { t.adr_turn_on } else { t.adr_add };
         if can_fix {
-            drawer.row(gfx, action, None, true, true);
+            drawer.row(gfx, action, None, None, true, panel::Step::Right);
         }
-        let note = if failed { texts::ADR_FAILED.to_string() } else { texts::adrenaline(state, &title) };
+        let note = if failed {
+            t.adr_failed.to_string()
+        } else {
+            let text = match state {
+                PluginState::Off => t.adr_off,
+                PluginState::Missing => t.adr_missing,
+                PluginState::NoAdrenaline | PluginState::On => t.adr_none,
+            };
+            crate::i18n::fill(text, &[("title", &title)])
+        };
         drawer.note(gfx, &note, 1);
         let confirm = chrome::Button::confirm(self.settings.confirm);
         let cancel = chrome::Button::cancel(self.settings.confirm);
         if can_fix {
-            drawer.hints(gfx, &[(confirm, action), (cancel, texts::BACK)]);
+            drawer.hints(gfx, &[(confirm, action), (cancel, t.back)]);
         } else {
-            drawer.hints(gfx, &[(cancel, texts::BACK)]);
+            drawer.hints(gfx, &[(cancel, t.back)]);
         }
     }
 
@@ -872,6 +1309,50 @@ mod tests {
         rest(&mut shelf, &mut host, &mut gfx);
         assert_eq!(host.backdrops.len(), 2, "no new request");
         assert_eq!(shelf.backdrop.as_ref().map(|b| b.key.clone()), Some(PictureKey::Backdrop { id: "VITASHELL".into(), file: String::new() }));
+    }
+
+    #[test]
+    fn the_menu_steps_a_setting_and_saves_it() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        // SELECT, Appearance, down to View, right: Carousel.
+        for button in [SELECT, RIGHT, DOWN, RIGHT] {
+            press(&mut shelf, &mut host, button);
+        }
+        assert!(shelf.menu.open);
+        assert_eq!(shelf.settings.view, ViewMode::Carousel);
+        let saved = String::from_utf8(host.files.0[SETTINGS_FILE].clone()).unwrap();
+        assert!(saved.contains(r#""view":"carousel""#), "{saved}");
+        // The shelf takes no buttons while the menu is open: confirm steps
+        // the row, it does not launch.
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(shelf.settings.view, ViewMode::Grid);
+        assert!(host.launched.is_empty());
+        // Back returns to the main page; SELECT closes from any page.
+        press(&mut shelf, &mut host, CROSS);
+        assert_eq!(shelf.menu.page, menu::Page::Main);
+        press(&mut shelf, &mut host, RIGHT);
+        press(&mut shelf, &mut host, SELECT);
+        assert!(!shelf.menu.open);
+    }
+
+    #[test]
+    fn a_search_shows_its_tab_and_closing_returns_to_the_title() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        // On Games, the second title is not there; Games holds PCSA00069.
+        press(&mut shelf, &mut host, R);
+        let before = shelf.selected_game().map(|g| g.id.to_string());
+        press(&mut shelf, &mut host, SQUARE);
+        assert!(shelf.keyboard.is_some());
+        shelf.keyboard.as_mut().unwrap().text = "vita".into();
+        press(&mut shelf, &mut host, START);
+        assert_eq!(shelf.tab, SEARCH_ID);
+        assert_eq!(shelf.tabs[0].id, SEARCH_ID);
+        assert_eq!(shelf.selected_game().map(|g| g.id.to_string()).as_deref(), Some("VITASHELL"));
+        // Back on the search tab closes it and returns.
+        press(&mut shelf, &mut host, CROSS);
+        assert_ne!(shelf.tab, SEARCH_ID);
+        assert!(shelf.tabs.iter().all(|c| c.id != SEARCH_ID));
+        assert_eq!(shelf.selected_game().map(|g| g.id.to_string()), before);
     }
 
     #[test]

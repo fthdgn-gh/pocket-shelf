@@ -16,6 +16,15 @@ const PAD_X: f32 = 12.0;
 const PAD_Y: f32 = 10.0;
 pub const ROW_H: f32 = 26.0;
 
+/// The arrows an active row shows: none, a right one for a row that opens
+/// something, both for a value that steps.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Step {
+    None,
+    Right,
+    Both,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Size {
     Narrow,
@@ -64,9 +73,9 @@ impl Drawer {
         drawer
     }
 
-    /// A row: its label, and with `arrow`, the right arrow of a row that
-    /// opens something.
-    pub fn row(&mut self, gfx: &mut Gfx, label: &str, value: Option<&str>, active: bool, arrow: bool) {
+    /// A row (`OptionRow`): its label on the left, its value (text and/or
+    /// a button symbol) on the right, and while active the arrows of `step`.
+    pub fn row(&mut self, gfx: &mut Gfx, label: &str, value: Option<&str>, icon: Option<Button>, active: bool, step: Step) {
         let theme = self.theme;
         let rect = Rect::new(self.x, self.y, self.w, ROW_H);
         if active {
@@ -75,15 +84,26 @@ impl Drawer {
         let role = if active { Role::BodyBold } else { Role::Body };
         let baseline = (rect.y + ROW_H / 2.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
         gfx.text(role, rect.x + 8.0, baseline, if active { theme.text } else { theme.dim }, label);
+        // Right to left: arrow, icon, value, left arrow.
         let mut right = rect.right() - 8.0;
-        if arrow && active {
+        if active && step != Step::None {
             right -= 8.0;
             gfx.icon(Icon::ArrowRight, right, rect.y + 5.0, theme.dim);
             right -= 4.0;
         }
+        if let Some(icon) = icon {
+            right -= 16.0;
+            icon.draw(gfx, right, rect.y + 5.0);
+            right -= 4.0;
+        }
         if let Some(value) = value {
             let base = (rect.y + ROW_H / 2.0 - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
-            gfx.text_right(Role::BodyBold, right, base, if active { theme.accent } else { theme.dim }, value);
+            let width = gfx.measure(Role::BodyBold, value);
+            gfx.text(Role::BodyBold, right - width, base, if active { theme.accent } else { theme.dim }, value);
+            right -= width + 4.0;
+        }
+        if active && step == Step::Both {
+            gfx.icon(Icon::ArrowLeft, right - 8.0, rect.y + 5.0, theme.dim);
         }
         self.y += ROW_H + 2.0;
     }

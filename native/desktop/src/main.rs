@@ -39,6 +39,16 @@ fn retro() -> fake::FakeHost {
     fake::FakeHost::new().with_retro_library()
 }
 
+fn turkish() -> fake::FakeHost {
+    fake::FakeHost::new().with_language("tr")
+}
+
+fn german_first_start() -> fake::FakeHost {
+    let mut host = fake::FakeHost::new().with_language("de");
+    host.first_start = true;
+    host
+}
+
 fn saved() -> fake::FakeHost {
     fake::FakeHost::new().with_saved_data()
 }
@@ -47,39 +57,61 @@ const fn shot(name: &'static str, script: &'static [(u32, u32)]) -> Shot {
     Shot { name, script, setup: plain }
 }
 
-// Views by SELECT presses from Home: Carousel 1, Grid 2, List 3, Cascade 4.
-// Details by START presses from Normal: Detailed 1, Basic 2.
+// Views through SELECT > Appearance > View, steps from Home: Carousel 1,
+// Grid 2, List 3, Cascade 4. Details through Appearance > Details, steps
+// from Normal: Detailed 1, Basic 2.
 const SHOTS: &[Shot] = &[
     shot("01-reading", &[(0, 1)]),
     shot("02-home", &[(0, SETTLE)]),
     shot("03-home-right-3", &[(0, 4), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
     shot("04-home-moving", &[(0, 4), (RIGHT, TAP), (0, 4)]),
-    shot("05-home-detailed", &[(0, 4), (START, TAP), (0, SETTLE)]),
-    shot("06-home-basic", &[(0, 4), (START, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
-    shot("10-carousel", &[(0, 4), (SELECT, TAP), (0, SETTLE)]),
-    shot("11-carousel-right-2", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
-    shot("12-carousel-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
-    shot("13-carousel-basic", &[(0, 4), (SELECT, TAP), (0, TAP), (START, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
-    shot("20-grid", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, SETTLE)]),
-    shot("21-grid-down-2", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, SETTLE)]),
-    shot("22-grid-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
-    shot("30-list", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, SETTLE)]),
-    shot("31-list-held-down", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, 60), (0, SETTLE)]),
-    shot("32-list-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
-    shot("40-cascade", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, SETTLE)]),
-    shot("41-cascade-right-2", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
-    shot("42-cascade-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
+    shot("05-home-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("06-home-basic", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("10-carousel", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("11-carousel-right-2", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("12-carousel-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("13-carousel-basic", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("20-grid", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("21-grid-down-2", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (0, SETTLE)]),
+    shot("22-grid-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("30-list", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("31-list-held-down", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, 60), (0, SETTLE)]),
+    shot("32-list-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("40-cascade", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("41-cascade-right-2", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("42-cascade-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
     // Tabs: R from Games to Homebrew, PS Mobile, PSP, PSX, the consoles;
     // L wraps to System.
     shot("50-tab-homebrew", &[(0, 4), (R, TAP), (0, SETTLE)]),
     shot("51-tab-snes", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, SETTLE)]),
     shot("52-tab-system", &[(0, 4), (L, TAP), (0, SETTLE)]),
     shot("53-tab-sliding", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, 3)]),
-    // Themes by SQUARE: Aurora, Sakura, Ember, Daylight, Dynamic.
-    shot("60-aurora", &[(0, 4), (SQUARE, TAP), (0, SETTLE)]),
-    shot("61-daylight", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE)]),
-    shot("62-dynamic", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE)]),
-    shot("63-dynamic-carousel", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
+    // Themes by Appearance > Theme: Aurora 1, Daylight 4, Dynamic 5.
+    shot("60-aurora", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("61-daylight", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("62-dynamic", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("63-dynamic-carousel", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    // The SELECT menu: main page, Appearance, Status bar, a value stepped
+    // with the menu open, the language changed to Turkish.
+    shot("100-menu", &[(0, 4), (SELECT, TAP), (0, SETTLE)]),
+    shot("101-menu-appearance", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("102-menu-status", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("103-menu-view-changed", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("104-menu-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("105-menu-confirm-cross", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    // Search: square opens the keyboard; typing "st" (row 2 col 1, row 1
+    // col 4) shows the count; Done shows the results tab; back closes it.
+    shot("110-keyboard", &[(0, 4), (SQUARE, TAP), (0, TAP), (0, SETTLE)]),
+    shot("111-keyboard-typed", &[(0, 4), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    shot("112-search-results", &[(0, 4), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (0, SETTLE)]),
+    shot("113-search-closed", &[(0, 4), (RIGHT, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (CROSS, TAP), (0, TAP), (0, SETTLE)]),
+    shot("114-search-nothing", &[(0, 4), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (0, SETTLE)]),
+    shot("115-keyboard-accents-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (0, SETTLE)]),
+    // Languages: the shelf in Turkish (the dotted capital İ in a drawer
+    // heading), the scan page in German.
+    Shot { name: "64-turkish", script: &[(0, SETTLE)], setup: turkish },
+    Shot { name: "65-turkish-adrenaline", script: &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, SETTLE)], setup: turkish },
+    Shot { name: "66-german-scan", script: &[(0, 24)], setup: german_first_start },
     // A first start: the scan page, then the titles.
     Shot { name: "70-scan-start", script: &[(0, 3)], setup: first_start },
     Shot { name: "71-scan-middle", script: &[(0, 24)], setup: first_start },

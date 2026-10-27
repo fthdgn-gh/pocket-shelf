@@ -383,7 +383,8 @@
     "next:shots": "cd native/desktop && cargo run --release --",
     "next:build": "sh native/vita/build.sh",
     "next:test": "cd native/core && cargo test && cd ../platform-tests && RETROARCH_SAMPLES=\"$PWD/../../.samples/retroarch-playlists\" cargo test",
-    "next:fixtures": "bun src/tools/build-info.ts && bun test ./native/tools/fixtures.test.ts"
+    "next:fixtures": "bun src/tools/build-info.ts && bun test ./native/tools/fixtures.test.ts",
+    "next:locales": "bun native/tools/locales.ts"
   },
   "dependencies": {
     "@babel/core": "7.29.7",

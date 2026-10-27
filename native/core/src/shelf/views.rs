@@ -5,7 +5,7 @@
 use super::art::{selected_frame, tile_shadow};
 use super::chrome::{Button, FOOTER_H};
 use super::layout::*;
-use super::{texts, Shelf, Slot, TileAnim};
+use super::{Shelf, Slot, TileAnim};
 use crate::gfx::{Gfx, Rect};
 use crate::library::catalog::Game;
 use crate::library::settings::{DetailLevel, ViewMode};
@@ -89,15 +89,28 @@ impl Shelf {
     /// how to move one here.
     fn draw_empty(&mut self, gfx: &mut Gfx) {
         let theme = self.theme;
+        if self.tab == crate::library::categories::SEARCH_ID {
+            // A search that found nothing: its term, then search again or
+            // close.
+            let t = self.t();
+            let line = gfx.line_height(Role::Title);
+            let top = TOP + VIEW_H / 2.0 - (line + 4.0 + 16.0) / 2.0;
+            let term = gfx.fit(Role::Title, &self.library.search_term, 180.0);
+            gfx.text_top_centered(Role::Title, W / 2.0, top, theme.text, &crate::i18n::fill(t.no_match, &[("term", &term)]));
+            let items = [(Button::Face(Symbol::Square), t.search_again), (Button::cancel(self.settings.confirm), t.close)];
+            super::chrome::hints_centered(gfx, &theme, &items, W / 2.0, top + line + 4.0, W - 32.0);
+            return;
+        }
         let has_titles = !self.library.games().is_empty();
         let line = gfx.line_height(Role::Title);
         let cy = TOP + VIEW_H / 2.0;
         let top = if has_titles { cy - (line + 4.0 + 16.0) / 2.0 } else { cy - line / 2.0 };
-        let text = if has_titles { texts::EMPTY_CATEGORY } else { texts::NO_TITLES };
+        let t = self.t();
+        let text = if has_titles { t.empty_category } else { t.no_titles };
         gfx.text_top_centered(Role::Title, W / 2.0, top, theme.text, text);
         if has_titles {
             // "Press {button} on a title to move it here", the button inline.
-            let (before, after) = texts::MOVE_HERE.split_once("{button}").unwrap_or((texts::MOVE_HERE, ""));
+            let (before, after) = t.move_here.split_once("{button}").unwrap_or((t.move_here, ""));
             let width = gfx.measure(Role::Small, before) + 20.0 + gfx.measure(Role::Small, after);
             let y = top + line + 4.0;
             let baseline = (y + 8.0 - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
@@ -136,7 +149,12 @@ impl Shelf {
     }
 
     fn category_label(&self, game: &Game) -> String {
-        self.library.all_categories().iter().find(|c| *c.id == *game.category).map_or(game.category.to_string(), |c| c.label.clone())
+        let t = self.t();
+        self.library
+            .all_categories()
+            .iter()
+            .find(|c| *c.id == *game.category)
+            .map_or(game.category.to_string(), |c| crate::i18n::category_label(t, c))
     }
 
     /// Draw a tile's art and, for the selected one, its ring.
@@ -200,12 +218,13 @@ impl Shelf {
         y += gfx.line_height(Role::Small) + 4.0 + 4.0 + 4.0;
         // The start button: the confirm button and "Launch" on a pill in the
         // text color.
-        let label_w = gfx.measure(Role::BodyBold, texts::LAUNCH);
+        let launch = self.t().launch;
+        let label_w = gfx.measure(Role::BodyBold, launch);
         let pill = Rect::new(HOME_LEFT, y, 6.0 + 16.0 + 6.0 + label_w + 14.0, 26.0);
         gfx.round_rect(pill, 13.0, 0.0, theme.text);
         Button::confirm(self.settings.confirm).draw(gfx, pill.x + 6.0, y + 5.0);
         let baseline = (y + 13.0 - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
-        gfx.text(Role::BodyBold, pill.x + 28.0, baseline, theme.bg_bottom, texts::LAUNCH);
+        gfx.text(Role::BodyBold, pill.x + 28.0, baseline, theme.bg_bottom, launch);
     }
 
     /// The Carousel (`views/carousel.tsx`): one row of tiles on a lit shelf,

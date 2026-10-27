@@ -46,8 +46,9 @@ pub struct App {
     /// Whether the host's titles have arrived.
     titled: bool,
     scan: Option<Scan>,
-    /// The scan page's theme, from the saved settings.
+    /// The scan page's theme and language, from the saved settings.
     theme: Theme,
+    language: crate::library::settings::Language,
     background: Option<TexId>,
     /// The mark's three tile gradients, made on first use.
     mark: Option<[TexId; 3]>,
@@ -72,6 +73,7 @@ impl App {
             titled: false,
             scan: None,
             theme: theme_by_id(Settings::defaults(UpdateChannel::Off).theme),
+            language: crate::library::settings::Language::En,
             background: None,
             mark: None,
             events: Vec::new(),
@@ -139,6 +141,7 @@ impl App {
                 settings = Settings::parse(&bytes, settings);
             }
             self.theme = theme_by_id(settings.theme);
+            self.language = settings.language;
             let library = Library::load(host);
             host.log(&format!("library loaded in {} ms", (host.time_us() - now) / 1000));
             // The first status reading is slow on hardware (about 25 ms), so
@@ -199,7 +202,8 @@ impl App {
         y += 48.0 + 10.0 + 2.0 + 10.0;
         gfx.text_top_centered(Role::Heading, W / 2.0, y, theme.text, "Pocket Shelf");
         y += lines[0] + 10.0;
-        gfx.text_top_centered(Role::Body, W / 2.0, y, theme.dim, "Finding your games and apps");
+        let t = crate::i18n::messages(self.language);
+        gfx.text_top_centered(Role::Body, W / 2.0, y, theme.dim, t.scan_title);
         y += lines[1] + 10.0;
         let bar = Rect::new((W - SCAN_BAR_W) / 2.0, y, SCAN_BAR_W, 6.0);
         gfx.round_rect(bar, 3.0, 0.0, theme.line);
@@ -211,7 +215,8 @@ impl App {
         }
         y += 6.0 + 10.0;
         if let (Some(phase), None) = (phase, finished) {
-            let step = format!("{}: {done} of {total}", phase.label());
+            let (done, total) = (done.to_string(), total.to_string());
+            let step = crate::i18n::fill(t.scan_step, &[("phase", crate::i18n::scan_phase(t, phase)), ("done", &done), ("total", &total)]);
             gfx.text_top_centered(Role::Small, W / 2.0, y, theme.faint, &step);
         }
     }

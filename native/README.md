@@ -41,6 +41,7 @@ glyph changed.
 |---|---|
 | `bun run next:test` | Core tests, then the platform modules' tests (with `.samples/retroarch-playlists` when present) |
 | `bun run next:fixtures` | Write `core/tests/fixtures/` with the current app's own save functions |
+| `bun run next:locales` | Write `core/src/locales.rs` from `src/locales/*.ts` |
 | `bun run next:shots [words…]` | Screenshots to `.pocket-build/validation/native/desktop/` |
 | `bun run next:build` | Release VPK to `dist/vita/pocket-shelf-next.vpk` (`vita/build.sh`) |
 
@@ -123,19 +124,31 @@ screen the main loop sends the request and the process ends
 back. The VPK carries `psp/pocketshelf.prx`, which an Adrenaline launch
 copies to the memory stick.
 
-**Until the SELECT menu (phase 4)**: SELECT steps the view, START the detail
-level, SQUARE the theme (each saved), TRIANGLE adds or removes 5,000 test
-titles. The footer already shows the current app's hints (Edit, Search,
-Menu).
+**The SELECT menu** (`menu.rs`, `components/menu.tsx`) holds every setting
+on the current app's pages and saves each change. Its Categories, Rescan
+and Diagnostics rows open their panels later in phase 4; Fetch artwork,
+Clean up artwork and Check for updates in phase 5. **Search** (`keyboard.rs`):
+SQUARE opens the keyboard (three pages, the accents page led by the
+language's own letters), Done shows the results in a Search tab in front,
+the other face button on that tab closes it and returns to the title
+selected before. Until the editor takes the button, TRIANGLE adds or
+removes 5,000 test titles.
+
+**Languages**: `locales.rs` is generated from the current app's
+`src/locales/*.ts` (`bun run next:locales`, `tools/locales.ts`), one
+`Messages` struct and a constant per language; `i18n.rs` has `fill`,
+`upper` (the Turkish i) and the built-in categories' names by key. Every
+screen reads its words from the chosen language.
 
 On a first start (no `titles.tsv`), the scan page shows first: the mark,
 the name, a bar and the phase with its count (`components/scan-page.tsx`),
 fed by `Event::Scan`, until the titles arrive and 8 frames after.
 
-Desktop shots: `02`–`06` Home, `10`–`13` Carousel, `20`–`22` Grid, `30`–`32`
+Desktop shots: `02`–`06` Home (views and details are set through the menu), `10`–`13` Carousel, `20`–`22` Grid, `30`–`32`
 List, `40`–`42` Cascade, `50`–`53` tabs, `60`–`63` themes, `70`–`72` the scan
 page, `80`–`82` saved data, `90` test titles, `91` launching, `92`–`93` the
-Adrenaline drawer.
+Adrenaline drawer, `100`–`105` the SELECT menu, `110`–`115` the keyboard and
+search, `64`–`66` Turkish and German.
 
 ## Timing
 

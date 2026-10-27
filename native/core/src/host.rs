@@ -83,18 +83,6 @@ impl ScanPhase {
             _ => ScanPhase::Apps,
         }
     }
-
-    /// The English name (`scanPhases` in `locales/en.ts`).
-    pub fn label(self) -> &'static str {
-        match self {
-            ScanPhase::Apps => "Apps and games",
-            ScanPhase::System => "System applications",
-            ScanPhase::Psm => "PlayStation Mobile",
-            ScanPhase::Psp => "PSP and PSX games",
-            ScanPhase::Images => "Disc images",
-            ScanPhase::Retro => "RetroArch playlists",
-        }
-    }
 }
 
 pub enum Event {
