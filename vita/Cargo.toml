@@ -1,0 +1,42 @@
+[package]
+name = "pocket-shelf-next"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[dependencies]
+shelf-core = { path = "../core" }
+vitasdk-sys = { version = "0.3.3", features = ["SceAppMgr_stub", "SceAppUtil_stub", "SceCtrl_stub", "SceGxm_stub", "SceLibKernel_stub", "SceKernelThreadMgr_stub", "SceNet_stub", "SceNetCtl_stub", "ScePower_stub", "SceRegistryMgr_stub", "SceRtc_stub", "SceSqlite_stub", "SceSysmodule_stub", "ScePromoterUtil_stub"] }
+vita2d-sys = "0.1.1"
+png = "0.17"
+# Raw deflate for CSO disc images and RetroArch's compressed playlists.
+miniz_oxide = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# TLS for `http`. The Vita's own SceSsl cannot negotiate with servers that
+# present an ECDSA certificate, so the TLS stack is Rust's.
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
+rustls-rustcrypto = "0.0.2-alpha"
+webpki-roots = "1"
+
+# The platform modules keep the current host's switches; this build has the
+# data folder.
+[features]
+default = ["data-fs"]
+data-fs = []
+
+[package.metadata.vita]
+# The app's own title id since the cutover (docs/PLAN.md, phase 6): a
+# release replaces ux0:app/POCKTSHLF, and the updater app starts it.
+title_id = "POCKTSHLF"
+title_name = "Pocket Shelf"
+
+# vita-elf-create reads sceUserMainThreadStackSize from the symbol table.
+[package.metadata.vita.profile.release]
+strip_symbols = false
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = true
