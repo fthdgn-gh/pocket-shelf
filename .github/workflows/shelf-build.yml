@@ -1,7 +1,7 @@
 name: Pocket Shelf build
 
-# Builds the release VPK of the native port (native/, no PocketJS since
-# 0.2.0) and attaches it to the run as the `pocket-shelf-vpk` artifact. shelf-release.yml and shelf-nightly.yml call it and publish the
+# Builds the release VPK and attaches it to the run as the `pocket-shelf-vpk`
+# artifact. shelf-release.yml and shelf-nightly.yml call it and publish the
 # result; run it by hand (Actions ▸ Pocket Shelf build ▸ Run workflow) to check
 # a build without publishing anything.
 on:
@@ -14,7 +14,7 @@ permissions:
 env:
   VITASDK: /home/runner/vitasdk
   VDPM_NONINTERACTIVE: "1"
-  # The toolchain pinned in native/vita/rust-toolchain.toml and build.sh.
+  # The toolchain pinned in vita/rust-toolchain.toml and vita/build.sh.
   VITA_RUST: nightly-2026-05-28
   CARGO_VITA_VERSION: 0.2.2
 
@@ -44,9 +44,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            native/vita -> target
-            native/core -> target
-            native/platform-tests -> target
+            vita -> target
+            core -> target
+            platform-tests -> target
           key: ${{ env.VITA_RUST }}
 
       - name: Install cargo-vita
@@ -57,8 +57,8 @@ jobs:
 
       # Core and platform module tests on the runner's own Rust, then the VPK
       # (build.sh reads the tag through src/tools/build-info.ts).
-      - run: bun run next:test
-      - run: bun run next:build
+      - run: bun run test
+      - run: bun run build
 
       - uses: actions/upload-artifact@v7
         with:
