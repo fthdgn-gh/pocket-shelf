@@ -147,6 +147,11 @@ impl App {
                         shelf.picture(gfx, key, picture);
                     }
                 }
+                Event::Listing(folder, listing) => {
+                    if let Some(shelf) = &mut self.shelf {
+                        shelf.listing(host, folder, listing);
+                    }
+                }
             }
         }
         self.events = events;

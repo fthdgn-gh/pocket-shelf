@@ -36,16 +36,35 @@ fn slot(kind: AssetKind) -> usize {
 #[derive(Default)]
 pub struct Listings {
     loaded: HashMap<String, Listing>,
+    /// Folders the host is reading and parsing (`Host::listing`).
+    asked: HashSet<String>,
 }
 
 impl Listings {
-    /// A console's listing when on disk or loaded.
-    pub fn get(&mut self, host: &mut dyn Host, folder: &str) -> Option<&Listing> {
-        if !self.loaded.contains_key(folder) {
-            let listing = host.read(&libretro::listing_path(folder)).and_then(|b| Listing::parse(&String::from_utf8_lossy(&b)))?;
-            self.loaded.insert(folder.to_string(), listing);
-        }
+    /// A console's listing once loaded.
+    pub fn get(&self, folder: &str) -> Option<&Listing> {
         self.loaded.get(folder)
+    }
+
+    /// Ask the host for a console's listing file, read and parsed off the
+    /// frame (9301 PlayStation names took 680 ms on the Vita); answered with
+    /// [`Event::Listing`](crate::host::Event::Listing).
+    pub fn load(&mut self, host: &mut dyn Host, folder: &str) {
+        if !self.loaded.contains_key(folder) && self.asked.insert(folder.to_string()) {
+            host.listing(folder);
+        }
+    }
+
+    /// The host's answer; `false` when there is no listing file.
+    pub fn answer(&mut self, folder: &str, listing: Option<Listing>) -> bool {
+        self.asked.remove(folder);
+        match listing {
+            Some(listing) => {
+                self.loaded.insert(folder.to_string(), listing);
+                true
+            }
+            None => false,
+        }
     }
 
     /// Start fetching a console's listing to its file.
@@ -118,6 +137,9 @@ pub struct Online {
     /// Downloaded candidates by file name, newest last.
     memory: Vec<(String, Vec<u8>)>,
     next_memory: u32,
+    /// The listing being loaded, and whether it was fetched from the
+    /// server already (a second missing file is an error).
+    waiting: Option<(String, bool)>,
 }
 
 impl Online {
@@ -147,6 +169,7 @@ impl Online {
             on_disk: [art, list_png(host, "backdrops").into_iter().collect()],
             memory: Vec::new(),
             next_memory: 0,
+            waiting: None,
         };
         let actions = online.search(host, t, listings);
         (online, actions)
@@ -202,18 +225,14 @@ impl Online {
                 self.status = t.not_retro_arch.to_string();
                 return Vec::new();
             };
-            if listings.get(host, &folder).is_some() {
-                self.show_names(host, t, listings, &folder);
+            if listings.get(&folder).is_some() {
+                self.show_names(t, listings, &folder);
                 return Vec::new();
             }
             self.busy = true;
             self.status = t.getting_list.to_string();
-            if let Some(id) = Listings::fetch(host, &folder) {
-                self.pending.push((id, Purpose::Listing(folder)));
-            } else {
-                self.busy = false;
-                self.status = t.no_network.to_string();
-            }
+            listings.load(host, &folder);
+            self.waiting = Some((folder, false));
             return Vec::new();
         }
         let key = Online::key(host);
@@ -229,8 +248,28 @@ impl Online {
         Vec::new()
     }
 
-    fn show_names(&mut self, host: &mut dyn Host, t: &Messages, listings: &mut Listings, folder: &str) {
-        let names = listings.get(host, folder).map(|l| libretro::search_names(&self.term, l, 30)).unwrap_or_default();
+    /// A listing the host read: its names, or a fetch from the server when
+    /// the file is missing.
+    pub fn listing_ready(&mut self, host: &mut dyn Host, t: &Messages, listings: &Listings, folder: &str) {
+        let Some((waiting, fetched)) = self.waiting.clone() else { return };
+        if waiting != folder || self.step != Step::Games {
+            return;
+        }
+        self.waiting = None;
+        if listings.get(folder).is_some() || fetched {
+            // A fetched file with no names finds none.
+            self.busy = false;
+            self.show_names(t, listings, folder);
+        } else if let Some(id) = Listings::fetch(host, folder) {
+            self.pending.push((id, Purpose::Listing(folder.to_string())));
+        } else {
+            self.busy = false;
+            self.status = t.no_network.to_string();
+        }
+    }
+
+    fn show_names(&mut self, t: &Messages, listings: &Listings, folder: &str) {
+        let names = listings.get(folder).map(|l| libretro::search_names(&self.term, l, 30)).unwrap_or_default();
         self.games = names.into_iter().enumerate().map(|(i, name)| Found { id: i as u64, name, year: None }).collect();
         self.row = if self.games.is_empty() { 0 } else { 1 };
         self.status = if self.games.is_empty() { t.no_games.to_string() } else { String::new() };
@@ -402,11 +441,13 @@ impl Online {
                 Vec::new()
             }
             Purpose::Listing(folder) => {
-                self.busy = false;
                 let error = failed(&state).unwrap_or_else(|| format!("HTTP {status}"));
-                if status == 200 && listings.get(host, &folder).is_some() {
-                    self.show_names(host, t, listings, &folder);
+                if status == 200 {
+                    // Saved to its file; the host reads it back.
+                    listings.load(host, &folder);
+                    self.waiting = Some((folder, true));
                 } else {
+                    self.busy = false;
                     self.status = fill(t.unreachable_libretro, &[("error", &error)]);
                 }
                 Vec::new()
@@ -567,6 +608,8 @@ mod tests {
         replies: HashMap<i32, (u16, String)>,
         next: i32,
         writes: Vec<String>,
+        /// Folders asked for with `listing`.
+        listings: Vec<String>,
     }
 
     impl Host for Net {
@@ -629,6 +672,44 @@ mod tests {
             self.writes.push(path.into());
             self.files.write(path, &png)
         }
+        fn listing(&mut self, folder: &str) {
+            self.listings.push(folder.into());
+        }
+    }
+
+    #[test]
+    fn a_listing_is_read_off_the_frame_and_fetched_when_missing() {
+        let t = crate::i18n::messages(crate::library::settings::Language::En);
+        let folder = "Sony - PlayStation".to_string();
+        let names = || Listing::parse("Crash Bandicoot (USA)\nCrash Bandicoot (Europe)\nSpyro the Dragon (USA)\n");
+        let start = |host: &mut Net, listings: &mut Listings| {
+            Online::start(host, t, Scraper::Libretro, "SCUS94900", Some(folder.clone()), "Crash Bandicoot (USA)", HashSet::new(), listings).0
+        };
+        // On disk: asked once, the names shown when the host answers.
+        let (mut host, mut listings) = (Net::default(), Listings::default());
+        let mut online = start(&mut host, &mut listings);
+        assert!(online.busy && online.games.is_empty());
+        assert_eq!(host.listings, [folder.clone()]);
+        listings.answer(&folder, names());
+        online.listing_ready(&mut host, t, &listings, &folder);
+        assert!(!online.busy);
+        assert_eq!(online.games[0].name, "Crash Bandicoot (USA)");
+        // Loaded: a second search is answered at once.
+        let again = start(&mut host, &mut listings);
+        assert_eq!((host.listings.len(), again.games.len()), (1, 2));
+
+        // Missing: fetched from the server, then read back.
+        let (mut host, mut listings) = (Net::default(), Listings::default());
+        let mut online = start(&mut host, &mut listings);
+        listings.answer(&folder, None);
+        online.listing_ready(&mut host, t, &listings, &folder);
+        assert!(online.busy);
+        online.frame(&mut host, t, &mut listings);
+        assert_eq!(host.writes, [libretro::listing_path(&folder)]);
+        assert_eq!(host.listings, [folder.clone(), folder.clone()]);
+        listings.answer(&folder, names());
+        online.listing_ready(&mut host, t, &listings, &folder);
+        assert_eq!(online.games.len(), 2);
     }
 
     #[test]

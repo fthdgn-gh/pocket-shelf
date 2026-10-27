@@ -273,6 +273,17 @@ impl Host for VitaHost {
         names
     }
 
+    fn listing(&mut self, folder: &str) {
+        use shelf_core::online::libretro::{listing_path, Listing};
+        let (folder, sender) = (folder.to_string(), self.answer_sender.clone());
+        spawn("shelf-listing", move || {
+            let started = now_us();
+            let listing = fs::read(format!("{DATA}/{}", listing_path(&folder))).ok().and_then(|b| Listing::parse(&String::from_utf8_lossy(&b)));
+            log_line(&format!("listing {folder}: {} names in {} ms", listing.as_ref().map_or(0, |l| l.len()), (now_us() - started) / 1000));
+            let _ = sender.send(Event::Listing(folder, listing));
+        });
+    }
+
     fn status(&mut self) -> Status {
         crate::status::read()
     }

@@ -115,6 +115,14 @@ impl Listing {
         listing
     }
 
+    pub fn len(&self) -> usize {
+        self.all.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.all.is_empty()
+    }
+
     /// The names of a listing file (one per line); `None` when empty.
     pub fn parse(text: &str) -> Option<Listing> {
         let names: Vec<String> = text.split('\n').filter(|n| !n.is_empty()).map(String::from).collect();
@@ -419,5 +427,21 @@ mod tests {
             i += 1;
         }
         String::from_utf8_lossy(&out).into_owned()
+    }
+}
+
+#[cfg(test)]
+mod timing {
+    /// `LIBRETRO_LISTING=<names file> cargo test --release -p pocket-core listing_timing -- --nocapture`
+    #[test]
+    fn listing_timing() {
+        let Ok(path) = std::env::var("LIBRETRO_LISTING") else { return };
+        let text = std::fs::read_to_string(path).unwrap();
+        let start = std::time::Instant::now();
+        let listing = super::Listing::parse(&text).unwrap();
+        let parsed = start.elapsed();
+        let start = std::time::Instant::now();
+        let names = super::search_names("Crash Bandicoot", &listing, 30);
+        println!("parse {:?}, search {:?}, {} names, first {:?}", parsed, start.elapsed(), listing.all.len(), names.first());
     }
 }

@@ -458,6 +458,12 @@ impl Host for FakeHost {
         self.later.push(Event::Picture(key, picture));
     }
 
+    fn listing(&mut self, folder: &str) {
+        use shelf_core::online::libretro::{listing_path, Listing};
+        let listing = self.files.get(&listing_path(folder)).and_then(|b| Listing::parse(&String::from_utf8_lossy(b)));
+        self.later.push(Event::Listing(folder.to_string(), listing));
+    }
+
     fn cancel(&mut self, key: &PictureKey) {
         self.later.retain(|event| !matches!(event, Event::Picture(k, _) if k == key));
     }
