@@ -664,6 +664,8 @@ impl Shelf {
             self.tab = next;
             self.selected = 0;
             self.refresh();
+            // A direction held across the change starts slow again.
+            self.held.restart();
         }
     }
 
