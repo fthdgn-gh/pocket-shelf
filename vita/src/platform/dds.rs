@@ -4,7 +4,7 @@
 //! first level only, to tightly packed RGBA.
 //!
 //! No dependencies, so the tests run natively:
-//! `bun run test` (platform-tests).
+//! `make test` (platform-tests).
 
 /// "DDS " and the 124-byte header.
 const HEADER: usize = 128;

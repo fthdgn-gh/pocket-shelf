@@ -1,8 +1,13 @@
-//! The launcher's texts in its five languages, generated from
-//! `locales/*.ts` by `tools/locales.ts` (`bun run locales`). Do not edit
-//! by hand. A `{name}` in a text
-//! is filled in when shown (`i18n::fill`); `{button}` is where a button's
+//! The launcher's texts in its five languages: `Messages` names each text,
+//! and each language is a constant that has to give all of them, so the
+//! compiler rejects a language missing a text. A `{name}` in a text is
+//! filled in when shown (`i18n::fill`); `{button}` is where a button's
 //! symbol goes.
+//!
+//! A new text goes in `Messages` (or one of its groups), in every language,
+//! and in `Messages::texts`, which the tests in `i18n.rs` read: each
+//! language must have the same `{names}` as English, no text may be empty,
+//! and `texts` must list every text.
 
 #[derive(Debug)]
 pub struct Messages {
@@ -275,7 +280,7 @@ pub struct Categories {
 }
 
 impl Messages {
-    /// Every text with its key (`categories.games`), in `en.ts` order.
+    /// Every text with its key (`categories.games`), in declaration order.
     pub fn texts(&self) -> Vec<(&'static str, &'static str)> {
         vec![
             ("launch", self.launch),
