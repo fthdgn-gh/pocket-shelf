@@ -22,39 +22,45 @@ pub enum Weight {
     Bold,
 }
 
-/// Where a piece of text is used; each role has one size and weight
-/// (`src/text.ts`).
+/// Where a piece of text is used; each role has one size and weight. The
+/// roles are those of `src/text.ts`, each about two steps smaller than its
+/// `text-*` class there: PocketJS baked fonts at 12, 14, 16, 18, 20, 24 and
+/// 36 px only, and this build rasterizes any size (logical size × scale,
+/// rounded to whole screen pixels), so half sizes such as 11.5 work.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Role {
-    /// 24, bold.
+    /// 18, bold (24 in `text.ts`).
     Display,
-    /// 20, bold.
+    /// 15, bold (20).
     Heading,
-    /// 16, bold.
+    /// 13, bold (16).
     Title,
-    /// 14.
+    /// 11 (14).
     Body,
-    /// 14, bold.
+    /// 11, bold (14).
     BodyBold,
-    /// 12.
+    /// 9 (12).
     Small,
-    /// 12, bold.
+    /// 9, bold (12).
     SmallBold,
-    /// 12, bold, letters 0.025 em apart (`tracking-wide`).
+    /// 9, bold, letters 0.025 em apart (`tracking-wide`).
     Label,
+    /// 8, bold: numbers inside symbols, such as the battery's.
+    Tiny,
 }
 
 impl Role {
     pub fn style(self) -> (Weight, f32, f32) {
         match self {
-            Role::Display => (Weight::Bold, 24.0, 0.0),
-            Role::Heading => (Weight::Bold, 20.0, 0.0),
-            Role::Title => (Weight::Bold, 16.0, 0.0),
-            Role::Body => (Weight::Regular, 14.0, 0.0),
-            Role::BodyBold => (Weight::Bold, 14.0, 0.0),
-            Role::Small => (Weight::Regular, 12.0, 0.0),
-            Role::SmallBold => (Weight::Bold, 12.0, 0.0),
-            Role::Label => (Weight::Bold, 12.0, 0.3),
+            Role::Display => (Weight::Bold, 18.0, 0.0),
+            Role::Heading => (Weight::Bold, 15.0, 0.0),
+            Role::Title => (Weight::Bold, 13.0, 0.0),
+            Role::Body => (Weight::Regular, 11.0, 0.0),
+            Role::BodyBold => (Weight::Bold, 11.0, 0.0),
+            Role::Small => (Weight::Regular, 9.0, 0.0),
+            Role::SmallBold => (Weight::Bold, 9.0, 0.0),
+            Role::Label => (Weight::Bold, 9.0, 0.22),
+            Role::Tiny => (Weight::Bold, 8.0, 0.0),
         }
     }
 }
@@ -192,6 +198,12 @@ impl Gfx {
     pub fn text_top(&mut self, role: Role, x: f32, top: f32, color: Color, text: &str) -> f32 {
         let baseline = top + self.ascent(role);
         self.text(role, x, baseline, color, text)
+    }
+
+    /// Centered on `cx`, with the top of its line box at `top`.
+    pub fn text_top_centered(&mut self, role: Role, cx: f32, top: f32, color: Color, text: &str) {
+        let baseline = top + self.ascent(role);
+        self.text_centered(role, cx, baseline, color, text);
     }
 
     pub fn text_centered(&mut self, role: Role, cx: f32, baseline: f32, color: Color, text: &str) {

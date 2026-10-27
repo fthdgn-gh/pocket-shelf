@@ -9,8 +9,6 @@
 //! neighbors are averaged. Gray, black and white pixels do not vote; an icon
 //! with almost no color gets its average gray.
 
-use std::vec::Vec;
-
 /// Bit set in the packed result when the icon has transparent parts.
 pub const HAS_ALPHA: i32 = 1 << 24;
 

@@ -80,7 +80,9 @@ fn main() {
         let start = now_us();
         let frame_us = (start - last_start) as u32;
         last_start = start;
-        if frame > 1 && frame_us > SLOW_US && slow_logged < SLOW_LOG_MAX {
+        // From the first frame on: the time after it counts in the timing
+        // line too (a 133 ms gap there went unexplained on hardware).
+        if frame >= 1 && frame_us > SLOW_US && slow_logged < SLOW_LOG_MAX {
             host.log(&last.0.line(frame - 1, frame_us, last.1));
             slow_logged += 1;
         }

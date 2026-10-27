@@ -1,0 +1,12 @@
+[package]
+name = "shelf-platform-tests"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+# The Vita platform modules that use only std, serde_json and miniz_oxide,
+# built on the desktop so their tests run with `cargo test`.
+[dependencies]
+miniz_oxide = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -21,6 +21,8 @@ pub struct Status {
     pub bluetooth: Option<bool>,
 }
 
+pub use crate::library::catalog::Game;
+
 /// One installed title as the host lists it.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TitleInfo {
@@ -53,9 +55,57 @@ pub enum PictureKey {
     Backdrop(String),
 }
 
+/// What a running scan is reading (`installed.rs`): one step per app
+/// folder, one for the database and PSM, one per PSP folder or disc image,
+/// one per RetroArch playlist.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ScanPhase {
+    Apps,
+    System,
+    Psm,
+    Psp,
+    Images,
+    Retro,
+}
+
+impl ScanPhase {
+    /// From the host's `running <done> <total> <phase>` line; Apps when unknown.
+    pub fn from_key(key: &str) -> ScanPhase {
+        match key {
+            "system" => ScanPhase::System,
+            "psm" => ScanPhase::Psm,
+            "psp" => ScanPhase::Psp,
+            "images" => ScanPhase::Images,
+            "retro" => ScanPhase::Retro,
+            _ => ScanPhase::Apps,
+        }
+    }
+
+    /// The English name (`scanPhases` in `locales/en.ts`).
+    pub fn label(self) -> &'static str {
+        match self {
+            ScanPhase::Apps => "Apps and games",
+            ScanPhase::System => "System applications",
+            ScanPhase::Psm => "PlayStation Mobile",
+            ScanPhase::Psp => "PSP and PSX games",
+            ScanPhase::Images => "Disc images",
+            ScanPhase::Retro => "RetroArch playlists",
+        }
+    }
+}
+
 pub enum Event {
-    /// The scan finished: the titles and how long it took.
-    Titles(Vec<TitleInfo>, u32),
+    /// A scan is running, with no title list to read: steps done of the
+    /// total, and the phase. Only a scan sends it; a start that reads the
+    /// saved list goes straight to [`Event::Titles`].
+    Scan { done: u32, total: u32, phase: ScanPhase },
+    /// The titles, from the saved list or a finished scan, and how long that
+    /// took. Hosts make them with [`load_catalog`] on their worker thread:
+    /// with thousands of RetroArch games that is tens of milliseconds the
+    /// frame loop does not spend.
+    ///
+    /// [`load_catalog`]: crate::library::catalog::load_catalog
+    Titles(Vec<Game>, u32),
     /// A picture asked for with [`Host::request`]; `None` when there is none.
     Picture(PictureKey, Option<Picture>),
 }
@@ -67,6 +117,9 @@ pub trait Host {
     fn read(&mut self, path: &str) -> Option<Vec<u8>>;
     /// Write a file in the data folder; false when it could not be written.
     fn write(&mut self, path: &str, data: &[u8]) -> bool;
+    /// Delete a file in the data folder; true when it is gone (also when it
+    /// was not there).
+    fn remove(&mut self, path: &str) -> bool;
     /// The names in a folder of the data folder.
     fn list(&mut self, dir: &str) -> Vec<String>;
     fn status(&mut self) -> Status;
