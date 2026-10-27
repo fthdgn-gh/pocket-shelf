@@ -44,6 +44,10 @@ pub struct Picker {
     pub folder: Vec<String>,
     /// All the folder's files, or only those named after the title.
     pub every: bool,
+    /// The files listed now: worked out when the picker opens and when
+    /// triangle switches, not every frame (thousands of files in `art/`
+    /// took 20 ms a frame on hardware).
+    pub listed: Vec<String>,
     pub row: usize,
     pub note: String,
     /// Whether the host decoded a file, learned from its preview.
@@ -86,13 +90,17 @@ fn file_slug(text: &str) -> String {
 
 /// Whether `file` is named after one of `names`: the name, or the name and
 /// `-` and more (`fileBelongsTo`).
+#[cfg(test)]
 pub fn file_belongs_to(file: &str, names: &[&str]) -> bool {
+    let slugs: Vec<String> = names.iter().map(|n| file_slug(n)).collect();
+    belongs(file, &slugs)
+}
+
+/// `file_belongs_to` with the names' slugs worked out once.
+fn belongs(file: &str, slugs: &[String]) -> bool {
     let stem = if file.to_lowercase().ends_with(".png") { &file[..file.len() - 4] } else { file };
     let base = file_slug(stem);
-    names.iter().any(|name| {
-        let slug = file_slug(name);
-        !slug.is_empty() && (base == slug || base.starts_with(&format!("{slug}-")))
-    })
+    slugs.iter().any(|slug| !slug.is_empty() && (base == *slug || (base.len() > slug.len() && base.starts_with(slug.as_str()) && base.as_bytes()[slug.len()] == b'-')))
 }
 
 impl Shelf {
@@ -127,11 +135,11 @@ impl Shelf {
     // --- Editor ------------------------------------------------------------
 
     /// TRIANGLE: edit the selected title.
-    pub(super) fn open_editor(&mut self, host: &mut dyn Host) {
+    pub(super) fn open_editor(&mut self) {
         let Some(game) = self.selected_game() else { return };
+        // `art/` is listed when a picker opens, not here: listing thousands
+        // of files took 65 ms on hardware.
         let id = game.id.to_string();
-        self.library.reload_art(host);
-        self.art.forget_missing();
         self.editor = Some(Editor { id, row: 0, note: String::new() });
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);
@@ -308,16 +316,33 @@ impl Shelf {
     /// The picker's listed files: all of the folder, or those named after
     /// the title (its name, the name it came with, its id), the one in use
     /// listed whatever its name.
-    pub(super) fn picker_files(&self) -> Vec<String> {
+    fn compute_listed(&self) -> Vec<String> {
         let Some(picker) = &self.picker else { return Vec::new() };
         if picker.every {
             return picker.folder.clone();
         }
         let Some(game) = self.editor_game() else { return Vec::new() };
         let own = self.library.base_game(&game.id).map(|g| g.title.to_string()).unwrap_or_default();
-        let names = [&*game.title, own.as_str(), &*game.id];
+        let slugs: Vec<String> = [&*game.title, own.as_str(), &*game.id].iter().map(|n| file_slug(n)).collect();
         let chosen = self.chosen_file(picker.backdrop);
-        picker.folder.iter().filter(|f| Some(*f) == chosen.as_ref() || file_belongs_to(f, &names)).cloned().collect()
+        picker.folder.iter().filter(|f| Some(*f) == chosen.as_ref() || belongs(f, &slugs)).cloned().collect()
+    }
+
+    /// Work the listed files out again (on open and on triangle).
+    fn refresh_listed(&mut self) {
+        let listed = self.compute_listed();
+        if let Some(picker) = &mut self.picker {
+            picker.listed = listed;
+        }
+    }
+
+    /// The file on a picker row (rows 0 and 1 are fixed).
+    fn picker_file(&self, row: usize) -> Option<String> {
+        self.picker.as_ref().and_then(|p| p.listed.get(row.wrapping_sub(2)).cloned())
+    }
+
+    fn picker_count(&self) -> usize {
+        self.picker.as_ref().map_or(0, |p| p.listed.len())
     }
 
     fn open_picker(&mut self, host: &mut dyn Host, backdrop: bool) {
@@ -328,6 +353,7 @@ impl Shelf {
             backdrop,
             folder,
             every: false,
+            listed: Vec::new(),
             row: 0,
             note: String::new(),
             decodes: HashMap::new(),
@@ -336,12 +362,16 @@ impl Shelf {
             preview: None,
         });
         // A title with no files of its own starts on the whole folder.
-        let every = self.picker_files().is_empty();
+        self.refresh_listed();
+        let every = self.picker_count() == 0;
         let chosen = self.chosen_file(backdrop);
         if let Some(picker) = &mut self.picker {
             picker.every = every;
         }
-        let files = self.picker_files();
+        if every {
+            self.refresh_listed();
+        }
+        let files = &self.picker.as_ref().map(|p| p.listed.clone()).unwrap_or_default();
         let fixed = if backdrop { game.backdrop.as_deref() == Some(NO_BACKDROP) } else { game.art_icon };
         let current = chosen.and_then(|c| files.iter().position(|f| *f == c));
         if let Some(picker) = &mut self.picker {
@@ -351,7 +381,7 @@ impl Shelf {
 
     pub(super) fn picker_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool, triangle: bool) {
         use super::navigation::{Direction, Step as Nav};
-        let count = self.picker_files().len() + 2;
+        let count = self.picker_count() + 2;
         let Some(picker) = &mut self.picker else { return };
         let before = picker.row;
         match step {
@@ -362,21 +392,22 @@ impl Shelf {
         if triangle {
             // Switch between this title's files and the whole folder; the
             // highlight stays on its file.
-            let files = self.picker_files();
-            let file = files.get(before.wrapping_sub(2)).cloned();
+            let file = self.picker_file(before);
             if let Some(picker) = &mut self.picker {
                 picker.every = !picker.every;
             }
-            let files = self.picker_files();
+            self.refresh_listed();
             if let Some(picker) = &mut self.picker {
+                let files = &picker.listed;
                 picker.row = match file.and_then(|f| files.iter().position(|x| *x == f)) {
                     Some(i) => i + 2,
                     None => picker.row.min(1),
                 };
             }
         }
-        let files = self.picker_files();
         let cant_read = self.t().cant_read;
+        let row = self.picker.as_ref().map_or(0, |p| p.row);
+        let file = self.picker_file(row);
         let Some(picker) = &mut self.picker else { return };
         if picker.row != before || triangle {
             // A new row: its picture after the highlight rests; a file known
@@ -384,7 +415,7 @@ impl Shelf {
             picker.preview = None;
             picker.waiting = false;
             picker.preview_wait = PREVIEW_DELAY;
-            let file = files.get(picker.row.wrapping_sub(2));
+            let file = file.as_ref();
             picker.note = if file.is_some_and(|f| picker.decodes.get(f) == Some(&false)) { cant_read.to_string() } else { String::new() };
         }
         if confirm {
@@ -406,8 +437,7 @@ impl Shelf {
         }
         let (backdrop, row) = (picker.backdrop, picker.row);
         let Some(game) = self.editor_game() else { return };
-        let files = self.picker_files();
-        let file = files.get(row.wrapping_sub(2)).cloned();
+        let file = self.picker_file(row);
         let key = if backdrop {
             // Row 0 is the title's own picture, row 1 none.
             if row == 1 {
@@ -431,13 +461,12 @@ impl Shelf {
 
     /// A picture answered for the picker's preview; true when it was.
     pub(super) fn picker_picture(&mut self, gfx: &mut Gfx, key: &PictureKey, picture: &Option<Picture>) -> bool {
-        let files = self.picker_files();
         let cant_read = self.t().cant_read;
+        let file = self.picker.as_ref().and_then(|p| self.picker_file(p.row));
         let Some(picker) = &mut self.picker else { return false };
         if picker.preview.as_ref().map(|p| &p.0) != Some(key) {
             return false;
         }
-        let file = files.get(picker.row.wrapping_sub(2)).cloned();
         if let (PictureKey::Backdrop { .. }, Some(picture)) = (key, picture) {
             let tex = gfx.add_texture(picture.w, picture.h, Format::Rgba8, picture.rgba.clone(), true);
             picker.preview = Some((key.clone(), Some(tex)));
@@ -460,12 +489,11 @@ impl Shelf {
     /// it: one it cannot read keeps the drawer open with a note, one not
     /// checked yet is checked first.
     pub(super) fn picker_confirm(&mut self, host: &mut dyn Host) {
-        let files = self.picker_files();
         let cant_read = self.t().cant_read;
         let Some(game) = self.editor_game() else { return };
+        let file = self.picker.as_ref().and_then(|p| self.picker_file(p.row));
         let Some(picker) = &mut self.picker else { return };
         let row = picker.row;
-        let file = files.get(row.wrapping_sub(2)).cloned();
         if let Some(file) = &file {
             match picker.decodes.get(file) {
                 Some(false) => {
@@ -499,14 +527,21 @@ impl Shelf {
     }
 
     pub(super) fn draw_picker(&mut self, gfx: &mut Gfx) {
-        let files = self.picker_files();
         let Some(picker) = &self.picker else { return };
+        let count = picker.listed.len();
         let (backdrop, row, every, note) = (picker.backdrop, picker.row, picker.every, picker.note.clone());
         let preview = picker.preview.clone();
         let t = self.t();
         let theme = self.theme;
-        let mut entries: Vec<String> = vec![t.standard.into(), (if backdrop { t.none } else { t.game_icon }).into()];
-        entries.extend(files.iter().cloned());
+        // Only the rows shown are read from the list.
+        let total = count + 2;
+        let entry = |i: usize| -> String {
+            match i {
+                0 => t.standard.into(),
+                1 => (if backdrop { t.none } else { t.game_icon }).into(),
+                _ => self.picker.as_ref().map(|p| p.listed[i - 2].clone()).unwrap_or_default(),
+            }
+        };
         let slide = self.drawer.at(self.now);
         let title = if backdrop { t.backdrop } else { t.box_art };
         let mut drawer = Drawer::open(gfx, &theme, &upper(title, self.settings.language), panel::Size::Wide, slide);
@@ -523,9 +558,9 @@ impl Shelf {
                 gfx.image_full(tex, picture, crate::gfx::Color::rgb(0xffffff));
             }
         }
-        let first = row.saturating_sub(PICKER_ROWS / 2).min(entries.len().saturating_sub(PICKER_ROWS));
-        for (i, entry) in entries.iter().enumerate().skip(first).take(PICKER_ROWS) {
-            let label = gfx.fit(Role::BodyBold, entry, 240.0);
+        let first = row.saturating_sub(PICKER_ROWS / 2).min(total.saturating_sub(PICKER_ROWS));
+        for i in first..(first + PICKER_ROWS).min(total) {
+            let label = gfx.fit(Role::BodyBold, &entry(i), 240.0);
             drawer.row(gfx, &label, None, None, i == row, Step::None);
         }
         let confirm = Button::confirm(self.settings.confirm);
@@ -533,7 +568,7 @@ impl Shelf {
         let hints = [(confirm, t.r#use), (Button::Face(Symbol::Triangle), if every { t.this_title } else { t.all_files }), (cancel, t.back)];
         if !note.is_empty() {
             drawer.note(gfx, &note, 1);
-        } else if files.is_empty() {
+        } else if count == 0 {
             let folder = if backdrop { "ux0:data/PocketShelf/backdrops" } else { "ux0:data/PocketShelf/art" };
             drawer.note(gfx, &format!("{} {folder}", t.no_png), 1);
         }

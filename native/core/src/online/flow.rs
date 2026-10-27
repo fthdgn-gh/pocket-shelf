@@ -123,7 +123,10 @@ pub struct Online {
 impl Online {
     /// Open for a title: its id, its folder on libretro's server, and the
     /// term the search starts from (its playlist label for libretro).
-    pub fn start(host: &mut dyn Host, t: &Messages, scraper: Scraper, owner: &str, folder: Option<String>, term: &str, listings: &mut Listings) -> (Online, Vec<Action>) {
+    /// `art` is the art folder's files as the library last read them (the
+    /// folder is not listed again: thousands of files took most of a second).
+    #[allow(clippy::too_many_arguments)]
+    pub fn start(host: &mut dyn Host, t: &Messages, scraper: Scraper, owner: &str, folder: Option<String>, term: &str, art: HashSet<String>, listings: &mut Listings) -> (Online, Vec<Action>) {
         let mut online = Online {
             scraper,
             owner: owner.to_string(),
@@ -141,7 +144,7 @@ impl Online {
             shown: [false, false],
             pending: Vec::new(),
             asset_lists: [None, None],
-            on_disk: [list_png(host, "art").into_iter().collect(), list_png(host, "backdrops").into_iter().collect()],
+            on_disk: [art, list_png(host, "backdrops").into_iter().collect()],
             memory: Vec::new(),
             next_memory: 0,
         };
@@ -634,7 +637,7 @@ mod tests {
         let mut host = Net::default();
         host.files.0.insert(sgdb::KEY_FILE.into(), b"0123456789abcdef0123456789abcdef\n".to_vec());
         let mut listings = Listings::default();
-        let (mut online, _) = Online::start(&mut host, t, Scraper::SteamGridDb, "PCSA00069", None, "Gravity Daze", &mut listings);
+        let (mut online, _) = Online::start(&mut host, t, Scraper::SteamGridDb, "PCSA00069", None, "Gravity Daze", HashSet::new(), &mut listings);
         online.frame(&mut host, t, &mut listings);
         assert_eq!(online.games.len(), 1);
         online.confirm(&mut host, t);

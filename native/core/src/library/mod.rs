@@ -34,7 +34,8 @@ use crate::host::{Host, TitleInfo};
 pub fn list_png(host: &mut dyn Host, dir: &str) -> Vec<String> {
     let mut names: Vec<String> =
         host.list(dir).into_iter().filter(|name| !name.starts_with('.') && name.to_lowercase().ends_with(".png")).collect();
-    names.sort_by_key(|n| n.to_lowercase());
+    // Each lowercase name made once, not once per comparison.
+    names.sort_by_cached_key(|n| n.to_lowercase());
     names
 }
 
@@ -206,6 +207,11 @@ impl Library {
         self.index.get(id).map(|&i| &self.base[i])
     }
 
+    /// The art files known since the folder was last read, by name.
+    pub fn art_names(&self) -> impl Iterator<Item = &String> {
+        self.art.values()
+    }
+
     /// The title with the user's changes.
     pub fn game(&self, id: &str) -> Option<&Game> {
         self.index.get(id).map(|&i| &self.games[i])
@@ -216,7 +222,7 @@ impl Library {
     pub fn reload_art(&mut self, host: &mut dyn Host) -> Vec<String> {
         let art = art_index(host);
         let mut names: Vec<String> = art.values().cloned().collect();
-        names.sort_by_key(|n| n.to_lowercase());
+        names.sort_by_cached_key(|n| n.to_lowercase());
         if art != self.art {
             self.art = art;
             self.rebuild();
