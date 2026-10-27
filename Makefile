@@ -8,12 +8,14 @@
 #   make art       redraw the LiveArea pictures in vita/package/sce_sys/
 #   make updater   rebuild the updater app into vita/package/updater/
 #   make plugin    rebuild the Adrenaline plugin into vita/package/psp/
+#   make notices   rewrite vita/package/THIRD_PARTY_NOTICES.txt after a
+#                  dependency changes
 
 VITASDK ?= $(HOME)/vitasdk
 PSPDEV ?= $(HOME)/pspdev
 TOOLS = cargo run --release --quiet --manifest-path tools/Cargo.toml --
 
-.PHONY: test shots build art updater plugin
+.PHONY: test shots build art updater plugin notices
 
 test:
 	cd core && cargo test
@@ -28,6 +30,9 @@ build:
 
 art:
 	$(TOOLS) art
+
+notices:
+	$(TOOLS) notices
 
 updater:
 	PATH="$(VITASDK)/bin:$$PATH" VITASDK="$(VITASDK)" $(MAKE) -C updater

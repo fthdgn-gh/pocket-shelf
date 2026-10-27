@@ -38,6 +38,8 @@ for dir in sce_sys psp updater; do
     set -- "$@" -a "package/$dir/$file=$dir/$file"
   done
 done
+# The licenses of what the executable includes (`make notices`).
+set -- "$@" -a package/THIRD_PARTY_NOTICES.txt=THIRD_PARTY_NOTICES.txt
 vita-pack-vpk -s "$out/param.sfo" -b "$out/eboot.bin" "$@" ../dist/vita/pocket-shelf.vpk
 echo "$title_id $title_name APP_VER $app_ver"
 ls -l "$out/eboot.bin" ../dist/vita/pocket-shelf.vpk

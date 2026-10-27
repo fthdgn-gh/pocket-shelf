@@ -254,7 +254,10 @@ restart run on hardware only.
 ## License
 
 [MIT](./LICENSE). Font: Figtree (SIL OFL 1.1), see
-[`fonts/NOTICE.md`](./fonts/NOTICE.md).
+[`fonts/NOTICE.md`](./fonts/NOTICE.md). The licenses of the libraries built
+into the app (Rust crates, the Rust standard library, vita2d, Figtree) are in
+[`vita/package/THIRD_PARTY_NOTICES.txt`](./vita/package/THIRD_PARTY_NOTICES.txt),
+which the VPK carries; `make notices` rewrites it.
 
 The updater app in [`updater/`](./updater/) (`POCKTUPDR`, which installs
 Pocket Shelf's updates) is a separate program under the

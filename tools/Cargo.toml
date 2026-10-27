@@ -8,6 +8,7 @@ description = "Pocket Shelf's build tools: the LiveArea artwork and the updater'
 [dependencies]
 fontdue = "0.9"
 miniz_oxide = "0.8"
+serde_json = "1"
 sha1 = "0.10"
 tiny-skia = "0.11"
 

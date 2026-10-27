@@ -1,6 +1,7 @@
 //! The updater app's installable package in `vita/package/updater/`, which
 //! Pocket Shelf's VPK carries as `app0:updater/`: the `eboot.bin` and
-//! `param.sfo` that `updater/Makefile` builds, the bubble icon, and
+//! `param.sfo` that `updater/Makefile` builds, its GPL-3.0 text
+//! (`LICENSE.txt`), the bubble icon, and
 //! `sce_sys/package/head.bin`, which the system's package installer needs.
 //! `head.bin` is written as `make_head_bin` in `updater/main.c` writes it on
 //! the console (the template and the fold of SHA-1 digests are VitaShell's,
@@ -60,9 +61,10 @@ pub fn run(root: &Path) -> Result<(), String> {
     let sfo = read(&build.join("param.sfo"))?;
     let icon = read(&root.join("vita/package/sce_sys/icon0.png"))?;
     let head = head_bin(&read(&root.join("updater/head.bin"))?, TITLE_ID);
+    let license = read(&root.join("updater/LICENSE"))?;
     let _ = fs::remove_dir_all(&out);
     fs::create_dir_all(out.join("sce_sys/package")).map_err(|e| e.to_string())?;
-    for (path, bytes) in [("eboot.bin", &eboot), ("sce_sys/param.sfo", &sfo), ("sce_sys/icon0.png", &icon), ("sce_sys/package/head.bin", &head)] {
+    for (path, bytes) in [("eboot.bin", &eboot), ("sce_sys/param.sfo", &sfo), ("sce_sys/icon0.png", &icon), ("sce_sys/package/head.bin", &head), ("LICENSE.txt", &license)] {
         fs::write(out.join(path), bytes).map_err(|e| format!("{path}: {e}"))?;
     }
     println!("Pocket Shelf Updater ({TITLE_ID}) packaged in {}", out.display());
