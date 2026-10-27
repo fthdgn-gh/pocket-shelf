@@ -26,7 +26,7 @@ its saved data.
 | --- | --- | --- |
 | ![The list view: title rows with small icons, the selected row highlighted.](./screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist, its console in the detail line.](./screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, details, backdrop, icon box and status bar.](./screenshots/menu.png) |
 
-The screens are rendered on the desktop by `bun run shots` with sample titles;
+The screens are rendered on the desktop by `make shots` with sample titles;
 the colored tiles with initials stand in for game icons.
 
 ## Features
@@ -150,32 +150,32 @@ The log is `ux0:/data/PocketShelfNext/log.txt`.
 
 ## Building
 
-You need [Bun](https://bun.sh/), [Rust via rustup](https://rustup.rs/),
+You need [Rust via rustup](https://rustup.rs/), `make`,
 [VitaSDK](https://vitasdk.org/) with libvita2d, and
 [cargo-vita](https://github.com/vita-rust/cargo-vita) 0.2.2. The Vita crate
 pins its nightly toolchain in [`vita/rust-toolchain.toml`](./vita/rust-toolchain.toml).
 
 ```sh
-bun install
-bun run test      # core and platform module tests, on the desktop
-bun run shots     # render every screen to .pocket-build/validation/desktop/
-bun run build     # VPK at dist/vita/pocket-shelf.vpk
+make test      # core, platform module and tools tests, on the desktop
+make shots     # render every screen to .pocket-build/validation/desktop/
+make build     # VPK at dist/vita/pocket-shelf.vpk
 ```
 
 | Folder | Holds |
 | --- | --- |
 | [`core/`](./core/) | Everything but the platform: the library and saved files, the shelf's screens and panels, text, shapes, themes, artwork lookups, updates, the `Host` trait |
 | [`vita/`](./vita/) | The Vita host, the vita2d backend and the frame loop; `vita/package/` holds the VPK's other files |
-| [`desktop/`](./desktop/) | A software renderer and a fake host with sample titles, for `bun run shots` |
+| [`desktop/`](./desktop/) | A software renderer and a fake host with sample titles, for `make shots` |
 | [`platform-tests/`](./platform-tests/) | The Vita modules with no system calls, built for the desktop so their tests run there |
-| [`locales/`](./locales/) | The texts in five languages; `bun run locales` writes `core/src/locales.rs` |
 | [`updater/`](./updater/), [`psp-boot/`](./psp-boot/) | The updater app and the Adrenaline plugin (C) |
-| [`tools/`](./tools/) | The locale generator, the build identity, the LiveArea artwork |
+| [`tools/`](./tools/) | `make art` (the LiveArea pictures) and `make updater` (the updater's package) |
 | [`docs/`](./docs/) | [Architecture](./docs/ARCHITECTURE.md), working [notes](./docs/NOTES.md), the port's [plan](./docs/PLAN.md) |
 
-The updater app (`bun run updater`, needs VitaSDK) and the Adrenaline plugin
-(`bun run plugin`, needs pspdev) are committed in `vita/package/`, so a build
-needs neither toolchain.
+The texts in five languages are in [`core/src/locales.rs`](./core/src/locales.rs).
+The version is `version` in [`vita/Cargo.toml`](./vita/Cargo.toml). The updater
+app (`make updater`, needs VitaSDK) and the Adrenaline plugin (`make plugin`,
+needs pspdev) are committed in `vita/package/`, so a build needs neither
+toolchain.
 
 ### Releases
 
@@ -187,7 +187,7 @@ Three GitHub Actions workflows build and publish the VPK:
 | [`shelf-release.yml`](./.github/workflows/shelf-release.yml) | On a `shelf-v*` tag, publishes a beta or stable release |
 | [`shelf-nightly.yml`](./.github/workflows/shelf-nightly.yml) | Replaces the `shelf-nightly` pre-release with a build of `main`, once a day when `main` changed |
 
-The tag's version must be the `version` in `package.json`:
+The tag's version must be the `version` in `vita/Cargo.toml`:
 
 ```sh
 git tag shelf-v0.2.0-beta.2   # beta: published as a pre-release

@@ -27,7 +27,7 @@ share files on disk and start each other.
 ## Building
 
 ```sh
-bun run updater   # make, then lay out vita/package/updater/
+make updater      # build, then lay out vita/package/updater/
 ```
 
 Needs VitaSDK with libvita2d. The output in `vita/package/updater/` is committed,

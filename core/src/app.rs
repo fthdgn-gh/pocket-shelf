@@ -289,7 +289,7 @@ impl App {
     }
 
     /// The app's mark: the Home view in small, a selected tile in its ring
-    /// and two smaller tiles after it (`MARK` in `tools/art.ts`).
+    /// and two smaller tiles after it (`MARK` in `tools/src/art.rs`).
     fn draw_mark(&mut self, gfx: &mut Gfx, x: f32, y: f32) {
         let [amber, emerald, violet] = *self.mark.get_or_insert_with(|| {
             [

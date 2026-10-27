@@ -1,11 +1,7 @@
 # Build output
 target/
 dist/
-node_modules/
 .DS_Store
-
-# This build's version, channel and commit (tools/build-info.ts)
-/build-info.json
 
 # Per-run output: desktop renders, validation captures, the updater build
 .pocket-build/

@@ -1,7 +1,7 @@
 //! Adrenaline's plugin lists in `ms0:/seplugins/`, read and changed the way
 //! each Adrenaline reads them. Pure text functions; `pspemu.rs` does the file
 //! access. The tests run natively:
-//! `bun run test` (platform-tests).
+//! `make test` (platform-tests).
 //!
 //! - TheOfficialFloW's Adrenaline reads the first 1024 bytes of `vsh.txt`.
 //!   A line is a module path, a space or tab, and `1` for on; any other

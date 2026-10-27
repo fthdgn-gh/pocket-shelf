@@ -128,6 +128,14 @@ mod tests {
         }
     }
 
+    /// `texts` lists every text: each field of `Messages` and its groups is
+    /// a `&'static str`, so the struct holds one per text.
+    #[test]
+    fn texts_lists_every_text() {
+        let fields = std::mem::size_of::<crate::locales::Messages>() / std::mem::size_of::<&'static str>();
+        assert_eq!(messages(Language::En).texts().len(), fields);
+    }
+
     #[test]
     fn no_text_is_left_empty() {
         for (language, name) in LANGUAGES {

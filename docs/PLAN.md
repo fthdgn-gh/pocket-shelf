@@ -174,8 +174,14 @@ the user.
    `fonts/`, `updater/`, `psp-boot/`, `tools/` and `vita/package/`, and
    `package.json` took over the version from `pocket.json`. The README,
    the repository instructions and the working notes (`docs/NOTES.md`,
-   was `src/CLAUDE.md`) were rewritten. Left to the user: asking GitHub
-   Support to detach the fork.
+   was `src/CLAUDE.md`) were rewritten. Then Bun and TypeScript went too:
+   the build identity moved into `vita/build.rs` and the version into
+   `vita/Cargo.toml`, `core/src/locales.rs` became the edited file, the art
+   and updater scripts were ported to a Rust crate in `tools/` (the
+   updater's `head.bin` byte for byte; the pictures within dithering noise
+   of the committed ones, which were kept), and a `Makefile` replaced
+   `package.json`. Left to the user: asking GitHub Support to detach the
+   fork.
 
 ## Decisions
 

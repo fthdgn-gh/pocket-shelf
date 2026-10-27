@@ -10,7 +10,7 @@ reads and writes that app's saved data unchanged.
 | `desktop/` | A software rasterizer for the same draw commands, a fake `Host` with a sample library, a fake SteamGridDB, libretro, GitHub and updater, and scripted screenshots. |
 | `vita/` | `Host` on the Vita (title scan, picture decoding, file writes, downloads and the log on worker threads), the vita2d backend, the frame loop, the platform modules (`vita/src/platform/`), and the VPK's other files (`vita/package/`). |
 | `platform-tests/` | The Vita platform modules with no system calls (`accent`, `adrenaline_config`, `dds`, `iso`, `retroarch`, `seplugins`), included by path so their tests run on the desktop. |
-| `locales/`, `tools/` | The texts as TypeScript objects and the generator that writes `core/src/locales.rs`; the build identity; the LiveArea artwork. |
+| `tools/` | `make art` draws the LiveArea pictures (`tiny-skia`, `fontdue`, a 256-color quantizer); `make updater` lays out the updater's package and its `head.bin`. |
 
 ## Drawing
 
@@ -39,18 +39,18 @@ glyph changed.
 
 | Command | Does |
 |---|---|
-| `bun run test` | Core tests, then the platform modules' tests (with `.samples/retroarch-playlists` when present) |
-| `bun run locales` | Write `core/src/locales.rs` from `locales/*.ts` |
-| `bun run shots [words…]` | Screenshots to `.pocket-build/validation/desktop/` |
-| `bun run build` | Release VPK to `dist/vita/pocket-shelf.vpk` (`vita/build.sh`); `GITHUB_REF_NAME=shelf-v<version>` sets the version the update check compares |
-| `bun run updater` | Build the updater app into `vita/package/updater/` (VitaSDK) |
-| `bun run plugin` | Build the Adrenaline plugin into `vita/package/psp/` (pspdev) |
+| `make test` | Core tests, the platform modules' tests (with `.samples/retroarch-playlists` when present), the tools' tests |
+| `make shots` | Screenshots to `.pocket-build/validation/desktop/`; `SHOTS="words"` for those whose names hold them |
+| `make build` | Release VPK to `dist/vita/pocket-shelf.vpk` (`vita/build.sh`); `GITHUB_REF_NAME=shelf-v<version>` sets the version the update check compares |
+| `make art` | Redraw the LiveArea pictures and `template.xml` in `vita/package/sce_sys/` |
+| `make updater` | Build the updater app into `vita/package/updater/` (VitaSDK) |
+| `make plugin` | Build the Adrenaline plugin into `vita/package/psp/` (pspdev) |
 
 **The SELF must not be "safe".** cargo-vita signs with `vita-make-fself -s`;
 on hardware a safe app cannot open `ux0:app`, and the first hardware run
 listed 0 titles. Vita3K does not enforce this. `build.sh` signs again with
 `-c` only, and writes `param.sfo` itself (`ATTRIBUTE2=12`, `APP_VER` from
-`package.json`).
+`vita/Cargo.toml`).
 
 **The title id reaches the code through `vita/build.rs`**, read from
 `Cargo.toml`. cargo-vita does not pass it to the compiler; without it the
@@ -171,9 +171,8 @@ off in Appearance ▸ Status bar (the Clock row's last value is Off), right of
 R or left of L (`StatusLayout`, saved in `status-bar.json`: 0.1 rewrote `settings.json`
 with only the keys it knew). The tab names have the rest of the bar.
 
-**Languages**: `locales.rs` is generated from `locales/*.ts`
-(`bun run locales`, `tools/locales.ts`), one
-`Messages` struct and a constant per language; `i18n.rs` has `fill`,
+**Languages**: `locales.rs` holds one `Messages` struct and a constant
+per language (edited by hand; a missing text does not compile); `i18n.rs` has `fill`,
 `upper` (the Turkish i) and the built-in categories' names by key. Every
 screen reads its words from the chosen language.
 
