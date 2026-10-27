@@ -1,8 +1,20 @@
 //! This build's identity for the update check: `src/build-info.json`,
 //! written by `src/tools/build-info.ts` (`build.sh` runs it first). Without
-//! the file the build is local, which checks no channel.
+//! the file the build is local, which checks no channel. Also this build's
+//! title id, from `Cargo.toml`'s `[package.metadata.vita]` (cargo-vita does
+//! not pass it to the compiler; PocketJS's tools/vita.ts did, as
+//! `VITA_DEFAULT_TITLE_ID`).
 
 fn main() {
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    let manifest = std::fs::read_to_string("Cargo.toml").unwrap_or_default();
+    let title_id = manifest
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("title_id = \"").and_then(|rest| rest.strip_suffix('"')))
+        .unwrap_or("");
+    assert!(!title_id.is_empty(), "no title_id in Cargo.toml");
+    println!("cargo:rustc-env=SHELF_TITLE_ID={title_id}");
+
     let path = "../../src/build-info.json";
     println!("cargo:rerun-if-changed={path}");
     let text = std::fs::read_to_string(path).unwrap_or_default();
