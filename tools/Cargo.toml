@@ -1,0 +1,15 @@
+[package]
+name = "shelf-tools"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Pocket Shelf's build tools: the LiveArea artwork and the updater's package."
+
+[dependencies]
+fontdue = "0.9"
+miniz_oxide = "0.8"
+sha1 = "0.10"
+tiny-skia = "0.11"
+
+[profile.release]
+opt-level = 3

@@ -15,7 +15,7 @@
 //! whether `PSP_GAME/SYSDIR/EBOOT.OLD` (a patched game boots that) and
 //! `BOOT.BIN` exist.
 //! The file system is pure text and byte work; its tests run natively with
-//! `bun run test` (platform-tests).
+//! `make test` (platform-tests).
 
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};

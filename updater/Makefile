@@ -1,5 +1,5 @@
 # Pocket Shelf Updater (GPL-3.0, see LICENSE). Builds eboot.bin and
-# param.sfo; `bun run updater` runs this and packages the result into
+# param.sfo; `make updater` runs this and packages the result into
 # vita/package/updater/, which goes into Pocket Shelf's VPK.
 
 TITLE_ID = POCKTUPDR

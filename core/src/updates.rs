@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::host::Host;
 use crate::library::settings::UpdateChannel;
 
-/// This build, from `build-info.json` at build time (`tools/build-info.ts`).
+/// This build, compiled in by `vita/build.rs`.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BuildInfo {
     pub version: String,

@@ -20,7 +20,7 @@
 //! also the folder its thumbnails are in.
 //!
 //! This file uses std, serde_json and miniz_oxide only, so its tests run on
-//! the build machine: `bun run test` (platform-tests).
+//! the build machine: `make test` (platform-tests).
 
 use std::fs;
 use std::string::String;

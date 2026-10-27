@@ -10,27 +10,27 @@ set -e
 cd "$(dirname "$0")"
 export VITASDK="${VITASDK:-$HOME/vitasdk}"
 export PATH="$VITASDK/bin:$HOME/.cargo/bin:$PATH"
-# This build's version, channel and commit for the update check (build.rs):
-# the version from a shelf-v<version> tag (GITHUB_REF_NAME), else package.json's.
-bun ../tools/build-info.ts
+# build.rs compiles in this build's version, channel and commit for the
+# update check: the version from a shelf-v<version> tag (GITHUB_REF_NAME),
+# else Cargo.toml's.
 rustup run nightly-2026-05-28 cargo vita build vpk --release
 out=target/armv7-sony-vita-newlibeabihf/release
 vita-make-fself -c "$out/pocket-shelf-next.velf" "$out/eboot.bin"
 
 # param.sfo as tools/vita.ts writes it for the PocketJS build: ATTRIBUTE2=12,
-# and APP_VER, the version the system shows, as MM.mm of package.json's
+# and APP_VER, the version the system shows, as MM.mm of Cargo.toml's
 # major and minor version ("0.2.0" is "00.02").
 title_id=$(sed -n 's/^title_id = "\(.*\)"/\1/p' Cargo.toml)
 title_name=$(sed -n 's/^title_name = "\(.*\)"/\1/p' Cargo.toml)
-version=$(sed -n 's/.*"version": "\([0-9]*\)\.\([0-9]*\)\..*/\1 \2/p' ../package.json)
+version=$(sed -n 's/^version = "\([0-9]*\)\.\([0-9]*\)\..*/\1 \2/p' Cargo.toml)
 app_ver=$(printf '%02d.%02d' $version)
 vita-mksfoex -d ATTRIBUTE2=12 -s TITLE_ID="$title_id" -s APP_VER="$app_ver" "$title_name" "$out/param.sfo"
 
 mkdir -p ../dist/vita
 # The bubble icon, splash and LiveArea (vita/package/sce_sys, drawn
-# by `bun run art`). Adrenaline launches copy the boot plugin from the app
+# by `make art`). Adrenaline launches copy the boot plugin from the app
 # folder (pspemu::copy_plugin reads app0:psp/pocketshelf.prx). The updater
-# app (vita/package/updater, built by `bun run updater`) goes in as
+# app (vita/package/updater, built by `make updater`) goes in as
 # updater/; platform::update installs it from app0:updater.
 set --
 for dir in sce_sys psp updater; do
