@@ -2,9 +2,9 @@
 
 Pocket Shelf is a PS Vita launcher written in Rust. Read [`docs/NOTES.md`](docs/NOTES.md) first: what the hardware, the firmware, Adrenaline and RetroArch do, what has been verified where, and how to test. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) describes the crates and the drawing model.
 
-- `bun run test` (core and platform module tests), `bun run shots` (desktop renders to `.pocket-build/validation/desktop/`), `bun run build` (VPK at `dist/vita/pocket-shelf.vpk`). Texts live in `locales/*.ts`; run `bun run locales` after changing one.
+- `make test` (core, platform module and tools tests), `make shots` (desktop renders to `.pocket-build/validation/desktop/`), `make build` (VPK at `dist/vita/pocket-shelf.vpk`); `make art`, `make updater` and `make plugin` regenerate committed files in `vita/package/`. Texts live in `core/src/locales.rs`.
 - Saved data in `ux0:data/PocketShelf` stays compatible across releases: read and write each file in the format the previous release used (`core/src/library/round_trip.rs` and its fixtures check it). A breaking change waits for 1.0.0 and is called out.
-- Release tags are `shelf-v<version>` and must match `version` in `package.json`; installed copies' update check reads only that form. The release VPK keeps the name `pocket-shelf.vpk` and the title id `POCKTSHLF`.
+- Release tags are `shelf-v<version>` and must match `version` in `vita/Cargo.toml`; installed copies' update check reads only that form. The release VPK keeps the name `pocket-shelf.vpk` and the title id `POCKTSHLF`.
 - If the user asks to merge the change, merge it after the relevant checks pass.
 - Name pull requests (and the branch's primary commit) using the Conventional Commits format — `type(scope): summary`, e.g. `feat(shelf): …`, `fix: …`, `docs: …`, `refactor: …`.
 - Keep per-run validation screenshots, videos, raw logs, traces, benchmark dumps, and build/install receipts in ignored `.pocket-build/validation/<task>/<run>/` output or an artifact store. Device validation does not require committing these files to Git.

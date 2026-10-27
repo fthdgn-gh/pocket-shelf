@@ -25,10 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.2
-
       - name: Install VitaSDK
         run: |
           git clone --depth 1 https://github.com/vitasdk/vdpm /tmp/vdpm
@@ -47,6 +43,7 @@ jobs:
             vita -> target
             core -> target
             platform-tests -> target
+            tools -> target
           key: ${{ env.VITA_RUST }}
 
       - name: Install cargo-vita
@@ -55,10 +52,10 @@ jobs:
             cargo +"$VITA_RUST" install cargo-vita --version "$CARGO_VITA_VERSION" --locked --force
           fi
 
-      # Core and platform module tests on the runner's own Rust, then the VPK
-      # (build.sh reads the tag through src/tools/build-info.ts).
-      - run: bun run test
-      - run: bun run build
+      # Core, platform module and tools tests on the runner's own Rust, then
+      # the VPK (vita/build.rs reads the tag from GITHUB_REF_NAME).
+      - run: make test
+      - run: make build
 
       - uses: actions/upload-artifact@v7
         with:

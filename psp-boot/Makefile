@@ -1,5 +1,5 @@
 # Pocket Shelf boot plugin for Adrenaline (see main.c). Built with the pspdev
-# toolchain: `bun run plugin`, which copies the result to
+# toolchain: `make plugin`, which copies the result to
 # vita/package/psp/pocketshelf.prx for the VPK.
 TARGET = pocketshelf
 OBJS = main.o

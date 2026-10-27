@@ -1,6 +1,6 @@
 //! Adrenaline's Vita-side settings file, for where it keeps the PSP's memory
 //! stick (`ms0:`). Pure byte work; `pspemu.rs` reads the file. The tests run
-//! natively: `bun run test` (platform-tests).
+//! natively: `make test` (platform-tests).
 //!
 //! The file is `ux0:data/PSPEMUCFW/adrenaline.bin` (isage's Adrenaline, which
 //! reads it first) or `ux0:app/PSPEMUCFW/adrenaline.bin` (both). Two layouts,

@@ -21,15 +21,15 @@ it, kept its saved data, and the framework was removed from the repository.
 ## How we work
 
 - Commit and push only when asked. Conventional Commits (`feat(shelf): ...`).
-- After a change: `bun run test`, `bun run shots` and look at the renders,
-  then `bun run build` for the user to install. The user installs
+- After a change: `make test`, `make shots` and look at the renders, then
+  `make build` for the user to install. The user installs
   `dist/vita/pocket-shelf.vpk` on a real Vita and sends the log; several
   features have only ever been confirmed there.
 - State plainly what was verified on the desktop, in Vita3K, and on hardware.
 
 ## Seeing the app
 
-**Desktop shots** (`bun run shots [words…]`, `desktop/src/main.rs`): the core
+**Desktop shots** (`make shots`, `SHOTS="words"` for some, `desktop/src/main.rs`): the core
 draws into a software renderer; a fake host answers with sample titles,
 generated icons and backdrops, a fake SteamGridDB, libretro server, GitHub
 and updater. Shots are button scripts; renders go to
@@ -70,14 +70,15 @@ cannot be driven. Evidence comes from the log and from files under
 - **The title id is compiled in by `vita/build.rs`** from `Cargo.toml`.
   Without it the app listed itself, refused to download updates and failed
   its own package check.
-- **LiveArea PNGs must be indexed 8-bit**; `tools/art.ts` quantizes them with
+- **LiveArea PNGs must be indexed 8-bit**; `make art` (`tools/src/art.rs`) quantizes them with
   capped Floyd-Steinberg dithering (uncapped, the error left reddish dots).
   The pictures hold no text: the system draws "Start" over the gate image,
   which hid a name drawn there. Name, author and version are LiveArea text in
-  `template.xml` (frames 2, 3 and 4, VitaShell's layout), from `package.json`.
+  `template.xml` (frames 2, 3 and 4, VitaShell's layout), from `vita/Cargo.toml`.
   Confirmed on hardware.
-- `APP_VER` is `MM.mm` of `package.json`'s version ("0.2.0" is "00.02"); the
-  update check compares the full version compiled in from `build-info.json`.
+- `APP_VER` is `MM.mm` of `vita/Cargo.toml`'s version ("0.2.0" is "00.02");
+  the update check compares the full version `vita/build.rs` compiles in
+  (from the tag on CI).
 
 ## Titles (`vita/src/platform/`)
 
@@ -185,7 +186,7 @@ stick at each launch when it differs.
   modules) was looked at and not done: the user chose not to modify
   Adrenaline's files.
 - The plugin is committed (`vita/package/psp/pocketshelf.prx`); rebuild with
-  `bun run plugin` (pspdev in `~/pspdev`; its compiler needs Homebrew `gmp`,
+  `make plugin` (pspdev in `~/pspdev`; its compiler needs Homebrew `gmp`,
   `mpfr`, `libmpc` and `zstd`).
 
 ## Network
@@ -259,7 +260,7 @@ updates**.
   nothing). **Confirmed on hardware (2026-10-27):** 0.2.0-beta.0 → beta.1
   downloaded, installed and restarted by itself. Each step goes to
   `ux0:data/PocketShelf/updater.log`.
-- Rebuild the updater with `bun run updater` (VitaSDK); its build is
+- Rebuild the updater with `make updater` (VitaSDK); its build is
   committed in `vita/package/updater/`.
 
 ## Status bar (`vita/src/status.rs`, `shelf/chrome.rs`)
@@ -305,8 +306,9 @@ updates**.
 
 ## Languages
 
-English, Turkish, German, French and Spanish, in `locales/*.ts`
-(`en.ts` defines the keys); `bun run locales` writes `core/src/locales.rs`.
+English, Turkish, German, French and Spanish, in `core/src/locales.rs`: a
+language missing a text does not compile, and the tests check that every
+language has the same `{placeholders}` as English.
 The keyboard's accents page holds the same thirty letters in every language,
 the current language's own first. `upper` handles the Turkish dotted and
 dotless i.
