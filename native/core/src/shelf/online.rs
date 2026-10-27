@@ -29,7 +29,6 @@ impl Shelf {
         let t = self.t();
         let (online, actions) = Online::start(host, t, scraper, &game.id, folder, &term, &mut self.listings);
         self.online = Some(online);
-        self.online_tex = None;
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);
         self.online_actions(host, actions);
@@ -41,6 +40,12 @@ impl Shelf {
             match action {
                 Action::AskText { key, text } => self.open_keyboard(if key { Target::ApiKey } else { Target::Search }, &text),
                 Action::Preview(key) => host.request(key),
+                Action::Decode(key, png) => host.decode(key, png),
+                Action::Save { path, png, fit } => {
+                    if !host.save_picture(&path, png, fit) {
+                        host.log(&format!("Picture not saved: {path}"));
+                    }
+                }
                 Action::Apply(kind, file) => {
                     let Some(id) = self.editor.as_ref().map(|e| e.id.clone()) else { continue };
                     match kind {
@@ -85,15 +90,9 @@ impl Shelf {
         if confirm {
             actions.extend(online.confirm(host, t));
         } else if cancel && online.back(host) {
-            let overrides = &self.library.overrides.titles;
-            online.close(host, |kind, file| {
-                overrides.values().any(|c| match kind {
-                    AssetKind::Icon => c.art.as_deref() == Some(file),
-                    AssetKind::Backdrop => c.backdrop.as_deref() == Some(file),
-                })
-            });
+            online.close(host);
             self.online = None;
-            if let Some(tex) = self.online_tex.take() {
+            for tex in self.online_tex.iter_mut().filter_map(Option::take) {
                 self.pending_free.push(tex);
             }
         }
@@ -108,21 +107,20 @@ impl Shelf {
         self.online_actions(host, actions);
     }
 
-    /// A picture answered for a preview; true when it was one (a backdrop
-    /// preview keeps its own texture; an icon's goes to the art cache too).
+    /// A picture answered for a preview; true when it was one. Each kind's
+    /// preview keeps its own texture until the next one replaces it.
     pub(super) fn online_picture(&mut self, gfx: &mut Gfx, key: &PictureKey, picture: &Option<Picture>) -> bool {
         let t = self.t();
         let Some(online) = &mut self.online else { return false };
-        if !online.previewed(t, key, picture.is_some()) {
-            return false;
+        let Some(slot) = online.preview.iter().position(|p| p.as_ref() == Some(key)) else { return false };
+        online.previewed(t, key, picture.is_some());
+        if let Some(old) = self.online_tex[slot].take() {
+            gfx.textures.free(old);
         }
-        if let (PictureKey::Backdrop { .. }, Some(p)) = (key, picture) {
-            if let Some(old) = self.online_tex.take() {
-                gfx.textures.free(old);
-            }
-            self.online_tex = Some(gfx.add_texture(p.w, p.h, Format::Rgba8, p.rgba.clone(), true));
+        if let Some(p) = picture {
+            self.online_tex[slot] = Some(gfx.add_texture(p.w, p.h, Format::Rgba8, p.rgba.clone(), true));
         }
-        matches!(key, PictureKey::Backdrop { .. })
+        true
     }
 
     pub(super) fn draw_online(&mut self, gfx: &mut Gfx) {
@@ -174,11 +172,7 @@ impl Shelf {
                 let kind = KINDS[online.row.min(1)];
                 let slot = online.row.min(1);
                 if online.shown[slot] {
-                    let tex = match (kind, &online.preview[slot]) {
-                        (AssetKind::Backdrop, _) => self.online_tex,
-                        (AssetKind::Icon, Some(key)) => self.art.texture(key),
-                        _ => None,
-                    };
+                    let tex = self.online_tex[slot];
                     if let Some(tex) = tex.filter(|&t| gfx.textures.ready(t)) {
                         let (w, h) = if kind == AssetKind::Icon { (96.0, 96.0) } else { (212.0, 120.0) };
                         let rect = Rect::new(drawer.x + (drawer.w - w) / 2.0, top + (128.0 - h) / 2.0, w, h);

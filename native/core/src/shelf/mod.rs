@@ -185,7 +185,8 @@ pub struct Shelf {
     pub reset_stats: bool,
     /// Find artwork, and its backdrop preview's texture.
     online: Option<crate::online::flow::Online>,
-    online_tex: Option<TexId>,
+    /// Each preview's texture: icon, backdrop.
+    online_tex: [Option<TexId>; 2],
     /// libretro's box art names per console (Find and Fetch artwork).
     listings: crate::online::flow::Listings,
     /// Textures to free at the next draw.
@@ -244,7 +245,7 @@ impl Shelf {
             diagnostics_lines: Vec::new(),
             reset_stats: false,
             online: None,
-            online_tex: None,
+            online_tex: [None, None],
             listings: Default::default(),
             pending_free: Vec::new(),
         };

@@ -37,8 +37,15 @@ pub(crate) fn decode(path: &str) -> Option<(u32, Vec<u8>)> {
     if fs::metadata(path).ok()?.len() > FILE_MAX {
         return None;
     }
-    let file = fs::File::open(path).ok()?;
-    let mut decoder = png::Decoder::new(std::io::BufReader::new(file));
+    decode_bytes(&fs::read(path).ok()?)
+}
+
+/// `decode` for a PNG in memory (a Find artwork candidate not yet saved).
+pub(crate) fn decode_bytes(bytes: &[u8]) -> Option<(u32, Vec<u8>)> {
+    if bytes.len() as u64 > FILE_MAX {
+        return None;
+    }
+    let mut decoder = png::Decoder::new(bytes);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;
     let (width, height) = {

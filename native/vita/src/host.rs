@@ -7,7 +7,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
-use shelf_core::host::{Event, Host, NetId, NetKind, NetState, Picture, PictureKey, PluginState, ScanPhase, Status};
+use shelf_core::host::{DecodeAs, Event, Host, NetId, NetKind, NetState, Picture, PictureKey, PluginState, ScanPhase, Status};
 
 use crate::platform::{backdrop, installed};
 
@@ -65,6 +65,8 @@ fn picture(key: &PictureKey) -> Option<Picture> {
             PictureKey::Backdrop { id, file } => {
                 backdrop::picture(id, file).map(|(w, h, rgba)| Picture { w, h, rgba, accent: None })
             }
+            // Pictures in memory come with their bytes (`decode_memory`).
+            PictureKey::Memory { .. } => None,
         }
     }
 }
@@ -72,14 +74,46 @@ fn picture(key: &PictureKey) -> Option<Picture> {
 /// A change to the data folder, done in order on the file thread.
 enum FileOp {
     Write(String, Vec<u8>),
+    /// A picture to `art/` or `backdrops/`, fitted into a square first.
+    Picture(String, Vec<u8>, bool),
     Remove(String),
     /// Answered once every earlier change is done.
     Flush(Sender<()>),
 }
 
+/// A picture in memory decoded as the file it would be saved to.
+fn decode_memory(as_: DecodeAs, png: &[u8]) -> Option<Picture> {
+    let with_accent = |w, h, rgba: Vec<u8>| {
+        let accent = Some(crate::platform::accent::of(&rgba) as u32);
+        Picture { w, h, rgba, accent }
+    };
+    match as_ {
+        DecodeAs::Art => crate::platform::art::decode_bytes(png).map(|(side, rgba)| with_accent(side, side, rgba)),
+        DecodeAs::FittedArt => crate::platform::pspemu::fit_png(png).map(|(w, h, rgba)| with_accent(w, h, rgba)),
+        DecodeAs::Backdrop => backdrop::decode(png).map(|(w, h, rgba)| Picture { w, h, rgba, accent: None }),
+    }
+}
+
+/// A picture file this build saves: `art/` or `backdrops/` and a plain PNG
+/// name.
+fn picture_path(path: &str) -> bool {
+    let Some((dir, name)) = path.split_once('/') else { return false };
+    (dir == "art" || dir == "backdrops")
+        && !name.starts_with('.')
+        && name.to_lowercase().ends_with(".png")
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
 /// Do one change; a failure goes to the log.
 fn file_op(op: FileOp) {
     match op {
+        FileOp::Picture(path, png, fit) => {
+            let png = if fit { crate::platform::http::shrink_bytes(&png) } else { Ok(png) };
+            match png {
+                Ok(png) => file_op(FileOp::Write(path, png)),
+                Err(error) => log_line(&format!("save {path}: {error}")),
+            }
+        }
         FileOp::Write(path, data) => {
             let full = format!("{DATA}/{path}");
             if let Some((dir, _)) = full.rsplit_once('/') {
@@ -109,6 +143,8 @@ fn file_op(op: FileOp) {
 struct Waiting {
     icons: VecDeque<PictureKey>,
     backdrop: Option<PictureKey>,
+    /// Pictures in memory to decode, by key; taken with their request.
+    bytes: std::collections::HashMap<PictureKey, Vec<u8>>,
     closed: bool,
 }
 
@@ -121,15 +157,16 @@ struct Requests {
 impl Requests {
     /// The next request for a thread: an icon (`backdrops` false) or the
     /// newest backdrop; `None` once the host is gone.
-    fn next(&self, backdrops: bool) -> Option<PictureKey> {
+    fn next(&self, backdrops: bool) -> Option<(PictureKey, Option<Vec<u8>>)> {
         let mut waiting = self.waiting.lock().ok()?;
         loop {
             if waiting.closed {
                 return None;
             }
             let next = if backdrops { waiting.backdrop.take() } else { waiting.icons.pop_front() };
-            if next.is_some() {
-                return next;
+            if let Some(key) = next {
+                let bytes = waiting.bytes.remove(&key);
+                return Some((key, bytes));
             }
             waiting = self.wake.wait(waiting).ok()?;
         }
@@ -138,9 +175,12 @@ impl Requests {
 
 /// A decoding thread: takes requests of its kind and answers them.
 fn decoder(requests: Arc<Requests>, sender: Sender<Event>, backdrops: bool) {
-    while let Some(key) = requests.next(backdrops) {
+    while let Some((key, bytes)) = requests.next(backdrops) {
         let started = now_us();
-        let picture = picture(&key);
+        let picture = match (&key, bytes) {
+            (PictureKey::Memory { as_, .. }, Some(png)) => decode_memory(*as_, &png),
+            _ => picture(&key),
+        };
         if let (true, PictureKey::Backdrop { id, .. }) = (backdrops, &key) {
             log_line(&format!("backdrop {id} in {} ms{}", (now_us() - started) / 1000, if picture.is_none() { " (none)" } else { "" }));
         }
@@ -272,7 +312,7 @@ impl Host for VitaHost {
         if let Ok(mut waiting) = self.requests.waiting.lock() {
             match key {
                 // Only the newest backdrop matters.
-                PictureKey::Backdrop { .. } => waiting.backdrop = Some(key),
+                PictureKey::Backdrop { .. } | PictureKey::Memory { as_: DecodeAs::Backdrop, .. } => waiting.backdrop = Some(key),
                 _ => waiting.icons.push_back(key),
             }
         }
@@ -282,6 +322,7 @@ impl Host for VitaHost {
     fn cancel(&mut self, key: &PictureKey) {
         if let Ok(mut waiting) = self.requests.waiting.lock() {
             waiting.icons.retain(|k| k != key);
+            waiting.bytes.remove(key);
             if waiting.backdrop.as_ref() == Some(key) {
                 waiting.backdrop = None;
             }
@@ -317,6 +358,7 @@ impl Host for VitaHost {
         use crate::platform::http;
         let id = match &kind {
             NetKind::Text { authorization } => http::start(url, authorization, None, false),
+            NetKind::Bytes => http::start_bytes(url),
             NetKind::Save(path) => http::start(url, "", Some(path), false),
             NetKind::SaveIcon(path) => http::start(url, "", Some(path), true),
         };
@@ -333,5 +375,20 @@ impl Host for VitaHost {
 
     fn net_close(&mut self, id: NetId) {
         crate::platform::http::close(id.0);
+    }
+
+    fn net_bytes(&mut self, id: NetId) -> Vec<u8> {
+        crate::platform::http::take_bytes(id.0)
+    }
+
+    fn decode(&mut self, key: PictureKey, png: Vec<u8>) {
+        if let Ok(mut waiting) = self.requests.waiting.lock() {
+            waiting.bytes.insert(key.clone(), png);
+        }
+        self.request(key);
+    }
+
+    fn save_picture(&mut self, path: &str, png: Vec<u8>, fit: bool) -> bool {
+        picture_path(path) && self.files.send(FileOp::Picture(path.into(), png, fit)).is_ok()
     }
 }

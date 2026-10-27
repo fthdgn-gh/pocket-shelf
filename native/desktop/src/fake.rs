@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use shelf_core::host::{Event, Host, NetId, NetKind, NetState, Picture, PictureKey, PluginState, ScanPhase, Status, TitleInfo};
+use shelf_core::host::{DecodeAs, Event, Host, NetId, NetKind, NetState, Picture, PictureKey, PluginState, ScanPhase, Status, TitleInfo};
 use shelf_core::library::catalog::load_catalog;
 use shelf_core::text::{render_mask, Weight};
 use shelf_core::theme::ACCENT_HAS_ALPHA;
@@ -452,6 +452,8 @@ impl Host for FakeHost {
             PictureKey::Art(name) if name.starts_with("broken") => None,
             PictureKey::Art(name) => Some(icon(name.len() % 7 + 3, name)),
             PictureKey::Backdrop { id, .. } => self.index(id).map(backdrop),
+            // Pictures in memory come through `decode`.
+            PictureKey::Memory { .. } => None,
         };
         self.later.push(Event::Picture(key, picture));
     }
@@ -508,6 +510,11 @@ impl Host for FakeHost {
                 let (status, text) = steamgriddb_reply(url, &authorization);
                 FakeRequest { polls: 0, status, size: text.len() as u64, text }
             }
+            NetKind::Bytes => {
+                // libretro's title screens are missing on the fake server.
+                let status = if url.contains("/Named_Titles/") { 404 } else { 200 };
+                FakeRequest { polls: 0, status, text: if status == 200 { "PNG".into() } else { String::new() }, size: 480 * 1024 }
+            }
             NetKind::Save(path) | NetKind::SaveIcon(path) if path.starts_with("libretro/") => {
                 self.files.insert(path, format!("{}\n", LIBRETRO_NAMES.join("\n")).into_bytes());
                 FakeRequest { polls: 0, status: 200, text: String::new(), size: 900 * 1024 }
@@ -542,5 +549,24 @@ impl Host for FakeHost {
 
     fn net_close(&mut self, id: NetId) {
         self.requests.remove(&id.0);
+    }
+
+    fn net_bytes(&mut self, id: NetId) -> Vec<u8> {
+        self.requests.get(&id.0).map(|r| r.text.as_bytes().to_vec()).unwrap_or_default()
+    }
+
+    /// A picture in memory decodes as a sample icon or backdrop.
+    fn decode(&mut self, key: PictureKey, _png: Vec<u8>) {
+        let picture = match &key {
+            PictureKey::Memory { id, as_: DecodeAs::Backdrop } => Some(backdrop(*id as usize % 5)),
+            PictureKey::Memory { id, .. } => Some(icon(*id as usize % 7 + 2, "Candidate")),
+            _ => None,
+        };
+        self.later.push(Event::Picture(key, picture));
+    }
+
+    fn save_picture(&mut self, path: &str, png: Vec<u8>, _fit: bool) -> bool {
+        self.files.insert(path.into(), png);
+        true
     }
 }

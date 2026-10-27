@@ -1,20 +1,27 @@
 //! Finding an icon and a backdrop for one title (title editor ▸ Find
 //! artwork, `src/online.ts`), on SteamGridDB or libretro's server. The shelf
 //! steps it once per frame; it polls its own requests and returns what the
-//! shelf has to do (open the keyboard, ask for a preview, apply a file).
+//! shelf has to do (open the keyboard, decode a preview, save and apply a
+//! file).
+//!
+//! Candidates download into memory and are decoded from there; a file is
+//! written only for the one the user uses (the current app wrote each
+//! candidate to `art/` or `backdrops/` and deleted the others on close).
 
 use std::collections::{HashMap, HashSet};
 
 use super::libretro::{self, Listing};
 use super::steamgriddb::{self as sgdb, AssetKind, Problem};
 use super::{candidate_path, libretro_candidates, sgdb_candidates, Candidate, Scraper};
-use crate::host::{Host, NetId, NetKind, NetState, PictureKey};
+use crate::host::{DecodeAs, Host, NetId, NetKind, NetState, PictureKey};
 use crate::i18n::fill;
 use crate::library::list_png;
 use crate::locales::Messages;
 
 /// Rows shown at once in the games list, the search row included.
 pub const ONLINE_ROWS: usize = 6;
+/// Downloaded candidates kept in memory, newest last (a hero is a few MB).
+const MEMORY_KEPT: usize = 4;
 pub const KINDS: [AssetKind; 2] = [AssetKind::Icon, AssetKind::Backdrop];
 
 fn slot(kind: AssetKind) -> usize {
@@ -79,8 +86,12 @@ enum Purpose {
 pub enum Action {
     /// Open the keyboard for the search term (`false`) or the API key.
     AskText { key: bool, text: String },
-    /// Decode a candidate for its preview.
+    /// Decode a saved candidate for its preview.
     Preview(PictureKey),
+    /// Decode a candidate in memory for its preview.
+    Decode(PictureKey, Vec<u8>),
+    /// Write a candidate to its file (fitted into a square with `fit`).
+    Save { path: String, png: Vec<u8>, fit: bool },
     /// Use a downloaded file for the edited title.
     Apply(AssetKind, String),
 }
@@ -104,7 +115,9 @@ pub struct Online {
     pending: Vec<(NetId, Purpose)>,
     asset_lists: [Option<Result<Vec<sgdb::Asset>, String>>; 2],
     on_disk: [HashSet<String>; 2],
-    downloaded: [HashSet<String>; 2],
+    /// Downloaded candidates by file name, newest last.
+    memory: Vec<(String, Vec<u8>)>,
+    next_memory: u32,
 }
 
 impl Online {
@@ -129,7 +142,8 @@ impl Online {
             pending: Vec::new(),
             asset_lists: [None, None],
             on_disk: [list_png(host, "art").into_iter().collect(), list_png(host, "backdrops").into_iter().collect()],
-            downloaded: [HashSet::new(), HashSet::new()],
+            memory: Vec::new(),
+            next_memory: 0,
         };
         let actions = online.search(host, t, listings);
         (online, actions)
@@ -274,12 +288,27 @@ impl Online {
         if self.on_disk[s].contains(&candidate.file) {
             return vec![self.display(t, kind, &candidate.file)];
         }
+        if let Some(png) = self.memory.iter().find(|(f, _)| *f == candidate.file).map(|(_, b)| b.clone()) {
+            return vec![self.decode(t, kind, candidate.fit, png)];
+        }
         self.busy = true;
         self.status = t.downloading.to_string();
-        let path = candidate_path(kind, &candidate);
-        let net = if candidate.fit { NetKind::SaveIcon(path) } else { NetKind::Save(path) };
-        self.start_request(host, t, &candidate.url, net, Purpose::Download(kind, candidate.file));
+        self.start_request(host, t, &candidate.url, NetKind::Bytes, Purpose::Download(kind, candidate.file));
         Vec::new()
+    }
+
+    /// Decode a candidate in memory for its preview.
+    fn decode(&mut self, t: &Messages, kind: AssetKind, fit: bool, png: Vec<u8>) -> Action {
+        let as_ = match kind {
+            AssetKind::Backdrop => DecodeAs::Backdrop,
+            AssetKind::Icon if fit => DecodeAs::FittedArt,
+            AssetKind::Icon => DecodeAs::Art,
+        };
+        self.next_memory += 1;
+        let key = PictureKey::Memory { id: self.next_memory, as_ };
+        self.preview[slot(kind)] = Some(key.clone());
+        self.status = t.loading.to_string();
+        Action::Decode(key, png)
     }
 
     /// Ask for a downloaded candidate's picture.
@@ -319,19 +348,26 @@ impl Online {
                     self.pending.push((id, purpose));
                 }
                 state => {
-                    let text = if matches!(state, NetState::Done { .. }) { host.net_text(id) } else { String::new() };
+                    let done = matches!(state, NetState::Done { status: 200, .. });
+                    // A candidate's bytes; an API reply's text.
+                    let (text, bytes) = match (&purpose, done) {
+                        (Purpose::Download(..), true) => (String::new(), host.net_bytes(id)),
+                        (_, _) if matches!(state, NetState::Done { .. }) => (host.net_text(id), Vec::new()),
+                        _ => (String::new(), Vec::new()),
+                    };
                     host.net_close(id);
-                    finished.push((purpose, state, text));
+                    finished.push((purpose, state, text, bytes));
                 }
             }
         }
-        for (purpose, state, text) in finished {
-            actions.extend(self.finished(host, t, listings, purpose, state, text));
+        for (purpose, state, text, bytes) in finished {
+            actions.extend(self.finished(host, t, listings, purpose, state, text, bytes));
         }
         actions
     }
 
-    fn finished(&mut self, host: &mut dyn Host, t: &Messages, listings: &mut Listings, purpose: Purpose, state: NetState, text: String) -> Vec<Action> {
+    #[allow(clippy::too_many_arguments)]
+    fn finished(&mut self, host: &mut dyn Host, t: &Messages, listings: &mut Listings, purpose: Purpose, state: NetState, text: String, bytes: Vec<u8>) -> Vec<Action> {
         let failed = |state: &NetState| match state {
             NetState::Error(error) => Some(error.clone()),
             _ => None,
@@ -398,9 +434,13 @@ impl Online {
                     self.status = fill(t.download_failed, &[("error", &error)]);
                     return Vec::new();
                 }
-                self.on_disk[slot(kind)].insert(file.clone());
-                self.downloaded[slot(kind)].insert(file.clone());
-                vec![self.display(t, kind, &file)]
+                let fit = self.assets[slot(kind)].iter().find(|c| c.file == file).is_some_and(|c| c.fit);
+                self.memory.retain(|(f, _)| *f != file);
+                self.memory.push((file, bytes.clone()));
+                if self.memory.len() > MEMORY_KEPT {
+                    self.memory.remove(0);
+                }
+                vec![self.decode(t, kind, fit, bytes)]
             }
         }
     }
@@ -457,7 +497,15 @@ impl Online {
                     return Vec::new();
                 }
                 self.status = (if kind == AssetKind::Icon { t.icon_applied } else { t.backdrop_applied }).to_string();
-                vec![Action::Apply(kind, candidate.file)]
+                let mut actions = Vec::new();
+                // Written only now, the first time it is used.
+                if !self.on_disk[slot(kind)].contains(&candidate.file) {
+                    let Some(png) = self.memory.iter().find(|(f, _)| *f == candidate.file).map(|(_, b)| b.clone()) else { return Vec::new() };
+                    actions.push(Action::Save { path: candidate_path(kind, &candidate), png, fit: candidate.fit });
+                    self.on_disk[slot(kind)].insert(candidate.file.clone());
+                }
+                actions.push(Action::Apply(kind, candidate.file));
+                actions
             }
         }
     }
@@ -477,17 +525,11 @@ impl Online {
         true
     }
 
-    /// Close: requests cancelled, and candidates looked at and not chosen
-    /// deleted (`in_use` says which files a title uses).
-    pub fn close(&mut self, host: &mut dyn Host, in_use: impl Fn(AssetKind, &str) -> bool) {
+    /// Close: requests cancelled, candidates in memory dropped; nothing
+    /// was written for the ones not used.
+    pub fn close(&mut self, host: &mut dyn Host) {
         self.cancel_all(host);
-        for kind in KINDS {
-            for file in self.downloaded[slot(kind)].drain() {
-                if !in_use(kind, &file) {
-                    host.remove(&format!("{}/{file}", sgdb::folder(kind)));
-                }
-            }
-        }
+        self.memory.clear();
     }
 
     pub fn submit_term(&mut self, host: &mut dyn Host, t: &Messages, listings: &mut Listings, text: &str) -> Vec<Action> {
@@ -506,5 +548,118 @@ impl Online {
                 Vec::new()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::host::{Event, Status};
+    use crate::library::testing::Files;
+
+    /// A data folder with a SteamGridDB that answers at once.
+    #[derive(Default)]
+    struct Net {
+        files: Files,
+        replies: HashMap<i32, (u16, String)>,
+        next: i32,
+        writes: Vec<String>,
+    }
+
+    impl Host for Net {
+        fn time_us(&self) -> u64 {
+            0
+        }
+        fn read(&mut self, path: &str) -> Option<Vec<u8>> {
+            self.files.read(path)
+        }
+        fn write(&mut self, path: &str, data: &[u8]) -> bool {
+            self.writes.push(path.into());
+            self.files.write(path, data)
+        }
+        fn remove(&mut self, path: &str) -> bool {
+            self.files.remove(path)
+        }
+        fn list(&mut self, dir: &str) -> Vec<String> {
+            self.files.list(dir)
+        }
+        fn status(&mut self) -> Status {
+            Status::default()
+        }
+        fn scan(&mut self, _: bool) {}
+        fn request(&mut self, _: PictureKey) {}
+        fn poll(&mut self, _: &mut Vec<Event>) {}
+        fn log(&mut self, _: &str) {}
+        fn launch(&mut self, _: &str) -> bool {
+            true
+        }
+        fn plugin_state(&mut self) -> crate::host::PluginState {
+            crate::host::PluginState::On
+        }
+        fn enable_plugin(&mut self) -> bool {
+            true
+        }
+        fn net_start(&mut self, url: &str, kind: NetKind) -> Option<NetId> {
+            self.next += 1;
+            let reply = match kind {
+                NetKind::Bytes => (200, "PNG".to_string()),
+                NetKind::Save(path) | NetKind::SaveIcon(path) => {
+                    self.writes.push(path);
+                    (200, String::new())
+                }
+                NetKind::Text { .. } if url.contains("/search/") => (200, r#"{"success":true,"data":[{"id":7,"name":"Gravity Daze"}]}"#.into()),
+                NetKind::Text { .. } => (200, r#"{"success":true,"data":[{"id":1,"url":"https://x/a.png"},{"id":2,"url":"https://x/b.png"}]}"#.into()),
+            };
+            self.replies.insert(self.next, reply);
+            Some(NetId(self.next))
+        }
+        fn net_state(&mut self, id: NetId) -> NetState {
+            NetState::Done { status: self.replies[&id.0].0, received: 3 }
+        }
+        fn net_text(&mut self, id: NetId) -> String {
+            self.replies[&id.0].1.clone()
+        }
+        fn net_bytes(&mut self, id: NetId) -> Vec<u8> {
+            self.replies[&id.0].1.as_bytes().to_vec()
+        }
+        fn save_picture(&mut self, path: &str, png: Vec<u8>, _: bool) -> bool {
+            self.writes.push(path.into());
+            self.files.write(path, &png)
+        }
+    }
+
+    #[test]
+    fn candidates_stay_in_memory_until_one_is_used() {
+        let t = crate::i18n::messages(crate::library::settings::Language::En);
+        let mut host = Net::default();
+        host.files.0.insert(sgdb::KEY_FILE.into(), b"0123456789abcdef0123456789abcdef\n".to_vec());
+        let mut listings = Listings::default();
+        let (mut online, _) = Online::start(&mut host, t, Scraper::SteamGridDb, "PCSA00069", None, "Gravity Daze", &mut listings);
+        online.frame(&mut host, t, &mut listings);
+        assert_eq!(online.games.len(), 1);
+        online.confirm(&mut host, t);
+        // Two asset lists, then the first icon's download and its decode.
+        online.frame(&mut host, t, &mut listings);
+        let actions = online.frame(&mut host, t, &mut listings);
+        assert!(matches!(actions.as_slice(), [Action::Decode(PictureKey::Memory { .. }, png)] if png == b"PNG"));
+        let key = online.preview[0].clone().unwrap();
+        online.previewed(t, &key, true);
+        // The next icon: downloaded and decoded, still nothing written.
+        online.step_by(&mut host, t, 1, 0);
+        online.frame(&mut host, t, &mut listings);
+        let key = online.preview[0].clone().unwrap();
+        online.previewed(t, &key, true);
+        assert!(host.writes.is_empty(), "{:?}", host.writes);
+        // Use: the one file is written, then applied.
+        let actions = online.confirm(&mut host, t);
+        assert_eq!(
+            actions,
+            [
+                Action::Save { path: "art/PCSA00069-2.png".into(), png: b"PNG".to_vec(), fit: false },
+                Action::Apply(AssetKind::Icon, "PCSA00069-2.png".into()),
+            ]
+        );
+        // Used again: already on disk, not written twice.
+        assert_eq!(online.confirm(&mut host, t), [Action::Apply(AssetKind::Icon, "PCSA00069-2.png".into())]);
     }
 }

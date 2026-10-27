@@ -115,6 +115,15 @@ call on the Vita's 32-bit CPU, and now reads each column's texel from a
 table; PNG checksums are skipped. The log splits each backdrop into read,
 decode and scale times.
 
+**Find artwork** (editor, `online/flow.rs`): SteamGridDB (the key typed or
+in `steamgriddb.txt`) or libretro (the console's listing, kept in
+`libretro/`), the games found, then each kind's candidates. **Candidates
+download into memory** (`NetKind::Bytes`, at most 8 MB, the last four
+kept) and decode from there (`Host::decode`); only the one used is written
+to `art/` or `backdrops/` (`Host::save_picture`, a libretro box art fitted
+into 128 px first). The current app wrote every candidate and deleted the
+unused ones on close.
+
 **Launching** (`launch_selected`): a title with no bubble first needs
 Adrenaline's boot plugin on, and the drawer offers to add it or turn it on;
 then `recent.json` and `settings.json` are written, the host accepts the id

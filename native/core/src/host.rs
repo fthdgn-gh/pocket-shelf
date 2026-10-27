@@ -56,6 +56,9 @@ pub enum PictureKey {
     /// A title's full-screen picture: the file the user chose in
     /// `backdrops/`, or (`file` empty) `pic0.png` and its stand-ins.
     Backdrop { id: String, file: String },
+    /// A picture decoded from memory with [`Host::decode`] (a Find artwork
+    /// candidate): its number, and how it was decoded.
+    Memory { id: u32, as_: DecodeAs },
 }
 
 /// What a running scan is reading (`installed.rs`): one step per app
@@ -83,6 +86,17 @@ impl ScanPhase {
             _ => ScanPhase::Apps,
         }
     }
+}
+
+/// How a picture in memory is decoded, as the files it would be saved to.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum DecodeAs {
+    /// Box art: cropped to a square (`art/`).
+    Art,
+    /// Box art fitted whole into a 128 px square (a libretro box art).
+    FittedArt,
+    /// A backdrop (`backdrops/`).
+    Backdrop,
 }
 
 pub enum Event {
@@ -123,6 +137,8 @@ pub enum NetKind {
     /// Text kept in memory (an API reply), with an `Authorization` header
     /// when not empty.
     Text { authorization: String },
+    /// A PNG kept in memory, read with [`Host::net_bytes`].
+    Bytes,
     /// A file in the data folder: a PNG, a libretro listing
     /// (`libretro/<console>.txt`, the names its page links to), or the
     /// update package.
@@ -207,6 +223,18 @@ pub trait Host {
     fn net_text(&mut self, _id: NetId) -> String {
         String::new()
     }
+    /// A finished `Bytes` request's reply.
+    fn net_bytes(&mut self, _id: NetId) -> Vec<u8> {
+        Vec::new()
+    }
     /// Cancel and forget a request.
     fn net_close(&mut self, _id: NetId) {}
+    /// Decode a PNG in memory; answered with [`Event::Picture`] under `key`
+    /// (a [`PictureKey::Memory`]).
+    fn decode(&mut self, _key: PictureKey, _png: Vec<u8>) {}
+    /// Save a PNG to `art/` or `backdrops/` (fitted into a 128 px square
+    /// first with `fit`), in order with the other writes.
+    fn save_picture(&mut self, _path: &str, _png: Vec<u8>, _fit: bool) -> bool {
+        false
+    }
 }
