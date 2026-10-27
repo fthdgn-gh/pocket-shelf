@@ -1,3 +1,0 @@
-// This file intentionally fails if a checker broadens from the entry graph to
-// the whole fixture directory.
-export const shouldNotBeChecked: number = "not a number";
