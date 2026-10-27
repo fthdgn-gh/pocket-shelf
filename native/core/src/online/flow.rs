@@ -182,11 +182,11 @@ impl Online {
         self.busy = false;
     }
 
-    fn unreachable(t: &Messages, error: &str) -> String {
+    pub(crate) fn unreachable(t: &Messages, error: &str) -> String {
         fill(t.unreachable, &[("error", error)])
     }
 
-    fn problem_text(t: &Messages, problem: Problem) -> String {
+    pub(crate) fn problem_text(t: &Messages, problem: Problem) -> String {
         match problem {
             Problem::KeyRejected => t.key_rejected.to_string(),
             Problem::ServerBusy => t.server_busy.to_string(),
@@ -195,7 +195,7 @@ impl Online {
         }
     }
 
-    fn key(host: &mut dyn Host) -> String {
+    pub(crate) fn key(host: &mut dyn Host) -> String {
         host.read(sgdb::KEY_FILE).map(|b| sgdb::parse_key(&String::from_utf8_lossy(&b))).unwrap_or_default()
     }
 

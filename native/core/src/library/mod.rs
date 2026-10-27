@@ -42,7 +42,11 @@ pub fn list_png(host: &mut dyn Host, dir: &str) -> Vec<String> {
 /// PNG files in `art/` (any case, not hidden), by lowercase name without
 /// `.png`.
 fn art_index(host: &mut dyn Host) -> FxHashMap<String, String> {
-    host.list("art")
+    index_of(host.list("art"))
+}
+
+fn index_of(names: impl IntoIterator<Item = String>) -> FxHashMap<String, String> {
+    names
         .into_iter()
         .filter(|name| !name.starts_with('.') && name.to_lowercase().ends_with(".png"))
         .map(|name| {
@@ -233,6 +237,23 @@ impl Library {
         if self.games.iter().zip(&self.base).any(|(g, b)| matches(&g.id) || matches(&g.title) || matches(&b.title)) {
             self.rebuild();
         }
+    }
+
+    /// The art folder's files as the caller knows them (Clean up artwork,
+    /// whose deletes finish on the host's file thread after the frame).
+    pub fn set_art_files(&mut self, names: impl IntoIterator<Item = String>) {
+        let art = index_of(names);
+        if art != self.art {
+            self.art = art;
+            self.rebuild();
+        }
+    }
+
+    /// Every title's changes replaced (Clean up artwork, all files), then
+    /// the titles recomputed.
+    pub fn set_overrides(&mut self, titles: overrides::Overrides) {
+        self.overrides.titles = titles;
+        self.rebuild();
     }
 
     /// Read `art/` again (the art picker, the editor); titles are recomputed

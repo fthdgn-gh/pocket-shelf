@@ -3,6 +3,7 @@
 //! drawn from its state every frame.
 
 pub mod art;
+mod artwork;
 pub mod chrome;
 mod editor;
 pub mod keyboard;
@@ -177,6 +178,10 @@ pub struct Shelf {
     /// A picker confirm that waited for its file to decode, now due.
     pending_picker_confirm: bool,
     rescan: Option<tools::Rescan>,
+    fetch: Option<artwork::FetchPanel>,
+    /// Pictures Fetch artwork applied since the title changes were written.
+    fetch_unsaved: u32,
+    cleanup: Option<artwork::Cleanup>,
     /// Diagnostics' highlighted row while open, and its lines (the app's
     /// frame timing and startup marks, filled while it is open).
     diagnostics: Option<usize>,
@@ -245,6 +250,9 @@ impl Shelf {
             categories: None,
             pending_picker_confirm: false,
             rescan: None,
+            fetch: None,
+            fetch_unsaved: 0,
+            cleanup: None,
             diagnostics: None,
             diagnostics_lines: Vec::new(),
             reset_stats: false,
@@ -412,6 +420,10 @@ impl Shelf {
             }
         } else if self.online.is_some() {
             self.online_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
+        } else if self.fetch.is_some() {
+            self.fetch_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
+        } else if self.cleanup.is_some() {
+            self.cleanup_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.rescan.is_some() {
             self.rescan_input(host, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.diagnostics.is_some() {
@@ -493,6 +505,9 @@ impl Shelf {
             }
         }
 
+        // Before the selection is compared: a backdrop fetched for the
+        // selected title is asked for like a newly selected one.
+        self.fetch_frame(host);
         let after = (self.tab.clone(), self.selected_game().map(|g| (g.id.clone(), g.backdrop.clone())));
         // The "Launching" line goes when the selection moves; the backdrop
         // is asked for once it rests, from the first frame on.
@@ -540,7 +555,11 @@ impl Shelf {
             keyboard::Target::Title => self.commit_title(host, &text),
             keyboard::Target::NewCategory | keyboard::Target::Category(_) => self.commit_category(host, &keyboard.target, &text),
             keyboard::Target::Search => self.commit_online(host, false, &text),
-            keyboard::Target::ApiKey => self.commit_online(host, true, &text),
+            keyboard::Target::ApiKey => {
+                if !self.commit_fetch_key(host, &text) {
+                    self.commit_online(host, true, &text);
+                }
+            }
         }
     }
 
@@ -700,8 +719,16 @@ impl Shelf {
                 self.open_diagnostics();
                 return;
             }
-            // Fetch artwork, Clean up artwork and updates arrive in phase 5.
-            Item::FetchArt | Item::CleanArt | Item::CheckUpdates => return,
+            Item::FetchArt => {
+                self.open_fetch();
+                return;
+            }
+            Item::CleanArt => {
+                self.open_cleanup(host);
+                return;
+            }
+            // Updates arrive with the updater.
+            Item::CheckUpdates => return,
         }
         if self.settings.status_bar {
             self.status = host.status();
@@ -964,6 +991,12 @@ impl Shelf {
         }
         if self.online.is_some() {
             self.draw_online(gfx);
+        }
+        if self.fetch.is_some() {
+            self.draw_fetch(gfx);
+        }
+        if self.cleanup.is_some() {
+            self.draw_cleanup(gfx);
         }
         if self.rescan.is_some() {
             self.draw_rescan(gfx);
@@ -1382,6 +1415,41 @@ mod tests {
         let infos = [info("PCSA00069", "vita", false), info("VITASHELL", "vita", false), info("ULUS10041", "psp", true)];
         shelf.set_titles(load_catalog(&infos), true);
         (shelf, host)
+    }
+
+    #[test]
+    fn clean_up_deletes_unused_files_or_all_of_them_on_a_second_press() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        for file in ["art/PCSA00069-1.png", "art/orphan.png", "art/VITASHELL.png", "backdrops/PCSA00069-2.png", "backdrops/old.png"] {
+            host.files.0.insert(file.into(), b"PNG".to_vec());
+        }
+        shelf.library.patch("PCSA00069", |c| {
+            c.art = Some("PCSA00069-1.png".into());
+            c.backdrop = Some("PCSA00069-2.png".into());
+        });
+        shelf.open_cleanup(&mut host);
+        // Unused: no title names it and none is matched to it by name.
+        let targets = |shelf: &Shelf| shelf.cleanup.as_ref().map(|c| c.targets.clone()).unwrap();
+        assert_eq!(targets(&shelf), (vec!["orphan.png".to_string()], vec!["old.png".to_string()]));
+        let down = Some(Step::Press(Direction::Down));
+        shelf.cleanup_input(&mut host, down, false, false);
+        shelf.cleanup_input(&mut host, None, true, false);
+        assert!(host.files.0.contains_key("art/orphan.png"), "the first press asks");
+        shelf.cleanup_input(&mut host, None, true, false);
+        assert!(!host.files.0.contains_key("art/orphan.png") && !host.files.0.contains_key("backdrops/old.png"));
+        assert_eq!(targets(&shelf), (Vec::new(), Vec::new()));
+
+        // All: every file, and the titles go back to their own pictures.
+        shelf.cleanup_input(&mut host, down, false, false);
+        shelf.cleanup_input(&mut host, None, true, false);
+        assert_eq!(targets(&shelf).0.len() + targets(&shelf).1.len(), 3);
+        shelf.cleanup_input(&mut host, down, false, false);
+        shelf.cleanup_input(&mut host, None, true, false);
+        shelf.cleanup_input(&mut host, None, true, false);
+        assert!(host.files.list("art").is_empty() && host.files.list("backdrops").is_empty());
+        let game = shelf.library.game("PCSA00069").unwrap();
+        assert_eq!((game.art.clone(), game.backdrop.clone()), (None, None));
+        assert_eq!(shelf.library.game("VITASHELL").unwrap().art, None);
     }
 
     fn press(shelf: &mut Shelf, host: &mut TestHost, button: u32) -> Option<Request> {

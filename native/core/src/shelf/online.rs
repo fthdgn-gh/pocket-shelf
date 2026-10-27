@@ -93,6 +93,7 @@ impl Shelf {
         if let Some(online) = &mut self.online {
             online.listing_ready(host, t, &self.listings, &folder);
         }
+        self.fetch_listing(host, &folder);
     }
 
     pub(super) fn online_frame(&mut self, host: &mut dyn Host) {
