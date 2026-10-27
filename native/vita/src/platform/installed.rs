@@ -78,12 +78,9 @@ unsafe fn find(title_id: &str) -> Option<&'static Title> {
     titles.get(index)
 }
 
-/// Title id of this VPK, when the build supplied one. It is omitted from the
+/// Title id of this VPK (build.rs, from Cargo.toml). It is omitted from the
 /// list so the library never offers to launch itself.
-pub(crate) const SELF_TITLE_ID: &str = match option_env!("VITA_DEFAULT_TITLE_ID") {
-    Some(id) => id,
-    None => "",
-};
+pub(crate) const SELF_TITLE_ID: &str = env!("SHELF_TITLE_ID");
 
 const APP_ROOT: &str = "ux0:/app";
 /// The firmware's own applications (Settings, Browser, ...), ids `NPXS` plus
