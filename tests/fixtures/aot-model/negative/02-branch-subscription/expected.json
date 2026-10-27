@@ -1,6 +1,0 @@
-{
-  "designRow": 2,
-  "diagnostic": "dependencies of this effect depend on control flow",
-  "line": 6,
-  "column": 1
-}
