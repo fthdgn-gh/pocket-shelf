@@ -11,6 +11,7 @@ pub mod menu;
 pub mod navigation;
 pub mod panel;
 mod tools;
+mod online;
 pub mod tween;
 mod views;
 
@@ -182,6 +183,13 @@ pub struct Shelf {
     pub diagnostics_lines: Vec<(String, String)>,
     /// Diagnostics opened: the app resets its frame timing.
     pub reset_stats: bool,
+    /// Find artwork, and its backdrop preview's texture.
+    online: Option<crate::online::flow::Online>,
+    online_tex: Option<TexId>,
+    /// libretro's box art names per console (Find and Fetch artwork).
+    listings: crate::online::flow::Listings,
+    /// Textures to free at the next draw.
+    pending_free: Vec<TexId>,
 }
 
 impl Shelf {
@@ -235,6 +243,10 @@ impl Shelf {
             diagnostics: None,
             diagnostics_lines: Vec::new(),
             reset_stats: false,
+            online: None,
+            online_tex: None,
+            listings: Default::default(),
+            pending_free: Vec::new(),
         };
         shelf.tab = shelf.settings.category.clone().unwrap_or_default();
         shelf.refresh();
@@ -290,6 +302,9 @@ impl Shelf {
         // The picker's preview: a backdrop is its own; an icon or box art
         // also goes to the art cache below.
         if self.picker_picture(gfx, &key, &picture) {
+            return;
+        }
+        if self.online_picture(gfx, &key, &picture) {
             return;
         }
         if matches!(key, PictureKey::Icon(_) | PictureKey::Art(_)) {
@@ -388,6 +403,8 @@ impl Shelf {
             } else if pressed & cancel != 0 {
                 self.keyboard = None;
             }
+        } else if self.online.is_some() {
+            self.online_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.rescan.is_some() {
             self.rescan_input(host, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.diagnostics.is_some() {
@@ -488,6 +505,7 @@ impl Shelf {
             self.picker_confirm(host);
         }
         self.picker_frame(host);
+        self.online_frame(host);
         self.request_icons(host);
         self.blend_dynamic();
         request
@@ -514,8 +532,8 @@ impl Shelf {
             keyboard::Target::Library => self.apply_search(&text),
             keyboard::Target::Title => self.commit_title(host, &text),
             keyboard::Target::NewCategory | keyboard::Target::Category(_) => self.commit_category(host, &keyboard.target, &text),
-            // SteamGridDB's search and key arrive in phase 5.
-            keyboard::Target::Search | keyboard::Target::ApiKey => {}
+            keyboard::Target::Search => self.commit_online(host, false, &text),
+            keyboard::Target::ApiKey => self.commit_online(host, true, &text),
         }
     }
 
@@ -871,6 +889,9 @@ impl Shelf {
             self.clear_pending = false;
             self.clear_backdrop(gfx);
         }
+        for tex in self.pending_free.drain(..) {
+            gfx.textures.free(tex);
+        }
         // Free the backdrops kept beyond the newest few; they are not drawn.
         while self.kept.len() > BACKDROPS_KEPT {
             if let Some(old) = self.kept.pop() {
@@ -925,6 +946,9 @@ impl Shelf {
         }
         if self.editor.is_some() {
             self.draw_editor(gfx);
+        }
+        if self.online.is_some() {
+            self.draw_online(gfx);
         }
         if self.rescan.is_some() {
             self.draw_rescan(gfx);

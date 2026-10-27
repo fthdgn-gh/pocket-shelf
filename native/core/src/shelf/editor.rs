@@ -110,6 +110,10 @@ impl Shelf {
         host.write(CATEGORIES_FILE, text.as_bytes());
     }
 
+    pub(super) fn after_change_pub(&mut self) {
+        self.after_change();
+    }
+
     /// After a title or a category changed: the tabs and the current tab's
     /// titles again, the selection kept in range.
     fn after_change(&mut self) {
@@ -164,8 +168,7 @@ impl Shelf {
                 }
                 3 => self.open_picker(host, false),
                 4 => self.open_picker(host, true),
-                // SteamGridDB and libretro arrive in phase 5.
-                FIND_ART_ROW => {}
+                FIND_ART_ROW => self.start_online(host),
                 _ => self.reset_game(host),
             }
         } else if cancel {
