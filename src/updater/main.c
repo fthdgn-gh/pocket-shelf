@@ -219,8 +219,29 @@ static void read_version(char *out, int out_size) {
   free(text);
 }
 
+// One line per step to ux0:data/PocketShelf/updater.log, appended and closed
+// each time so a hang leaves the last step reached. Outside update/, which
+// Pocket Shelf deletes at its next start.
+#define STEP_LOG "ux0:data/PocketShelf/updater.log"
+
+static void step(const char *line) {
+  SceUID fd = sceIoOpen(STEP_LOG, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
+  if (fd < 0)
+    return;
+  sceIoWrite(fd, line, strlen(line));
+  sceIoWrite(fd, "\n", 1);
+  sceIoClose(fd);
+}
+
+static void step_code(const char *what, int code) {
+  char line[64];
+  snprintf(line, sizeof(line), "%s 0x%08X", what, (unsigned)code);
+  step(line);
+}
+
 // "ok" or "error <step> 0x<code>", read by Pocket Shelf at its next start.
 static void report(const char *line) {
+  step(line);
   write_file(RESULT_FILE, line, strlen(line));
 }
 
@@ -254,7 +275,9 @@ static int work(SceSize args, void *argp) {
   }
 
   snprintf(status, sizeof(status), "Installing Pocket Shelf%s...", version);
+  step("installing");
   int res = promote(PACKAGE_DIR);
+  step_code("promote", res);
   if (res < 0) {
     snprintf(line, sizeof(line), "error install 0x%08X", (unsigned)res);
     report(line);
@@ -270,6 +293,8 @@ done:
 }
 
 int main(void) {
+  sceIoRemove(STEP_LOG);
+  step("start");
   sceAppMgrDestroyOtherApp();
 
   vita2d_init();
@@ -292,9 +317,18 @@ int main(void) {
     vita2d_swap_buffers();
   }
 
-  vita2d_free_pgf(font);
-  vita2d_fini();
+  step("drawing done");
 
+  // The graphics are left to the process exit: Pocket Shelf did not start
+  // after two installs (2026-10-07, 2026-10-27), the last frame frozen on
+  // screen and the PS button ignored, in the steps after this point that
+  // used to begin with vita2d_free_pgf and vita2d_fini. VitaShell's updater
+  // draws nothing and waits 250 ms before the launch.
+  sceKernelDelayThread(250000);
+  // The last line before the launch: nothing may run between the requests
+  // and the exit (two file writes there gave the "close this application?"
+  // prompt in Pocket Shelf).
+  step("launching");
   // Sent twice, 10 ms apart, as VitaShell's updater does.
   sceAppMgrLaunchAppByUri(0xFFFFF, "psgm:play?titleid=" APP_ID);
   sceKernelDelayThread(10000);
