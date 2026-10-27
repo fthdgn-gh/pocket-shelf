@@ -60,6 +60,9 @@ the colored tiles with initials stand in for game icons.
   takes its colors from the selected title.
 - **Status bar** with the clock, Wi-Fi, Bluetooth and battery, each of which
   can be hidden, on the left or the right of the top bar.
+- **Diagnostics** (SELECT menu): frame timing, startup timing, what the last
+  title scan found and skipped, and the last Adrenaline launches (see
+  [Troubleshooting](#troubleshooting)).
 - **Five languages:** English, Turkish, German, French and Spanish.
 - **Updates from GitHub** on the channel you pick (see [Updates](#updates)).
 
@@ -91,6 +94,12 @@ for a newer release. Pocket Shelf also checks once a day at start. To install,
 it downloads the VPK, then starts a separate app, Pocket Shelf Updater, which
 installs it, opens the new version and is removed again.
 
+0.2 is offered to 0.1 betas on the Beta channel, and keeps their settings,
+categories, title changes and artwork. That update runs 0.1's updater, which
+can stop on its last screen ("Starting it..."): the update is installed by
+then, so restart the Vita and open Pocket Shelf. From 0.2 on, the updater
+starts Pocket Shelf by itself.
+
 ### Adrenaline (PSP and PS1 games)
 
 Both TheOfficialFloW's Adrenaline and isage's fork (8.x) are supported, but
@@ -98,6 +107,10 @@ only TheOfficialFloW's has been tested on hardware. The first time you start a
 PSP or PS1 game, Pocket Shelf offers to add its plugin to Adrenaline's plugin
 list. Nothing changes until you confirm. Adrenaline's own files and settings
 are never modified.
+
+A launch writes a request to `ux0:/pspemu/PocketShelf/boot.txt` (under the
+memory stick location Adrenaline uses) and starts Adrenaline; the plugin
+boots the game and adds a line to `boot.log` next to it.
 
 ### RetroArch
 
@@ -126,7 +139,7 @@ app, or put it as one line in `ux0:/data/PocketShelf/steamgriddb.txt`.
 | ○ or ✕ (your choice in the menu) | Launch / back |
 | △ | Edit the selected title |
 | □ | Search |
-| SELECT | Menu: appearance, library, confirm button, language, diagnostics |
+| SELECT | Menu: appearance, library, updates, confirm button, language, diagnostics |
 
 ## Data
 
@@ -147,7 +160,21 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `titles.tsv` | The scanned title list. Delete it to force a new scan |
 
 The log is `log.txt` in the same folder. At 256 KB it becomes `log.old.txt`
-(replacing the previous one) and a new log starts.
+(replacing the previous one) and a new log starts. The updater app writes its
+steps to `updater.log`.
+
+## Troubleshooting
+
+- **A title is missing:** run **SELECT ▸ Library ▸ Rescan titles**, then open
+  **SELECT ▸ Diagnostics**. After the timing it lists what the scan found and
+  why it skipped any PSP folder, disc image or RetroArch game (for example
+  `skip=<id> noEboot`). These lines appear only after a scan in the same run.
+- **A PSP or PS1 game does not start:** the end of Diagnostics shows the last
+  Adrenaline launches (`Boot iso`, `Boot stale`, ...), the boot trigger and the
+  ISO driver.
+- **Something is slow or wrong:** `ux0:/data/PocketShelf/log.txt` records each
+  frame over 25 ms with where its time went, each launch, backdrop decode
+  times and the scan. Attach it to an issue.
 
 ## Building
 
@@ -184,7 +211,7 @@ Three GitHub Actions workflows build and publish the VPK:
 
 | Workflow | Does |
 | --- | --- |
-| [`shelf-build.yml`](./.github/workflows/shelf-build.yml) | Tests and builds the release VPK. The other two call it; "Run workflow" builds without publishing |
+| [`shelf-build.yml`](./.github/workflows/shelf-build.yml) | Tests and builds the release VPK, on every push to `main` and when the other two call it; "Run workflow" builds without publishing |
 | [`shelf-release.yml`](./.github/workflows/shelf-release.yml) | On a `shelf-v*` tag, publishes a beta or stable release |
 | [`shelf-nightly.yml`](./.github/workflows/shelf-nightly.yml) | Replaces the `shelf-nightly` pre-release with a build of `main`, once a day when `main` changed |
 
@@ -199,6 +226,11 @@ git push origin <tag>
 The nightly schedule is off until the repository variable `SHELF_NIGHTLY` is
 set to `true` (Settings ▸ Secrets and variables ▸ Actions ▸ Variables).
 
+Before tagging, test the update path on a Vita: build the current code with a
+lower version, `GITHUB_REF_NAME=shelf-v<lower version> make build`, install it,
+and let it update to the newest published release. Download, install and the
+restart run on hardware only.
+
 ## Contributors
 
 - [Fatih Doğan](https://github.com/fthdgn-gh): author and maintainer.
@@ -208,8 +240,8 @@ set to `true` (Settings ▸ Secrets and variables ▸ Actions ▸ Variables).
 ## Credits
 
 - [PocketJS](https://github.com/pocket-stack/pocketjs) by Yifeng "Evan" Wang
-  and Pocket Nexus: Pocket Shelf began as a PocketJS app, in a fork of its
-  repository, and its Vita platform modules began in the PocketJS Vita host.
+  and Pocket Nexus: Pocket Shelf 0.1 was a PocketJS app, and its Vita platform
+  modules began in the PocketJS Vita host.
 - [SteamGridDB](https://www.steamgriddb.com/) for the artwork lookups.
 - RetroFlow and VitaShell,
   for showing how to launch system applications and PlayStation Mobile titles,
