@@ -14,9 +14,9 @@ was a TypeScript app on PocketJS in a fork of that framework; 0.2.0 replaced
 it, kept its saved data, and the framework was removed from the repository.
 
 - `origin` is `fthdgn-gh/pocket-shelf`.
-- The data folder is `ux0:/data/PocketShelf/`. The log is
-  `ux0:/data/PocketShelfNext/log.txt` (the side-by-side build's folder,
-  kept for now; see `PLAN.md`, Follow-ups).
+- The data folder is `ux0:/data/PocketShelf/`, the log `log.txt` in it
+  (256 KB at most, then `log.old.txt`). The side-by-side build used
+  `ux0:/data/PocketShelfNext/`; nothing reads it any more.
 
 ## How we work
 
@@ -67,6 +67,10 @@ cannot be driven. Evidence comes from the log and from files under
   the user's Vita the VitaCheat plugin's thread crashed in the app (prefetch
   abort, PC 0x0). Retail ids start with `PCS`; VitaCheat likely treats `PC`
   ids as retail games.
+- **`vita-elf-create: ... segment 1 overlaps`**: the SCE data it appends to
+  segment 0 does not fit before segment 1. Resize `LINK_PAD` in
+  `vita/src/main.rs` by a few KiB (4 KiB to 8 KiB on 2026-10-28). Roughly one
+  code change in twenty triggers it.
 - **The title id is compiled in by `vita/build.rs`** from `Cargo.toml`.
   Without it the app listed itself, refused to download updates and failed
   its own package check.

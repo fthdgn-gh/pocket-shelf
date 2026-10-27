@@ -209,9 +209,6 @@ the user.
 
 ## Follow-ups
 
-- **The log and a scanned title list are still in `ux0:data/PocketShelfNext/`**
-  (`OWN` in `vita/src/host.rs`), the side-by-side build's folder. Moving
-  them into `ux0:data/PocketShelf/` changes where the log is collected.
 - **Icon texture budget**: icon and box art textures are never freed;
   texture memory reached 16 MB in a 30 s run with thousands of titles.
 - **Backdrop decode time**: a 1920×620 backdrop takes about 0.5 s to decode;

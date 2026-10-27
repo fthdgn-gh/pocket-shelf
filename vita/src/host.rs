@@ -36,8 +36,12 @@ fn removable(path: &str) -> bool {
     let picture = |name: &str| !name.contains('/') && !name.starts_with('.') && name.to_lowercase().ends_with(".png");
     path.strip_prefix("art/").or_else(|| path.strip_prefix("backdrops/")).is_some_and(picture)
 }
-/// This build's own folder: its log.
-pub const OWN: &str = "ux0:data/PocketShelfNext";
+/// The log, in the data folder. At `LOG_LIMIT` bytes it becomes
+/// `log.old.txt` (replacing the one before) and a new one starts, so the two
+/// stay under twice that on the card.
+const LOG_FILE: &str = "log.txt";
+const LOG_OLD: &str = "log.old.txt";
+const LOG_LIMIT: u64 = 256 * 1024;
 
 pub fn now_us() -> u64 {
     unsafe { vitasdk_sys::sceKernelGetProcessTimeWide() }
@@ -218,10 +222,22 @@ impl VitaHost {
             spawn(name, move || decoder(requests, sender, backdrops));
         }
         spawn("shelf-log", move || {
-            let _ = fs::create_dir_all(OWN);
+            let _ = fs::create_dir_all(DATA);
+            let (path, old) = (format!("{DATA}/{LOG_FILE}"), format!("{DATA}/{LOG_OLD}"));
+            let open = || fs::OpenOptions::new().create(true).append(true).open(&path).ok();
+            let mut size = fs::metadata(&path).map_or(0, |m| m.len());
+            let mut file = open();
             for line in lines {
-                if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(format!("{OWN}/log.txt")) {
-                    let _ = writeln!(file, "{line}");
+                if size > 0 && size + line.len() as u64 + 1 > LOG_LIMIT {
+                    drop(file.take());
+                    let _ = fs::rename(&path, &old);
+                    file = open();
+                    size = 0;
+                }
+                if let Some(file) = &mut file {
+                    if writeln!(file, "{line}").is_ok() {
+                        size += line.len() as u64 + 1;
+                    }
                 }
             }
         });

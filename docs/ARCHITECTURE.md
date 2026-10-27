@@ -82,9 +82,9 @@ those with a round-trip test (`settings.json`, `categories.json`,
 `libretro/` and `update/`; it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
 order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
 in the frame took 24–30 ms, so every view change was a missed refresh.
-`Host::flush` waits for them before a launch ends the process. The log and
-a title list the app scanned itself are in `ux0:data/PocketShelfNext/`, the
-folder the side-by-side build used.
+`Host::flush` waits for them before a launch ends the process. **The log**
+(`log.txt` in the data folder) is written by its own thread; at 256 KB it
+becomes `log.old.txt` and a new one starts, so the two stay under 512 KB.
 
 **Titles reach the frame loop as `Game` values made on the host's thread**
 (`load_catalog`, then `Event::Titles`), and a `Game`'s strings are

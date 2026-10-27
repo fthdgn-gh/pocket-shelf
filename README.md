@@ -146,7 +146,8 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `update.json`, `update/` | The last update check; a downloaded update |
 | `titles.tsv` | The scanned title list. Delete it to force a new scan |
 
-The log is `ux0:/data/PocketShelfNext/log.txt`.
+The log is `log.txt` in the same folder. At 256 KB it becomes `log.old.txt`
+(replacing the previous one) and a new log starts.
 
 ## Building
 

@@ -318,18 +318,10 @@ pub unsafe fn retro_report() -> String {
 #[cfg(feature = "data-fs")]
 const LIST_HEADER: &str = "pocket-shelf titles 6";
 
-/// Where the list is read: this build's own folder first (a list it scanned
-/// itself), then Pocket Shelf 0.1's (docs/PLAN.md: the shared folder is
-/// read only until the writer has its round-trip test).
-#[cfg(feature = "data-fs")]
-fn list_paths() -> [String; 2] {
-    [format!("{}/titles.tsv", crate::host::OWN), format!("{}/titles.tsv", crate::platform::data_dir())]
-}
-
-/// Where a scan saves the list: this build's own folder, for now.
+/// Where the list is kept: the data folder, as Pocket Shelf 0.1 kept it.
 #[cfg(feature = "data-fs")]
 fn list_path() -> String {
-    format!("{}/titles.tsv", crate::host::OWN)
+    format!("{}/titles.tsv", crate::platform::data_dir())
 }
 
 /// The saved list: the header, then one
@@ -340,7 +332,7 @@ fn list_path() -> String {
 /// empty. None when there is no usable file.
 #[cfg(feature = "data-fs")]
 fn load_list() -> Option<Vec<Title>> {
-    list_paths().iter().find_map(|path| parse_list(&fs::read_to_string(path).ok()?))
+    parse_list(&fs::read_to_string(list_path()).ok()?)
 }
 
 /// The titles of a list file's text; None when it is not a usable list.
@@ -406,7 +398,7 @@ fn save_list(titles: &[Title]) {
         text.push_str(&item.title);
         text.push('\n');
     }
-    let _ = fs::create_dir_all(crate::host::OWN);
+    let _ = fs::create_dir_all(crate::platform::data_dir());
     if let Err(error) = fs::write(list_path(), text) {
         crate::platform::vita_log(format_args!("[installed] title list not saved: {error}"));
     }
