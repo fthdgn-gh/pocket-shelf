@@ -4,15 +4,30 @@
 use std::fs;
 use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Mutex, OnceLock};
+use std::collections::VecDeque;
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
-use shelf_core::host::{Event, Host, Picture, PictureKey, ScanPhase, Status};
+use shelf_core::host::{Event, Host, Picture, PictureKey, PluginState, ScanPhase, Status};
 
 use crate::platform::{backdrop, installed};
 
-/// The current app's data folder. Read only until each file's writer has a
-/// round-trip test (native/PLAN.md).
+/// The current app's data folder, shared with it.
 pub const DATA: &str = "ux0:data/PocketShelf";
+
+/// Whether this build may write `path` in the data folder: only the files
+/// whose writers reproduce the current app's output byte for byte
+/// (`core/src/library/round_trip.rs`).
+fn writable(path: &str) -> bool {
+    matches!(path, "settings.json" | "categories.json" | "recent.json" | "titles.cache.json") || removable(path)
+}
+
+/// A title's changes, `titles/<id>.json`: the one kind of file this build
+/// deletes (a title reset to its defaults).
+fn removable(path: &str) -> bool {
+    path.strip_prefix("titles/")
+        .and_then(|name| name.strip_suffix(".json"))
+        .is_some_and(shelf_core::library::overrides::valid_title_id)
+}
 /// This build's own folder: its log.
 pub const OWN: &str = "ux0:data/PocketShelfNext";
 
@@ -37,7 +52,94 @@ fn picture(key: &PictureKey) -> Option<Picture> {
             PictureKey::Icon(id) => {
                 installed::icon(id).map(|(w, h, rgba, accent)| Picture { w, h, rgba, accent: Some(accent as u32) })
             }
-            PictureKey::Backdrop(id) => backdrop::picture(id, "").map(|(w, h, rgba)| Picture { w, h, rgba, accent: None }),
+            PictureKey::Art(name) => crate::platform::art::picture(name).map(|(w, h, rgba)| {
+                let accent = Some(crate::platform::accent::of(&rgba) as u32);
+                Picture { w, h, rgba, accent }
+            }),
+            PictureKey::Backdrop { id, file } => {
+                backdrop::picture(id, file).map(|(w, h, rgba)| Picture { w, h, rgba, accent: None })
+            }
+        }
+    }
+}
+
+/// A change to the data folder, done in order on the file thread.
+enum FileOp {
+    Write(String, Vec<u8>),
+    Remove(String),
+    /// Answered once every earlier change is done.
+    Flush(Sender<()>),
+}
+
+/// Do one change; a failure goes to the log.
+fn file_op(op: FileOp) {
+    match op {
+        FileOp::Write(path, data) => {
+            let full = format!("{DATA}/{path}");
+            if let Some((dir, _)) = full.rsplit_once('/') {
+                let _ = fs::create_dir_all(dir);
+            }
+            if let Err(error) = fs::write(&full, data) {
+                log_line(&format!("write {path}: {error}"));
+            }
+        }
+        FileOp::Remove(path) => match fs::remove_file(format!("{DATA}/{path}")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => log_line(&format!("remove {path}: {error}")),
+        },
+        FileOp::Flush(done) => {
+            let _ = done.send(());
+        }
+    }
+}
+
+/// Picture requests waiting for a decoding thread: icons and box art in
+/// order, which the app can take back once scrolled past, and the newest
+/// backdrop alone. Backdrops have their own thread: behind one queue they
+/// waited for every icon asked for while scrolling, and the previous
+/// title's backdrop stayed up meanwhile.
+#[derive(Default)]
+struct Waiting {
+    icons: VecDeque<PictureKey>,
+    backdrop: Option<PictureKey>,
+    closed: bool,
+}
+
+#[derive(Default)]
+struct Requests {
+    waiting: Mutex<Waiting>,
+    wake: Condvar,
+}
+
+impl Requests {
+    /// The next request for a thread: an icon (`backdrops` false) or the
+    /// newest backdrop; `None` once the host is gone.
+    fn next(&self, backdrops: bool) -> Option<PictureKey> {
+        let mut waiting = self.waiting.lock().ok()?;
+        loop {
+            if waiting.closed {
+                return None;
+            }
+            let next = if backdrops { waiting.backdrop.take() } else { waiting.icons.pop_front() };
+            if next.is_some() {
+                return next;
+            }
+            waiting = self.wake.wait(waiting).ok()?;
+        }
+    }
+}
+
+/// A decoding thread: takes requests of its kind and answers them.
+fn decoder(requests: Arc<Requests>, sender: Sender<Event>, backdrops: bool) {
+    while let Some(key) = requests.next(backdrops) {
+        let started = now_us();
+        let picture = picture(&key);
+        if let (true, PictureKey::Backdrop { id, .. }) = (backdrops, &key) {
+            log_line(&format!("backdrop {id} in {} ms{}", (now_us() - started) / 1000, if picture.is_none() { " (none)" } else { "" }));
+        }
+        if sender.send(Event::Picture(key, picture)).is_err() {
+            return;
         }
     }
 }
@@ -45,23 +147,28 @@ fn picture(key: &PictureKey) -> Option<Picture> {
 pub struct VitaHost {
     answers: Receiver<Event>,
     answer_sender: Sender<Event>,
-    pictures: Sender<PictureKey>,
+    requests: Arc<Requests>,
+    files: Sender<FileOp>,
+}
+
+impl Drop for VitaHost {
+    fn drop(&mut self) {
+        if let Ok(mut waiting) = self.requests.waiting.lock() {
+            waiting.closed = true;
+        }
+        self.requests.wake.notify_all();
+    }
 }
 
 impl VitaHost {
     pub fn new() -> Self {
         let (answer_sender, answers) = channel();
-        let (pictures, picture_requests) = channel::<PictureKey>();
+        let requests = Arc::new(Requests::default());
         let (log, lines) = channel::<String>();
-        let sender = answer_sender.clone();
-        spawn("shelf-pictures", move || {
-            for key in picture_requests {
-                let picture = picture(&key);
-                if sender.send(Event::Picture(key, picture)).is_err() {
-                    return;
-                }
-            }
-        });
+        for (name, backdrops) in [("shelf-icons", false), ("shelf-backdrops", true)] {
+            let (requests, sender) = (requests.clone(), answer_sender.clone());
+            spawn(name, move || decoder(requests, sender, backdrops));
+        }
         spawn("shelf-log", move || {
             let _ = fs::create_dir_all(OWN);
             for line in lines {
@@ -70,8 +177,10 @@ impl VitaHost {
                 }
             }
         });
+        let (files, file_ops) = channel::<FileOp>();
+        spawn("shelf-files", move || file_ops.into_iter().for_each(file_op));
         let _ = LOG.set(Mutex::new(log));
-        VitaHost { answers, answer_sender, pictures }
+        VitaHost { answers, answer_sender, requests, files }
     }
 }
 
@@ -88,14 +197,27 @@ impl Host for VitaHost {
         fs::read(format!("{DATA}/{path}")).ok()
     }
 
-    fn write(&mut self, path: &str, _data: &[u8]) -> bool {
-        self.log(&format!("write refused (read-only for now): {path}"));
-        false
+    fn write(&mut self, path: &str, data: &[u8]) -> bool {
+        if !writable(path) {
+            self.log(&format!("write refused (no round-trip test): {path}"));
+            return false;
+        }
+        self.files.send(FileOp::Write(path.into(), data.to_vec())).is_ok()
+    }
+
+    fn flush(&mut self) {
+        let (done, wait) = channel();
+        if self.files.send(FileOp::Flush(done)).is_ok() {
+            let _ = wait.recv();
+        }
     }
 
     fn remove(&mut self, path: &str) -> bool {
-        self.log(&format!("remove refused (read-only for now): {path}"));
-        false
+        if !removable(path) {
+            self.log(&format!("remove refused: {path}"));
+            return false;
+        }
+        self.files.send(FileOp::Remove(path.into())).is_ok()
     }
 
     fn list(&mut self, dir: &str) -> Vec<String> {
@@ -141,7 +263,23 @@ impl Host for VitaHost {
     }
 
     fn request(&mut self, key: PictureKey) {
-        let _ = self.pictures.send(key);
+        if let Ok(mut waiting) = self.requests.waiting.lock() {
+            match key {
+                // Only the newest backdrop matters.
+                PictureKey::Backdrop { .. } => waiting.backdrop = Some(key),
+                _ => waiting.icons.push_back(key),
+            }
+        }
+        self.requests.wake.notify_all();
+    }
+
+    fn cancel(&mut self, key: &PictureKey) {
+        if let Ok(mut waiting) = self.requests.waiting.lock() {
+            waiting.icons.retain(|k| k != key);
+            if waiting.backdrop.as_ref() == Some(key) {
+                waiting.backdrop = None;
+            }
+        }
     }
 
     fn poll(&mut self, events: &mut Vec<Event>) {
@@ -150,5 +288,22 @@ impl Host for VitaHost {
 
     fn log(&mut self, line: &str) {
         log_line(line);
+    }
+
+    fn launch(&mut self, id: &str) -> bool {
+        unsafe { installed::launch(id) }
+    }
+
+    fn plugin_state(&mut self) -> PluginState {
+        match crate::platform::pspemu::plugin_state() {
+            "noAdrenaline" => PluginState::NoAdrenaline,
+            "missing" => PluginState::Missing,
+            "off" => PluginState::Off,
+            _ => PluginState::On,
+        }
+    }
+
+    fn enable_plugin(&mut self) -> bool {
+        crate::platform::pspemu::enable_plugin()
     }
 }

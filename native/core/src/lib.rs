@@ -1,7 +1,7 @@
 //! Platform-independent part of native Pocket Shelf.
 //!
 //! The app draws into a [`gfx::Gfx`]: a list of commands (filled rectangles,
-//! tinted texture parts, clip changes) and the textures they read. A backend
+//! tinted texture parts, already cut to any clip) and the textures they read. A backend
 //! uploads the textures and runs the commands: vita2d on the console, a
 //! software rasterizer on the desktop for screenshots. Everything above those
 //! two primitives (rounded shapes, shadows, button symbols, text) is built
@@ -14,6 +14,7 @@ pub mod gfx;
 pub mod host;
 pub mod library;
 pub mod shapes;
+pub mod shelf;
 pub mod stats;
 pub mod text;
 pub mod theme;

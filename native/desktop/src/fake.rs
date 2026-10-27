@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use shelf_core::host::{Event, Host, Picture, PictureKey, ScanPhase, Status, TitleInfo};
+use shelf_core::host::{Event, Host, Picture, PictureKey, PluginState, ScanPhase, Status, TitleInfo};
 use shelf_core::library::catalog::load_catalog;
 use shelf_core::text::{render_mask, Weight};
 use shelf_core::theme::ACCENT_HAS_ALPHA;
@@ -224,6 +224,10 @@ pub struct FakeHost {
     pub first_start: bool,
     /// The frame a scan started on.
     scanning: Option<u64>,
+    /// Adrenaline's boot plugin, as `pspemu::plugin_state` would read it.
+    pub plugin: PluginState,
+    /// The launches accepted, by title id.
+    pub launched: Vec<String>,
     pub log: Vec<String>,
 }
 
@@ -244,8 +248,32 @@ impl FakeHost {
             frame: 0,
             first_start: false,
             scanning: None,
+            plugin: PluginState::Missing,
+            launched: Vec::new(),
             log: Vec::new(),
         }
+    }
+
+    /// A library like the user's: 3,000 RetroArch games with varied names
+    /// and no box art, so their tiles show initials.
+    pub fn with_retro_library(mut self) -> Self {
+        let words = [
+            "Alpha", "Battle", "Castle", "Dragon", "Echo", "Frontier", "Galaxy", "Hyper", "Iron", "Jungle", "Knight", "Legend", "Mega",
+            "Ninja", "Omega", "Pixel", "Quest", "Rocket", "Super", "Turbo", "Ultra", "Venture", "Wonder", "Xeno", "Yoshi", "Zero",
+            "1942", "3D", "Ötzi", "Éclair",
+        ];
+        let consoles = ["Nintendo - Nintendo Entertainment System", "Nintendo - Super Nintendo Entertainment System", "Sega - Mega Drive - Genesis"];
+        for n in 0..3000 {
+            let (a, b) = (words[n % words.len()], words[(n / words.len() + n) % words.len()]);
+            self.titles.push(TitleInfo {
+                id: format!("rq{n:07}"),
+                title: format!("{a} {b} {n}"),
+                platform: "retro".into(),
+                adrenaline: false,
+                console: Some(consoles[n % consoles.len()].into()),
+            });
+        }
+        self
     }
 
     /// Saved data as a user of the current app has it: settings with a
@@ -313,10 +341,17 @@ impl Host for FakeHost {
 
     fn request(&mut self, key: PictureKey) {
         let picture = match &key {
+            // The retro library's games have no box art.
+            PictureKey::Icon(id) if id.starts_with("rq") => None,
             PictureKey::Icon(id) => self.index(id).map(|i| icon(i, &self.titles[i].title)),
-            PictureKey::Backdrop(id) => self.index(id).map(backdrop),
+            PictureKey::Art(_) => None,
+            PictureKey::Backdrop { id, .. } => self.index(id).map(backdrop),
         };
         self.later.push(Event::Picture(key, picture));
+    }
+
+    fn cancel(&mut self, key: &PictureKey) {
+        self.later.retain(|event| !matches!(event, Event::Picture(k, _) if k == key));
     }
 
     fn poll(&mut self, events: &mut Vec<Event>) {
@@ -340,5 +375,22 @@ impl Host for FakeHost {
 
     fn log(&mut self, line: &str) {
         self.log.push(line.into());
+    }
+
+    fn launch(&mut self, id: &str) -> bool {
+        let known = self.index(id).is_some();
+        if known {
+            self.launched.push(id.into());
+        }
+        known
+    }
+
+    fn plugin_state(&mut self) -> PluginState {
+        self.plugin
+    }
+
+    fn enable_plugin(&mut self) -> bool {
+        self.plugin = PluginState::On;
+        true
     }
 }

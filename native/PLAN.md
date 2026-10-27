@@ -103,7 +103,28 @@ the user.
    thread with the scan page; read `titles.tsv`, overrides (via
    `titles.cache.json`), categories, settings and recent; catalog, category
    order, smart categories. Port `logic.test.ts`, `consoles.test.ts`.
-3. **Shelf.** Header with sliding tabs, footer, status bar, the five views
+3. **Shelf.** *Desktop shots and Vita3K done 2026-10-27; hardware run
+   pending. `core/src/shelf/`: layout and navigation with the cases of
+   `logic.test.ts` that cover them (71 core tests), the top bar, status
+   items, footer, the five views at three detail levels, art with icon box
+   and initials, backdrops and the tint wash, the Dynamic theme, held
+   directions with acceleration, launching with the Adrenaline drawer, and
+   writes for the files with round-trip tests. Until the SELECT menu,
+   SELECT, START and SQUARE step the view, details and theme. Hardware
+   (2026-10-27): a Vita game launches. Each view change cost 24–30 ms in
+   the frame, writing `settings.json`, and the shelf's first frame 25 ms
+   reading the status for the first time; writes now run on a file thread
+   (flushed before a launch) and the first status reading is in the
+   startup frame. Confirmed on hardware (2026-10-27): Vita, PSP (through
+   Adrenaline) and NES (RetroArch) launches; no slow frame in use after
+   the file thread, CPU-side clipping (the clipped top bar flickered with
+   vita2d's stencil clip) and the picture queues (backdrops waited behind
+   every icon asked for while scrolling). Backdrops take 0.3–1.1 s on
+   hardware: for the 1920×620 pictures of PSP and PS1 titles, read 50–320
+   ms, PNG decode 400–580 ms, scale 200–280 ms (wall time, with the icon
+   thread running). Follow-ups: decode the neighbors' backdrops ahead, or a
+   small scaled cache in this build's own folder; an icon budget (texture
+   memory reached 16 MB in a 30 s run).* Header with sliding tabs, footer, status bar, the five views
    (Home, Carousel, Grid, List, Cascade), details levels, backdrops, accent
    and the Dynamic theme, held-direction acceleration. **Launching**: Vita,
    PSM, system apps, RetroArch, and Adrenaline with the plugin consent

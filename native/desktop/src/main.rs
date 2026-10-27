@@ -35,6 +35,10 @@ fn first_start() -> fake::FakeHost {
     host
 }
 
+fn retro() -> fake::FakeHost {
+    fake::FakeHost::new().with_retro_library()
+}
+
 fn saved() -> fake::FakeHost {
     fake::FakeHost::new().with_saved_data()
 }
@@ -43,36 +47,70 @@ const fn shot(name: &'static str, script: &'static [(u32, u32)]) -> Shot {
     Shot { name, script, setup: plain }
 }
 
+// Views by SELECT presses from Home: Carousel 1, Grid 2, List 3, Cascade 4.
+// Details by START presses from Normal: Detailed 1, Basic 2.
 const SHOTS: &[Shot] = &[
     shot("01-reading", &[(0, 1)]),
-    shot("02-icons-arriving", &[(0, 3)]),
-    shot("03-start", &[(0, SETTLE)]),
-    shot("04-right-3", &[(0, 4), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
-    shot("05-down-2", &[(0, 4), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, SETTLE)]),
-    shot("06-scrolling", &[(0, 4), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, 2)]),
-    shot("07-wrap-to-last", &[(0, 4), (LEFT, TAP), (0, SETTLE)]),
-    shot("08-held-down", &[(0, 4), (R, TAP), (0, TAP), (DOWN, 120), (0, SETTLE)]),
-    shot("09-test-titles", &[(0, 4), (TRIANGLE, TAP), (0, TAP), (R, TAP), (0, TAP), (UP, TAP), (0, SETTLE)]),
-    shot("10-aurora", &[(0, 4), (SQUARE, TAP), (0, SETTLE)]),
-    shot("11-sakura", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE)]),
-    shot("12-ember", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE)]),
-    shot("13-daylight", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE)]),
-    // Tabs: R from Games to Homebrew, the consoles, System; L wraps to the last.
-    shot("20-tab-homebrew", &[(0, 4), (R, TAP), (0, SETTLE)]),
-    shot("21-tab-psp", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, SETTLE)]),
-    shot("22-tab-snes", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, SETTLE)]),
-    shot("23-tab-system", &[(0, 4), (L, TAP), (0, SETTLE)]),
+    shot("02-home", &[(0, SETTLE)]),
+    shot("03-home-right-3", &[(0, 4), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
+    shot("04-home-moving", &[(0, 4), (RIGHT, TAP), (0, 4)]),
+    shot("05-home-detailed", &[(0, 4), (START, TAP), (0, SETTLE)]),
+    shot("06-home-basic", &[(0, 4), (START, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
+    shot("10-carousel", &[(0, 4), (SELECT, TAP), (0, SETTLE)]),
+    shot("11-carousel-right-2", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
+    shot("12-carousel-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
+    shot("13-carousel-basic", &[(0, 4), (SELECT, TAP), (0, TAP), (START, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
+    shot("20-grid", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, SETTLE)]),
+    shot("21-grid-down-2", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, SETTLE)]),
+    shot("22-grid-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
+    shot("30-list", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, SETTLE)]),
+    shot("31-list-held-down", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, 60), (0, SETTLE)]),
+    shot("32-list-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
+    shot("40-cascade", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, SETTLE)]),
+    shot("41-cascade-right-2", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
+    shot("42-cascade-detailed", &[(0, 4), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (START, TAP), (0, SETTLE)]),
+    // Tabs: R from Games to Homebrew, PS Mobile, PSP, PSX, the consoles;
+    // L wraps to System.
+    shot("50-tab-homebrew", &[(0, 4), (R, TAP), (0, SETTLE)]),
+    shot("51-tab-snes", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, SETTLE)]),
+    shot("52-tab-system", &[(0, 4), (L, TAP), (0, SETTLE)]),
+    shot("53-tab-sliding", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, 3)]),
+    // Themes by SQUARE: Aurora, Sakura, Ember, Daylight, Dynamic.
+    shot("60-aurora", &[(0, 4), (SQUARE, TAP), (0, SETTLE)]),
+    shot("61-daylight", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE)]),
+    shot("62-dynamic", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE)]),
+    shot("63-dynamic-carousel", &[(0, 4), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
     // A first start: the scan page, then the titles.
-    Shot { name: "30-scan-start", script: &[(0, 3)], setup: first_start },
-    Shot { name: "31-scan-middle", script: &[(0, 24)], setup: first_start },
-    Shot { name: "32-scan-done", script: &[(0, 44)], setup: first_start },
-    Shot { name: "33-scan-titles", script: &[(0, 44 + 8 + SETTLE)], setup: first_start },
+    Shot { name: "70-scan-start", script: &[(0, 3)], setup: first_start },
+    Shot { name: "71-scan-middle", script: &[(0, 24)], setup: first_start },
+    Shot { name: "72-scan-titles", script: &[(0, 44 + 8 + SETTLE)], setup: first_start },
     // Saved data: Aurora, the user's own category with the saved title
     // selected, renamed and a favorite; R past System wraps to Last Played,
     // then Favorites.
-    Shot { name: "40-saved-selection", script: &[(0, SETTLE)], setup: saved },
-    Shot { name: "41-saved-favorites", script: &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, SETTLE)], setup: saved },
-    Shot { name: "42-saved-last-played", script: &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, SETTLE)], setup: saved },
+    Shot { name: "80-saved-selection", script: &[(0, SETTLE)], setup: saved },
+    Shot { name: "81-saved-favorites", script: &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, SETTLE)], setup: saved },
+    Shot { name: "82-saved-last-played", script: &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, SETTLE)], setup: saved },
+    shot("90-test-titles", &[(0, 4), (TRIANGLE, TAP), (0, TAP), (R, TAP), (0, TAP), (LEFT, TAP), (0, SETTLE)]),
+    shot("91-launching", &[(0, 4), (CIRCLE, TAP), (0, SETTLE)]),
+    // Every view and detail level over icon-less RetroArch games (the NES
+    // tab: L twice from Games wraps past System to the last console), with
+    // moves: the glyph atlas count is printed.
+    Shot {
+        name: "94-retro-views",
+        script: &[
+            (0, 4), (L, TAP), (0, TAP), (L, TAP), (0, TAP),
+            (START, TAP), (0, TAP), (RIGHT, 40), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, 40), (0, TAP),
+            (SELECT, TAP), (0, TAP), (DOWN, 40), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, 40), (0, TAP),
+            (SELECT, TAP), (0, TAP), (RIGHT, 40), (0, TAP), (START, TAP), (0, TAP), (SELECT, TAP), (0, TAP),
+            (RIGHT, 40), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, 40), (0, TAP),
+            (START, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, 40), (0, SETTLE),
+        ],
+        setup: retro,
+    },
+    // Velocity Run (PSP tab, second) starts through Adrenaline: the drawer
+    // offers the plugin; confirm adds it and launches.
+    shot("92-adrenaline-drawer", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, SETTLE)]),
+    shot("93-adrenaline-launch", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, SETTLE), (CIRCLE, TAP), (0, SETTLE)]),
 ];
 
 fn main() {
@@ -102,6 +140,12 @@ fn main() {
         canvas.run(&gfx.cmds, &gfx.textures);
         let path = out.join(format!("{}.png", shot.name));
         canvas.save_png(&path).expect("write png");
-        println!("{} ({} commands, {} KB of textures)", path.display(), gfx.cmds.len(), gfx.textures.live_bytes() / 1024);
+        println!(
+            "{} ({} commands, {} KB of textures, glyph atlas started over {} times)",
+            path.display(),
+            gfx.cmds.len(),
+            gfx.textures.live_bytes() / 1024,
+            gfx.atlas_resets()
+        );
     }
 }

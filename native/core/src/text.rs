@@ -47,6 +47,9 @@ pub enum Role {
     Label,
     /// 8, bold: numbers inside symbols, such as the battery's.
     Tiny,
+    /// Bold at the given size: the initials on a tile with no icon, sized
+    /// to the tile.
+    Initials(u8),
 }
 
 impl Role {
@@ -61,6 +64,7 @@ impl Role {
             Role::SmallBold => (Weight::Bold, 9.0, 0.0),
             Role::Label => (Weight::Bold, 9.0, 0.22),
             Role::Tiny => (Weight::Bold, 8.0, 0.0),
+            Role::Initials(size) => (Weight::Bold, size as f32, 0.0),
         }
     }
 }
@@ -83,6 +87,11 @@ pub(crate) struct FontState {
     pen_x: u32,
     pen_y: u32,
     row_h: u32,
+    /// The atlas ran out this frame: it starts over at the next frame's
+    /// `begin`, and glyphs that did not fit are skipped until then.
+    full: bool,
+    /// Times the atlas started over, for the log.
+    pub(crate) resets: u32,
 }
 
 impl FontState {
@@ -90,7 +99,7 @@ impl FontState {
         let load = |bytes| Font::from_bytes(bytes, FontSettings::default()).expect("font");
         let atlas = textures.add(ATLAS, ATLAS, Format::A8, vec![0; (ATLAS * ATLAS) as usize], true);
         textures.list[atlas.0 as usize].keep = true;
-        FontState { regular: load(REGULAR), bold: load(BOLD), glyphs: HashMap::new(), atlas, pen_x: 0, pen_y: 0, row_h: 0 }
+        FontState { regular: load(REGULAR), bold: load(BOLD), glyphs: HashMap::new(), atlas, pen_x: 0, pen_y: 0, row_h: 0, full: false, resets: 0 }
     }
 
     fn font(&self, weight: Weight) -> &Font {
@@ -100,10 +109,30 @@ impl FontState {
         }
     }
 
-    /// The glyph at `px` screen pixels, and whether it was new.
+    /// Start over when the last frame filled the atlas. Called before a
+    /// frame draws anything: clearing it in the middle of a frame moved
+    /// glyphs out from under text already drawn (the top bar, drawn first,
+    /// flickered on hardware).
+    pub(crate) fn begin(&mut self, textures: &mut Textures) {
+        if self.full {
+            self.full = false;
+            self.resets += 1;
+            self.glyphs.clear();
+            self.pen_x = 0;
+            self.pen_y = 0;
+            self.row_h = 0;
+            textures.edit(self.atlas).pixels.fill(0);
+        }
+    }
+
+    /// The glyph at `px` screen pixels, and whether it was new. A glyph
+    /// that does not fit a full atlas draws nothing this frame.
     fn glyph(&mut self, textures: &mut Textures, weight: Weight, px: u16, ch: char) -> (Glyph, bool) {
         if let Some(&glyph) = self.glyphs.get(&(weight, px, ch)) {
             return (glyph, false);
+        }
+        if self.full {
+            return (Glyph { src: None, left: 0.0, top: 0.0, advance: self.font(weight).metrics(ch, px as f32).advance_width }, false);
         }
         let (metrics, bitmap) = self.font(weight).rasterize(ch, px as f32);
         let (w, h) = (metrics.width as u32, metrics.height as u32);
@@ -115,13 +144,8 @@ impl FontState {
                 self.row_h = 0;
             }
             if self.pen_y + h + PAD > ATLAS {
-                // Full: start over. Glyphs already drawn this frame may show
-                // wrong for one frame.
-                self.glyphs.clear();
-                self.pen_x = 0;
-                self.pen_y = 0;
-                self.row_h = 0;
-                textures.edit(self.atlas).pixels.fill(0);
+                self.full = true;
+                return (Glyph { src: None, left: 0.0, top: 0.0, advance: metrics.advance_width }, false);
             }
             let atlas = textures.edit_rows(self.atlas, self.pen_y, self.pen_y + h);
             for row in 0..h {
@@ -200,6 +224,36 @@ impl Gfx {
         self.text(role, x, baseline, color, text)
     }
 
+    /// Centered on `(cx, cy)` (the middle of its line box), drawn `k` times
+    /// its size from the glyphs rasterized at its size: text on a tile that
+    /// is scaling, without new glyphs at every step.
+    pub fn text_scaled_centered(&mut self, role: Role, cx: f32, cy: f32, k: f32, color: Color, text: &str) {
+        let (weight, size, _) = role.style();
+        let px = self.px(size);
+        let s = self.scale;
+        let width = self.run(role, text, None) * k;
+        let (ascent, descent) = self.fonts.line(weight, px);
+        let baseline = cy * s + (ascent + descent) / 2.0 * k;
+        let atlas = self.fonts.atlas;
+        let mut pen = cx * s - width / 2.0;
+        let mut previous = None;
+        for ch in text.chars() {
+            if let Some(left) = previous {
+                pen += self.fonts.kern(weight, px, left, ch) * k;
+            }
+            let (glyph, new) = self.fonts.glyph(&mut self.textures, weight, px, ch);
+            if new {
+                self.work.glyphs += 1;
+            }
+            if let Some(src) = glyph.src {
+                let dst = Rect::new(pen + glyph.left * k, baseline + glyph.top * k, src.w * k, src.h * k);
+                self.raw_image(atlas, src, dst, color);
+            }
+            pen += glyph.advance * k;
+            previous = Some(ch);
+        }
+    }
+
     /// Centered on `cx`, with the top of its line box at `top`.
     pub fn text_top_centered(&mut self, role: Role, cx: f32, top: f32, color: Color, text: &str) {
         let baseline = top + self.ascent(role);
@@ -229,7 +283,8 @@ impl Gfx {
         (ascent - descent) / self.scale
     }
 
-    /// `text`, cut at the end with "…" to fit `max` units.
+    /// `text`, cut at the end with "..." to fit `max` units (`fitTitle` in
+    /// `catalog.ts`).
     pub fn fit(&mut self, role: Role, text: &str, max: f32) -> String {
         if self.measure(role, text) <= max {
             return text.to_string();
@@ -237,12 +292,12 @@ impl Gfx {
         let mut cut: Vec<char> = text.chars().collect();
         while !cut.is_empty() {
             cut.pop();
-            let candidate = cut.iter().collect::<String>().trim_end().to_string() + "…";
+            let candidate = cut.iter().collect::<String>().trim_end().to_string() + "...";
             if self.measure(role, &candidate) <= max {
                 return candidate;
             }
         }
-        "…".into()
+        "...".into()
     }
 
     /// The end of `text` that fits `max` units, led by "..." when it was cut
@@ -333,8 +388,45 @@ mod tests {
         let mut gfx = Gfx::new(2.0);
         assert_eq!(gfx.fit(Role::Body, "short", 200.0), "short");
         let cut = gfx.fit(Role::Body, "The Long Winter of the Northern Lighthouse", 100.0);
-        assert!(cut.ends_with('…') && gfx.measure(Role::Body, &cut) <= 100.0);
+        assert!(cut.ends_with("...") && gfx.measure(Role::Body, &cut) <= 100.0);
         let tail = gfx.fit_tail(Role::Small, "ux0:/pspemu/ISO/Racing/Some Long Game.cso", 80.0);
         assert!(tail.starts_with("...") && tail.ends_with(".cso"));
+    }
+}
+
+#[cfg(test)]
+mod atlas_tests {
+    use super::*;
+
+    /// A full atlas starts over at the next frame, never in the middle of
+    /// one: glyphs drawn earlier in the frame keep their pixels.
+    #[test]
+    fn a_full_atlas_starts_over_at_the_next_frame() {
+        let mut gfx = Gfx::new(2.0);
+        gfx.begin();
+        gfx.text(Role::Body, 0.0, 20.0, crate::gfx::Color::rgb(0xffffff), "Header");
+        let pixels_of = |gfx: &Gfx| {
+            let src = gfx.fonts.glyphs[&(Weight::Regular, 22, 'H')].src.unwrap();
+            let atlas = gfx.textures.get(gfx.fonts.atlas);
+            (src.y as u32..(src.y + src.h) as u32)
+                .flat_map(|y| {
+                    let at = (y * ATLAS + src.x as u32) as usize;
+                    atlas.pixels[at..at + src.w as usize].to_vec()
+                })
+                .collect::<Vec<u8>>()
+        };
+        let before = pixels_of(&gfx);
+        // Fill the atlas with large glyphs in many sizes.
+        let mut size = 20u8;
+        while !gfx.fonts.full {
+            gfx.text(Role::Initials(size), 0.0, 100.0, crate::gfx::Color::rgb(0xffffff), "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+            size = size.wrapping_add(1).max(20);
+        }
+        // Still this frame: the header's glyph keeps its pixels.
+        assert_eq!(gfx.atlas_resets(), 0);
+        assert_eq!(pixels_of(&gfx), before);
+        gfx.begin();
+        assert_eq!(gfx.atlas_resets(), 1);
+        assert!(gfx.work.atlas_reset && gfx.fonts.glyphs.is_empty());
     }
 }
