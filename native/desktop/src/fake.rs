@@ -5,7 +5,8 @@
 
 use std::collections::HashMap;
 
-use shelf_core::host::{Event, Host, Picture, PictureKey, Status, TitleInfo};
+use shelf_core::host::{Event, Host, Picture, PictureKey, ScanPhase, Status, TitleInfo};
+use shelf_core::library::catalog::load_catalog;
 use shelf_core::text::{render_mask, Weight};
 use shelf_core::theme::ACCENT_HAS_ALPHA;
 
@@ -219,8 +220,17 @@ pub struct FakeHost {
     next: Vec<Event>,
     later: Vec<Event>,
     frame: u64,
+    /// A first start: no saved list, so `scan` runs a scan with progress.
+    pub first_start: bool,
+    /// The frame a scan started on.
+    scanning: Option<u64>,
     pub log: Vec<String>,
 }
+
+/// Frames a fake scan takes, and its phases' shares of the steps.
+const SCAN_FRAMES: u64 = 40;
+const SCAN_PHASES: [(ScanPhase, u32); 5] =
+    [(ScanPhase::Apps, 26), (ScanPhase::System, 55), (ScanPhase::Psm, 1), (ScanPhase::Psp, 4), (ScanPhase::Retro, 6)];
 
 impl FakeHost {
     pub fn new() -> Self {
@@ -232,8 +242,30 @@ impl FakeHost {
             next: Vec::new(),
             later: Vec::new(),
             frame: 0,
+            first_start: false,
+            scanning: None,
             log: Vec::new(),
         }
+    }
+
+    /// Saved data as a user of the current app has it: settings with a
+    /// selection, a category of their own, changed titles, "Last Played".
+    pub fn with_saved_data(mut self) -> Self {
+        let files: &[(&str, &str)] = &[
+            (
+                "settings.json",
+                r#"{"language":"en","theme":"aurora","view":"home","detail":"normal","confirm":"circle","backdrop":true,"iconBox":true,"statusBar":true,"clock":"system","batteryPercent":true,"updates":"off","scraper":"auto","category":"favorites-mine","title":"PCSF00042"}"#,
+            ),
+            ("categories.json", "{\n  \"custom\": [\n    {\n      \"id\": \"favorites-mine\",\n      \"label\": \"Couch Co-op\"\n    }\n  ],\n  \"order\": [],\n  \"hidden\": [\"homebrew\"]\n}\n"),
+            ("titles/PCSF00042.json", "{\n  \"category\": \"favorites-mine\",\n  \"title\": \"Star Harbor: Director's Cut\",\n  \"favorite\": true\n}\n"),
+            ("titles/PCSE00444.json", "{\n  \"category\": \"favorites-mine\"\n}\n"),
+            ("titles/PCSB00245.json", "{\n  \"favorite\": true\n}\n"),
+            ("recent.json", "[\"PCSE00444\",\"VITASHELL\",\"ra0snes01\"]\n"),
+        ];
+        for (path, text) in files {
+            self.files.insert(path.to_string(), text.as_bytes().to_vec());
+        }
+        self
     }
 
     fn index(&self, id: &str) -> Option<usize> {
@@ -255,6 +287,11 @@ impl Host for FakeHost {
         true
     }
 
+    fn remove(&mut self, path: &str) -> bool {
+        self.files.remove(path);
+        true
+    }
+
     fn list(&mut self, dir: &str) -> Vec<String> {
         let prefix = format!("{}/", dir.trim_end_matches('/'));
         let mut names: Vec<String> = self.files.keys().filter_map(|k| k.strip_prefix(&prefix)).filter(|n| !n.contains('/')).map(String::from).collect();
@@ -267,7 +304,11 @@ impl Host for FakeHost {
     }
 
     fn scan(&mut self) {
-        self.later.push(Event::Titles(self.titles.clone(), 120));
+        if self.first_start {
+            self.scanning = Some(self.frame);
+        } else {
+            self.later.push(Event::Titles(load_catalog(&self.titles), 120));
+        }
     }
 
     fn request(&mut self, key: PictureKey) {
@@ -280,6 +321,19 @@ impl Host for FakeHost {
 
     fn poll(&mut self, events: &mut Vec<Event>) {
         self.frame += 1;
+        if let Some(start) = self.scanning {
+            let total: u32 = SCAN_PHASES.iter().map(|p| p.1).sum();
+            let elapsed = self.frame - start;
+            if elapsed >= SCAN_FRAMES {
+                self.scanning = None;
+                self.later.push(Event::Titles(load_catalog(&self.titles), 2800));
+            } else {
+                let done = (elapsed as u32 * total) / SCAN_FRAMES as u32;
+                let mut before = 0;
+                let phase = SCAN_PHASES.iter().find(|p| { before += p.1; done < before }).map_or(ScanPhase::Retro, |p| p.0);
+                events.push(Event::Scan { done, total, phase });
+            }
+        }
         events.append(&mut self.next);
         std::mem::swap(&mut self.next, &mut self.later);
     }

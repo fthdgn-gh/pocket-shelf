@@ -6,3 +6,6 @@ publish = false
 
 [dependencies]
 fontdue = "0.9"
+indexmap = "2"
+serde_json = { version = "1", features = ["preserve_order"] }
+unicode-normalization = "0.1"

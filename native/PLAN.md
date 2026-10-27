@@ -67,14 +67,39 @@ the user.
    requests the user has scrolled past. First hardware run: every slow
    frame was a backdrop upload (2 MB, 21 ms) or the whole glyph atlas; both
    are now spread or cut (README "Drawing").
-2. **Library.** *In progress. Done (2026-10-27): the platform modules are
-   in `vita/src/platform/`, changed only where they made engine textures;
-   icons (with their accent) and backdrops (512×256, as before) decode on
-   the picture thread; the saved `titles.tsv` is read (5,777 titles in 33 ms
-   in Vita3K); a scan saves to `ux0:data/PocketShelfNext/` for now. Next: the
-   core's catalog, categories, overrides, settings and recent, the scan
-   page, round-trip tests, and the platform modules' own tests on the
-   desktop.* Move the platform modules; scan to `titles.tsv` on a worker
+2. **Library.** *Done 2026-10-27 (desktop shots, Vita3K); hardware run
+   pending. The platform modules are in `vita/src/platform/`, changed only
+   where they made engine textures; icons (with their accent) and backdrops
+   (512×256, as before) decode on the picture thread; the saved
+   `titles.tsv` is read (5,777 titles in 33 ms in Vita3K); a scan saves to
+   `ux0:data/PocketShelfNext/` for now. `core/src/library/`: catalog,
+   categories, consoles, overrides, settings, recent and search, with the
+   cases of `logic.test.ts` and `consoles.test.ts` that cover them (47 core
+   tests); round-trip tests against fixtures written by the current app's
+   own save functions; the scan page; the platform modules' 35 tests on the
+   desktop (`platform-tests/`). In Vita3K the library loads Vita3K's copy
+   of the user's data (87 changed titles) in 17–19 ms, and the frame that
+   takes 5,738 titles is 19–27 ms (it was 103 ms before the catalog moved to
+   the scan thread and titles shared their strings).
+   **First hardware run (2026-10-27, 5,905 titles):** library loaded in
+   46 ms; the saved list read and turned into titles on the scan thread in
+   409 ms (53 ms in Vita3K); the frame that takes them 125 ms (events
+   111 ms), about 4× Vita3K; TRIANGLE 302 ms adding 5,000, 155 ms removing.
+   No other frame over 25 ms: the spread uploads hold (the run before them,
+   in the same log, lost 20–35 ms to each 2 MB backdrop). Then: art
+   matching by lowercase name without `.png`, ASCII lowercased without the
+   Unicode tables, FxHash for the library's maps (SipHash is 64-bit
+   arithmetic on a 32-bit CPU), and no copy of the list before a rebuild:
+   desktop rebuild 2.7 to 0.7 ms with 85 art files, Vita3K 11.6 ms. The log
+   now has `library: <n> titles in <us>`. **Second hardware run:** rebuild
+   38.6 ms (was 111), the frame taking the titles 52.7 ms (was 125),
+   TRIANGLE to 10,905 titles 201 ms (was 302); still no other frame over
+   25 ms. The rebuild runs on every change to a title, so phase 4's editor
+   and favorite toggle need an update of the one title, not a rebuild. The
+   timing line's 132.8 ms longest frame was the gap after the first frame,
+   which the slow-frame log skipped; it logs that frame now.
+   Writing to `ux0:data/PocketShelf/` stays off until phase 3.
+   Search's keyboard and the category manager's screens are phase 4.* Move the platform modules; scan to `titles.tsv` on a worker
    thread with the scan page; read `titles.tsv`, overrides (via
    `titles.cache.json`), categories, settings and recent; catalog, category
    order, smart categories. Port `logic.test.ts`, `consoles.test.ts`.
@@ -104,3 +129,10 @@ the user.
 - Side by side as **Pocket Shelf Next**, `PSHLFNEXT` (2026-10-27).
 - **Everything carries over**; dropping or adding features waits until the
   port is complete (2026-10-27).
+- **A text size setting** comes after the port (the user, 2026-10-27): the
+  roles' sizes are one table (`Role::style`), so a setting can scale it.
+- **Smaller text** (2026-10-27): each role is about two steps under its
+  `text.ts` size (Display 18, Heading 15, Title 13, Body 11, Small and
+  Label 9), plus an 8 px bold `Tiny` for numbers inside symbols. PocketJS
+  baked 12 px as its smallest size; `fontdue` rasterizes any size. Layouts
+  ported in phases 3 and 4 use these sizes, not the `text-*` classes.

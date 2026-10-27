@@ -12,6 +12,7 @@
 pub mod app;
 pub mod gfx;
 pub mod host;
+pub mod library;
 pub mod shapes;
 pub mod stats;
 pub mod text;

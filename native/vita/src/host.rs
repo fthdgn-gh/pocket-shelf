@@ -6,7 +6,7 @@ use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Mutex, OnceLock};
 
-use shelf_core::host::{Event, Host, Picture, PictureKey, Status};
+use shelf_core::host::{Event, Host, Picture, PictureKey, ScanPhase, Status};
 
 use crate::platform::{backdrop, installed};
 
@@ -93,6 +93,11 @@ impl Host for VitaHost {
         false
     }
 
+    fn remove(&mut self, path: &str) -> bool {
+        self.log(&format!("remove refused (read-only for now): {path}"));
+        false
+    }
+
     fn list(&mut self, dir: &str) -> Vec<String> {
         let Ok(entries) = fs::read_dir(format!("{DATA}/{dir}")) else { return Vec::new() };
         let mut names: Vec<String> = entries.flatten().filter_map(|e| e.file_name().to_str().map(String::from)).collect();
@@ -120,9 +125,17 @@ impl Host for VitaHost {
                         log_line(&format!("titles: scanned ({state})"));
                         break;
                     }
+                    // `running <done> <total> <phase>`: the scan page's bar.
+                    let mut words = state.split(' ');
+                    if words.next() == Some("running") {
+                        let done = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
+                        let total = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
+                        let phase = ScanPhase::from_key(words.next().unwrap_or(""));
+                        let _ = sender.send(Event::Scan { done, total, phase });
+                    }
                 }
             }
-            let titles = installed::infos();
+            let titles = shelf_core::library::catalog::load_catalog(&installed::infos());
             let _ = sender.send(Event::Titles(titles, ((now_us() - started) / 1000) as u32));
         });
     }
