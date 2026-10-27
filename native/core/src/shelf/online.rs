@@ -18,6 +18,7 @@ use crate::text::Role;
 impl Shelf {
     /// The editor's "Find artwork": the edited title on its scraper.
     pub(super) fn start_online(&mut self, host: &mut dyn Host) {
+        let started = host.time_us();
         let Some(editor) = &self.editor else { return };
         let Some(game) = self.library.game(&editor.id).cloned() else { return };
         // libretro for a title its server has no folder for says so.
@@ -33,6 +34,8 @@ impl Shelf {
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);
         self.online_actions(host, actions);
+        let ms = (host.time_us() - started) / 1000;
+        host.log(&format!("find artwork: opened in {ms} ms"));
     }
 
     /// Carry out what the flow asks.
@@ -59,7 +62,7 @@ impl Shelf {
                                 self.pending_art.push((PictureKey::Art(file.clone()), tex, self.online_accent));
                             }
                             // The new file has to be in the art index first.
-                            self.library.reload_art(host);
+                            self.library.add_art(&file);
                             self.art.forget_missing();
                             self.library.patch(&id, |c| c.art = Some(file));
                         }
@@ -80,6 +83,15 @@ impl Shelf {
                     self.after_change_pub();
                 }
             }
+        }
+    }
+
+    /// A libretro listing the host read (Find artwork, Fetch artwork).
+    pub fn listing(&mut self, host: &mut dyn Host, folder: String, listing: Option<crate::online::libretro::Listing>) {
+        self.listings.answer(&folder, listing);
+        let t = crate::i18n::messages(self.settings.language);
+        if let Some(online) = &mut self.online {
+            online.listing_ready(host, t, &self.listings, &folder);
         }
     }
 

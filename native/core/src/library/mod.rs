@@ -217,6 +217,24 @@ impl Library {
         self.index.get(id).map(|&i| &self.games[i])
     }
 
+    /// A file just saved to `art/`, added to the index without reading the
+    /// folder again (thousands of files and a rebuild took 36 ms on the
+    /// Vita). Titles are recomputed only when the name is a title's own
+    /// (`<title id>.png` or `<title>.png`); a picture from the network is
+    /// named `<title id>-<n>.png` and matches none.
+    pub fn add_art(&mut self, file: &str) {
+        let Some(stem) = file.len().checked_sub(4).filter(|&n| file[n..].eq_ignore_ascii_case(".png")).map(|n| &file[..n]) else { return };
+        let lower = stem.to_lowercase();
+        if self.art.get(&lower).is_some_and(|f| f == file) {
+            return;
+        }
+        self.art.insert(lower, file.to_string());
+        let matches = |name: &str| name.eq_ignore_ascii_case(stem) || (!name.is_ascii() && name.to_lowercase() == stem.to_lowercase());
+        if self.games.iter().zip(&self.base).any(|(g, b)| matches(&g.id) || matches(&g.title) || matches(&b.title)) {
+            self.rebuild();
+        }
+    }
+
     /// Read `art/` again (the art picker, the editor); titles are recomputed
     /// only when the files changed. Returns the PNG names, sorted.
     pub fn reload_art(&mut self, host: &mut dyn Host) -> Vec<String> {

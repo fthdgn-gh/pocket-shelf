@@ -113,6 +113,9 @@ pub enum Event {
     Titles(Vec<Game>, u32),
     /// A picture asked for with [`Host::request`]; `None` when there is none.
     Picture(PictureKey, Option<Picture>),
+    /// A console's libretro names asked for with [`Host::listing`]; `None`
+    /// when its file is missing or empty.
+    Listing(String, Option<crate::online::libretro::Listing>),
 }
 
 /// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP
@@ -237,4 +240,8 @@ pub trait Host {
     fn save_picture(&mut self, _path: &str, _png: Vec<u8>, _fit: bool) -> bool {
         false
     }
+    /// Read `libretro/<console>.txt` and parse it with
+    /// [`Listing::parse`](crate::online::libretro::Listing::parse) off the
+    /// frame; answered with [`Event::Listing`] under `folder`.
+    fn listing(&mut self, _folder: &str) {}
 }
