@@ -1,5 +1,10 @@
 # Port plan: Pocket Shelf without PocketJS
 
+**Done (2026-10-28).** The port was released as `shelf-v0.2.0-beta.1` and
+PocketJS was removed from the repository. This file is the record of the
+port: paths below such as `src/`, `hosts/vita/` and `native/` are where
+things were at the time. Open follow-ups are at the end.
+
 The spike (`README.md`) ran on hardware on 2026-10-27: 173 titles, first frame
 at 0.76 s, 2.4–2.9 ms CPU per frame, one frame over 20 ms in 20 s of
 scrolling 5,173 titles. The current app's best reading: 8.7 ms JS per frame,
@@ -154,13 +159,23 @@ the user.
    scrapers, art and backdrop pickers, Fetch artwork, Clean up artwork,
    updates with the updater app. Port `steamgriddb`, `libretro`, `updates`,
    `accent`, `status` tests.
-6. **Cutover.** Parity check against the current app's preview shots and a
-   copy of the user's data folder; release the port as `POCKTSHLF` on the
-   beta channel, so installed copies update to it through the existing
-   updater; then delete PocketJS (`framework/`, `engine/`, `apps/`, other
-   `hosts/`, `tools/`, `site/`, ...), move `native/` to the root, rewrite
-   the README and `src/CLAUDE.md`, ask GitHub Support to detach the fork,
-   and remove the `upstream` remote.
+6. **Cutover.** *Done 2026-10-28.* The port was checked on hardware over
+   the user's data folder (settings, categories, artwork and the LiveArea
+   kept) and released as `POCKTSHLF` 0.2.0-beta.1 on the beta channel. The
+   first build of that tag compiled an empty title id (cargo-vita does not
+   pass it; `vita/build.rs` now does) and its updater froze before
+   restarting Pocket Shelf, as 0.1's did once; it was taken down, both were
+   fixed, and the tag was released again from the fixed `main`. An update
+   from a local 0.2.0-beta.0 build to it ran on hardware: download, unpack,
+   install, and the restart. Then PocketJS was deleted (`framework/`,
+   `engine/`, `apps/`, `hosts/`, `microts/`, `pocket3d/`, `site/`, `tools/`,
+   the TypeScript app in `src/`, and the PocketJS workflows), `native/`
+   moved to the root, `src/`'s remaining files moved to `locales/`,
+   `fonts/`, `updater/`, `psp-boot/`, `tools/` and `vita/package/`, and
+   `package.json` took over the version from `pocket.json`. The README,
+   the repository instructions and the working notes (`docs/NOTES.md`,
+   was `src/CLAUDE.md`) were rewritten. Left to the user: asking GitHub
+   Support to detach the fork.
 
 ## Decisions
 
@@ -185,3 +200,15 @@ the user.
   Label 9), plus an 8 px bold `Tiny` for numbers inside symbols. PocketJS
   baked 12 px as its smallest size; `fontdue` rasterizes any size. Layouts
   ported in phases 3 and 4 use these sizes, not the `text-*` classes.
+
+## Follow-ups
+
+- **The log and a scanned title list are still in `ux0:data/PocketShelfNext/`**
+  (`OWN` in `vita/src/host.rs`), the side-by-side build's folder. Moving
+  them into `ux0:data/PocketShelf/` changes where the log is collected.
+- **Icon texture budget**: icon and box art textures are never freed;
+  texture memory reached 16 MB in a 30 s run with thousands of titles.
+- **Backdrop decode time**: a 1920×620 backdrop takes about 0.5 s to decode;
+  decoding the neighbors ahead, or a small scaled cache, would hide it.
+- **A text size setting** (the user, 2026-10-27): the roles' sizes are one
+  table (`Role::style`), so a setting can scale it.

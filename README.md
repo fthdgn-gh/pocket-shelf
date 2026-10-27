@@ -5,28 +5,29 @@ A launcher for the PS Vita. It lists the titles installed on the console
 applications) and the games in your RetroArch playlists, in tabs. Each title
 gets an icon and a backdrop, and it starts with one button press.
 
-Pocket Shelf is written in TypeScript with Solid and runs on
-[PocketJS](https://github.com/pocket-stack/pocketjs). This repository is a fork
-of PocketJS: the app lives in [`src/`](./src/), and the rest is the framework
-and its Vita host.
+Pocket Shelf is a native Rust app: it draws with vita2d, rasterizes its own
+text with `fontdue`, and runs the title scan, picture decoding, file writes and
+downloads on worker threads. Up to 0.1 it was a TypeScript app on
+[PocketJS](https://github.com/pocket-stack/pocketjs); 0.2 replaced it and kept
+its saved data.
 
-- Title id `POCKTSHLF`, app id `dev.fthdgn.pocket-shelf`
-- Version 0.1.0
+- Title id `POCKTSHLF`
+- Version 0.2.0
 
 <p align="center">
-  <img src="./src/screenshots/home.png" width="720" alt="Pocket Shelf's Home view on the Games tab in the Dynamic theme: the selected title's icon large at the left in a white ring, the next titles smaller after it, the title's name, platform and category, and a Launch button, over the title's backdrop." />
+  <img src="./screenshots/home.png" width="720" alt="Pocket Shelf's Home view on the Games tab in the Dynamic theme: the selected title's icon large at the left in a white ring, the next titles smaller after it, the title's name, platform and category, and a Launch button, over the title's backdrop." />
 </p>
 
 | Carousel | Cascade | Grid |
 | --- | --- | --- |
-| ![The carousel view: the selected title's icon enlarged in the middle of a row, its name below.](./src/screenshots/carousel.png) | ![The cascade view: the selected title's icon large at the left, the next titles shrinking and darkening to the right, its name below.](./src/screenshots/cascade.png) | ![The grid view: two rows of five title icons with the selected one in a white ring, its name below.](./src/screenshots/grid.png) |
+| ![The carousel view: the selected title's icon enlarged in the middle of a row, its name below.](./screenshots/carousel.png) | ![The cascade view: the selected title's icon large at the left, the next titles shrinking and darkening to the right, its name below.](./screenshots/cascade.png) | ![The grid view: two rows of five title icons with the selected one in a white ring, its name below.](./screenshots/grid.png) |
 
 | List | RetroArch | Menu |
 | --- | --- | --- |
-| ![The list view: title rows with small icons, the selected row highlighted.](./src/screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist, its console in the detail line.](./src/screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, details, backdrop, icon box and status bar.](./src/screenshots/menu.png) |
+| ![The list view: title rows with small icons, the selected row highlighted.](./screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist, its console in the detail line.](./screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, details, backdrop, icon box and status bar.](./screenshots/menu.png) |
 
-The screens are rendered by `bun run shelf:preview` with sample titles; the
-colored tiles with initials stand in for game icons.
+The screens are rendered on the desktop by `bun run shots` with sample titles;
+the colored tiles with initials stand in for game icons.
 
 ## Features
 
@@ -57,7 +58,8 @@ colored tiles with initials stand in for game icons.
 - **Per-title changes:** name, category, icon, backdrop and favorite.
 - **Six themes:** Midnight, Aurora, Sakura, Ember, Daylight, and Dynamic, which
   takes its colors from the selected title.
-- **Status bar** with the clock, Wi-Fi, Bluetooth and battery.
+- **Status bar** with the clock, Wi-Fi, Bluetooth and battery, each of which
+  can be hidden, on the left or the right of the top bar.
 - **Five languages:** English, Turkish, German, French and Spanish.
 - **Updates from GitHub** on the channel you pick (see [Updates](#updates)).
 
@@ -69,8 +71,8 @@ colored tiles with initials stand in for game icons.
    [![Newest release](https://img.shields.io/github/v/release/fthdgn-gh/pocket-shelf?include_prereleases&sort=semver&label=newest%20release)](https://github.com/fthdgn-gh/pocket-shelf/releases)
 
    There is no stable release yet. The current one is the beta
-   [`shelf-v0.1.0-beta.3`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.1.0-beta.3)
-   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.1.0-beta.3/pocket-shelf.vpk)).
+   [`shelf-v0.2.0-beta.1`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.2.0-beta.1)
+   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.2.0-beta.1/pocket-shelf.vpk)).
    GitHub marks betas as pre-releases, so its "Latest" label does not point to
    them. Releases come in three channels:
    - **Stable:** tested on hardware.
@@ -133,52 +135,47 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | File | Holds |
 | --- | --- |
 | `settings.json` | Settings and the last selection |
+| `status-bar.json` | Which status items show, and on which side |
 | `categories.json` | Your categories and their order |
 | `titles/<title id>.json` | Your changes to one title |
+| `titles.cache.json` | Every title's changes in one file, read at start |
 | `recent.json` | The last 15 titles started |
 | `art/`, `backdrops/` | Downloaded and chosen pictures |
+| `libretro/` | libretro's name lists, one per console, fetched once |
+| `steamgriddb.txt` | Your SteamGridDB API key |
+| `update.json`, `update/` | The last update check; a downloaded update |
 | `titles.tsv` | The scanned title list. Delete it to force a new scan |
+
+The log is `ux0:/data/PocketShelfNext/log.txt`.
 
 ## Building
 
-You need [Bun](https://bun.sh/), [Rust via rustup](https://rustup.rs/), and
-VitaSDK with the pinned Rust toolchain described in
-[`hosts/vita/README.md`](./hosts/vita/README.md).
+You need [Bun](https://bun.sh/), [Rust via rustup](https://rustup.rs/),
+[VitaSDK](https://vitasdk.org/) with libvita2d, and
+[cargo-vita](https://github.com/vita-rust/cargo-vita) 0.2.2. The Vita crate
+pins its nightly toolchain in [`vita/rust-toolchain.toml`](./vita/rust-toolchain.toml).
 
 ```sh
 bun install
-bun run shelf:build:release   # VPK at dist/vita/pocket-shelf.vpk
-bun run shelf:run             # debug build, opened in Vita3K
-bun run shelf:check           # manifest check and TypeScript
-bun run shelf:test            # unit tests
-bun run shelf:preview         # render screens to PNG without a Vita
+bun run test      # core and platform module tests, on the desktop
+bun run shots     # render every screen to .pocket-build/validation/desktop/
+bun run build     # VPK at dist/vita/pocket-shelf.vpk
 ```
 
-Install the release build on hardware. The debug executable is 105 MB, and
-the system reads it from the memory card on every launch.
+| Folder | Holds |
+| --- | --- |
+| [`core/`](./core/) | Everything but the platform: the library and saved files, the shelf's screens and panels, text, shapes, themes, artwork lookups, updates, the `Host` trait |
+| [`vita/`](./vita/) | The Vita host, the vita2d backend and the frame loop; `vita/package/` holds the VPK's other files |
+| [`desktop/`](./desktop/) | A software renderer and a fake host with sample titles, for `bun run shots` |
+| [`platform-tests/`](./platform-tests/) | The Vita modules with no system calls, built for the desktop so their tests run there |
+| [`locales/`](./locales/) | The texts in five languages; `bun run locales` writes `core/src/locales.rs` |
+| [`updater/`](./updater/), [`psp-boot/`](./psp-boot/) | The updater app and the Adrenaline plugin (C) |
+| [`tools/`](./tools/) | The locale generator, the build identity, the LiveArea artwork |
+| [`docs/`](./docs/) | [Architecture](./docs/ARCHITECTURE.md), working [notes](./docs/NOTES.md), the port's [plan](./docs/PLAN.md) |
 
-`shelf:preview` runs the PocketJS engine compiled to WebAssembly. When
-`hosts/web/pocketjs.wasm` is missing, the first run builds it from
-`engine/wasm` with `cargo build --release --target wasm32-unknown-unknown`.
-That crate pins no toolchain, so it builds with your default one (stable),
-which needs Rust's WebAssembly target. Add it once:
-
-```sh
-rustup target add wasm32-unknown-unknown
-```
-
-Without it the build stops with "missing target? run: rustup target add
-wasm32-unknown-unknown". Delete `hosts/web/pocketjs.wasm` to rebuild it after
-the engine changes, for example after merging PocketJS: an existing file is
-used as it is. The Vita host builds with its own pinned nightly toolchain
-instead (see [`hosts/vita/README.md`](./hosts/vita/README.md)).
-
-The Adrenaline plugin is committed as `src/vita/psp/pocketshelf.prx`. To
-rebuild it after changing `src/psp-boot/`, run `bun run shelf:plugin`, which
-needs pspdev.
-
-Notes on the engine limits, host behavior, and what has been verified where are
-in [`src/CLAUDE.md`](./src/CLAUDE.md).
+The updater app (`bun run updater`, needs VitaSDK) and the Adrenaline plugin
+(`bun run plugin`, needs pspdev) are committed in `vita/package/`, so a build
+needs neither toolchain.
 
 ### Releases
 
@@ -186,15 +183,15 @@ Three GitHub Actions workflows build and publish the VPK:
 
 | Workflow | Does |
 | --- | --- |
-| [`shelf-build.yml`](./.github/workflows/shelf-build.yml) | Checks, tests and builds the release VPK. The other two call it; "Run workflow" builds without publishing |
+| [`shelf-build.yml`](./.github/workflows/shelf-build.yml) | Tests and builds the release VPK. The other two call it; "Run workflow" builds without publishing |
 | [`shelf-release.yml`](./.github/workflows/shelf-release.yml) | On a `shelf-v*` tag, publishes a beta or stable release |
 | [`shelf-nightly.yml`](./.github/workflows/shelf-nightly.yml) | Replaces the `shelf-nightly` pre-release with a build of `main`, once a day when `main` changed |
 
-The tag's version must be the `version` in `pocket.json`:
+The tag's version must be the `version` in `package.json`:
 
 ```sh
-git tag shelf-v0.1.0-beta.2   # beta: published as a pre-release
-git tag shelf-v0.1.0          # stable: published as the latest release
+git tag shelf-v0.2.0-beta.2   # beta: published as a pre-release
+git tag shelf-v0.2.0          # stable: published as the latest release
 git push origin <tag>
 ```
 
@@ -210,7 +207,8 @@ set to `true` (Settings ▸ Secrets and variables ▸ Actions ▸ Variables).
 ## Credits
 
 - [PocketJS](https://github.com/pocket-stack/pocketjs) by Yifeng "Evan" Wang
-  and Pocket Nexus: the framework, renderer and Vita host this app is built on.
+  and Pocket Nexus: Pocket Shelf began as a PocketJS app, in a fork of its
+  repository, and its Vita platform modules began in the PocketJS Vita host.
 - [SteamGridDB](https://www.steamgriddb.com/) for the artwork lookups.
 - RetroFlow and VitaShell,
   for showing how to launch system applications and PlayStation Mobile titles,
@@ -218,11 +216,10 @@ set to `true` (Settings ▸ Secrets and variables ▸ Actions ▸ Variables).
 
 ## License
 
-[MIT](./LICENSE), the same as PocketJS. Fonts: Figtree (SIL OFL 1.1) and
-Inter (SIL OFL, in [`assets/fonts/`](./assets/fonts/)). See
-[`src/fonts/NOTICE.md`](./src/fonts/NOTICE.md).
+[MIT](./LICENSE). Font: Figtree (SIL OFL 1.1), see
+[`fonts/NOTICE.md`](./fonts/NOTICE.md).
 
-The updater app in [`src/updater/`](./src/updater/) (`POCKTUPDR`, which
-installs Pocket Shelf's updates) is a separate program under the
-[GPL-3.0](./src/updater/LICENSE): it uses VitaShell's package installer code.
+The updater app in [`updater/`](./updater/) (`POCKTUPDR`, which installs
+Pocket Shelf's updates) is a separate program under the
+[GPL-3.0](./updater/LICENSE): it uses VitaShell's package installer code.
 The VPK carries its build in `updater/`.

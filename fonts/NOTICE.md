@@ -1,9 +1,8 @@
 # Fonts
 
-Figtree is baked into Pocket Shelf by `bun run shelf:build`; it fills the
-engine's sans slots. `src/tools/icons.ts` and `src/tools/art.ts` draw the
-letters in the button icons and the LiveArea pictures with Figtree Bold.
-Inter (assets/fonts) supplies symbols Figtree does not have.
+Figtree is built into Pocket Shelf (`core/src/text.rs` includes both files)
+and rasterized at run time with `fontdue`. `tools/art.ts` draws the LiveArea
+pictures with Figtree Bold.
 
 - Figtree (Regular, Bold): SIL Open Font License 1.1, `OFL-Figtree.txt`,
   https://github.com/erikdkennedy/figtree
