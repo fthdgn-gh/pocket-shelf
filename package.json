@@ -379,7 +379,10 @@
     "shelf:updater": "bun src/updater/make-package.ts",
     "shelf:plugin": "PSPDEV=${PSPDEV:-$HOME/pspdev} && PATH=$PSPDEV/bin:$PATH make -C src/psp-boot && cp src/psp-boot/pocketshelf.prx src/vita/psp/pocketshelf.prx",
     "shelf:art": "bun src/tools/art.ts",
-    "shelf:icons": "bun src/tools/icons.ts"
+    "shelf:icons": "bun src/tools/icons.ts",
+    "next:shots": "cd native/desktop && cargo run --release --",
+    "next:build": "sh native/vita/build.sh",
+    "next:test": "cd native/core && cargo test"
   },
   "dependencies": {
     "@babel/core": "7.29.7",

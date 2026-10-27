@@ -1,0 +1,12 @@
+[package]
+name = "shelf-desktop"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[dependencies]
+shelf-core = { path = "../core" }
+png = "0.17"
+
+[profile.dev]
+opt-level = 2
