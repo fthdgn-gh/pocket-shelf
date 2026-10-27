@@ -81,6 +81,10 @@ the colored tiles with initials stand in for game icons.
    - **Stable:** tested on hardware.
    - **Beta** (marked pre-release): new features, tested less.
    - **Nightly** (`shelf-nightly`, when available): the current `main`, untested.
+   Each release's VPK carries a signed build provenance from GitHub Actions:
+   `gh attestation verify pocket-shelf.vpk -R fthdgn-gh/pocket-shelf` checks
+   that the file was built by this repository's workflow, and from which
+   commit.
 2. Copy it to the Vita and install it with VitaShell.
 3. Open Pocket Shelf from the home screen. On the first start it scans the
    installed titles and shows its progress. Later starts read the saved list.

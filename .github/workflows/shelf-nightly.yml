@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write # replacing the nightly release
+  id-token: write # the build's provenance attestation (shelf-build.yml)
+  attestations: write
 
 concurrency:
   group: shelf-nightly

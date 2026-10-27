@@ -17,6 +17,9 @@ on:
 
 permissions:
   contents: read
+  # Signing the VPK's build provenance (actions/attest-build-provenance).
+  id-token: write
+  attestations: write
 
 env:
   VITASDK: /home/runner/vitasdk
@@ -43,7 +46,7 @@ jobs:
       # times: installed fresh, the standard library's sources were newer
       # than every cached build, and cargo rebuilt std and all 120 crates on
       # top of it each run.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.rustup/toolchains/${{ env.VITA_RUST }}-x86_64-unknown-linux-gnu
           key: rustup-${{ env.VITA_RUST }}
@@ -74,7 +77,7 @@ jobs:
       # dependencies built for armv7-sony-vita), whole: the rust-cache step
       # above keeps the desktop crates'. The newest one for this toolchain and
       # lockfile is restored; the app's own crates rebuild from the checkout.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: vita/target
           key: vita-target-${{ env.VITA_RUST }}-${{ hashFiles('vita/Cargo.lock') }}-${{ github.sha }}
@@ -92,6 +95,13 @@ jobs:
       # the VPK (vita/build.rs reads the tag from GITHUB_REF_NAME).
       - run: make test
       - run: make build
+
+      # A signed record that this workflow built the VPK from this commit;
+      # `gh attestation verify pocket-shelf.vpk -R fthdgn-gh/pocket-shelf`
+      # checks a downloaded file against it.
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/vita/pocket-shelf.vpk
 
       - uses: actions/upload-artifact@v7
         with:

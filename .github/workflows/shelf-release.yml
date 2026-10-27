@@ -14,6 +14,8 @@ on:
 
 permissions:
   contents: write # creating the GitHub Release
+  id-token: write # the build's provenance attestation (shelf-build.yml)
+  attestations: write
 
 concurrency:
   group: shelf-release-${{ github.ref }}
