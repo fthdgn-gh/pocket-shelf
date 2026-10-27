@@ -20,7 +20,10 @@ pub const DATA: &str = "ux0:data/PocketShelf";
 /// newline), and this build's own `status-bar.json` (the current app does
 /// not read it). Downloads go to their files through `http.rs`.
 fn writable(path: &str) -> bool {
-    matches!(path, "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "steamgriddb.txt")
+    matches!(
+        path,
+        "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "steamgriddb.txt" | "update.json" | "update/version.txt"
+    )
         || path.strip_prefix("titles/").is_some_and(|_| removable(path))
 }
 
@@ -282,6 +285,45 @@ impl Host for VitaHost {
             log_line(&format!("listing {folder}: {} names in {} ms", listing.as_ref().map_or(0, |l| l.len()), (now_us() - started) / 1000));
             let _ = sender.send(Event::Listing(folder, listing));
         });
+    }
+
+    fn build(&self) -> shelf_core::updates::BuildInfo {
+        shelf_core::updates::BuildInfo {
+            version: env!("SHELF_VERSION").into(),
+            channel: env!("SHELF_CHANNEL").into(),
+            commit: env!("SHELF_COMMIT").into(),
+        }
+    }
+
+    fn unix_ms(&self) -> u64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
+    }
+
+    fn can_install_update(&self) -> bool {
+        // The updater app (src/updater/main.c) installs and starts
+        // POCKTSHLF only; the side-by-side build checks but does not
+        // download.
+        crate::platform::installed::SELF_TITLE_ID == "POCKTSHLF"
+    }
+
+    fn update_unpack(&mut self) -> bool {
+        crate::platform::update::unpack_start()
+    }
+
+    fn update_install(&mut self) -> bool {
+        crate::platform::update::install_start()
+    }
+
+    fn update_launch(&mut self) -> bool {
+        crate::platform::update::launch()
+    }
+
+    fn update_state(&mut self) -> String {
+        crate::platform::update::state()
+    }
+
+    fn update_result(&mut self) -> String {
+        crate::platform::update::take_result()
     }
 
     fn status(&mut self) -> Status {

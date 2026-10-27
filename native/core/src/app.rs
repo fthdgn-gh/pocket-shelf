@@ -161,7 +161,9 @@ impl App {
     pub fn update(&mut self, host: &mut dyn Host, pad: u32) {
         let now = host.time_us();
         if self.frame == 0 {
-            let mut settings = Settings::defaults(UpdateChannel::Off);
+            // A fresh install checks the channel it was released on.
+            let build = host.build();
+            let mut settings = Settings::defaults(build.default_channel());
             if let Some(bytes) = host.read(SETTINGS_FILE) {
                 settings = Settings::parse(&bytes, settings);
             }
@@ -177,7 +179,9 @@ impl App {
             // The first status reading is slow on hardware (about 25 ms), so
             // it is taken here, in the frame that loads the library.
             let status = host.status();
-            self.shelf = Some(Shelf::new(settings, library, status));
+            let mut shelf = Shelf::new(settings, library, status);
+            shelf.build = build;
+            self.shelf = Some(shelf);
             host.scan(false);
         }
         self.frame += 1;

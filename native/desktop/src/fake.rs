@@ -232,6 +232,23 @@ pub struct FakeHost {
     /// The launches accepted, by title id.
     pub launched: Vec<String>,
     pub log: Vec<String>,
+    /// Whether this build may install an update (the real title id).
+    pub installable: bool,
+    /// The updater's report at start ("", "ok" or "error <reason>").
+    pub update_report: String,
+    /// The update step running and the frame it started on.
+    update_step: Option<(&'static str, u64)>,
+}
+
+/// GitHub's releases list: a beta newer than the fake build (0.1.0, beta)
+/// and the build's own release.
+fn github_reply() -> String {
+    let release = |tag: &str, date: &str| {
+        format!(
+            r#"{{"tag_name":"{tag}","name":"Pocket Shelf {tag}","draft":false,"target_commitish":"main","published_at":"{date}T18:00:00Z","assets":[{{"name":"pocket-shelf.vpk","browser_download_url":"https://github.com/fthdgn-gh/pocket-shelf/releases/download/{tag}/pocket-shelf.vpk","size":2516582}}]}}"#
+        )
+    };
+    format!("[{},{}]", release("shelf-v0.2.0-beta.1", "2026-10-27"), release("shelf-v0.1.0", "2026-10-05"))
 }
 
 /// The names the fake libretro server lists for every console: the sample
@@ -342,6 +359,9 @@ impl FakeHost {
             next_request: 1,
             launched: Vec::new(),
             log: Vec::new(),
+            installable: false,
+            update_report: String::new(),
+            update_step: None,
         }
     }
 
@@ -458,6 +478,48 @@ impl Host for FakeHost {
         self.later.push(Event::Picture(key, picture));
     }
 
+    fn build(&self) -> shelf_core::updates::BuildInfo {
+        shelf_core::updates::BuildInfo { version: "0.1.0".into(), channel: "beta".into(), commit: String::new() }
+    }
+
+    fn unix_ms(&self) -> u64 {
+        1_800_000_000_000
+    }
+
+    fn can_install_update(&self) -> bool {
+        self.installable
+    }
+
+    fn update_unpack(&mut self) -> bool {
+        self.update_step = Some(("unpack", self.frame));
+        true
+    }
+
+    fn update_install(&mut self) -> bool {
+        self.update_step = Some(("install", self.frame));
+        true
+    }
+
+    fn update_launch(&mut self) -> bool {
+        self.log.push("updater started".into());
+        true
+    }
+
+    /// Unpacking 40 files over 40 frames, installing over 20.
+    fn update_state(&mut self) -> String {
+        match self.update_step {
+            Some(("unpack", at)) if self.frame - at < 40 => format!("busy {} 40", self.frame - at),
+            Some(("unpack", _)) => "done 00.02".into(),
+            Some(("install", at)) if self.frame - at < 20 => "installing".into(),
+            Some(("install", _)) => "installed".into(),
+            _ => "idle".into(),
+        }
+    }
+
+    fn update_result(&mut self) -> String {
+        std::mem::take(&mut self.update_report)
+    }
+
     fn listing(&mut self, folder: &str) {
         use shelf_core::online::libretro::{listing_path, Listing};
         let listing = self.files.get(&listing_path(folder)).and_then(|b| Listing::parse(&String::from_utf8_lossy(b)));
@@ -512,6 +574,14 @@ impl Host for FakeHost {
     /// lands in the data folder so the pickers list it.
     fn net_start(&mut self, url: &str, kind: NetKind) -> Option<NetId> {
         let request = match kind {
+            NetKind::Text { .. } if url.starts_with("https://api.github.com/") => {
+                let text = github_reply();
+                FakeRequest { polls: 0, status: 200, size: text.len() as u64, text }
+            }
+            NetKind::Save(path) if path.starts_with("update/") => {
+                self.files.insert(path, b"PK".to_vec());
+                FakeRequest { polls: 0, status: 200, text: String::new(), size: 2516582 }
+            }
             NetKind::Text { authorization } => {
                 let (status, text) = steamgriddb_reply(url, &authorization);
                 FakeRequest { polls: 0, status, size: text.len() as u64, text }

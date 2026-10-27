@@ -21,6 +21,7 @@ pub mod shelf;
 pub mod stats;
 pub mod text;
 pub mod theme;
+pub mod updates;
 
 /// Logical screen size: the current UI's layout units. The Vita draws them
 /// at 2× (960×544).
