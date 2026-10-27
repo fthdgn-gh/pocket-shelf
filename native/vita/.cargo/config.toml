@@ -1,0 +1,2 @@
+[target.armv7-sony-vita-newlibeabihf]
+rustflags = ["-C", "link-arg=-Wl,--undefined=sceUserMainThreadStackSize"]

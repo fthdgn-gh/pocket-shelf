@@ -1,0 +1,22 @@
+{
+  "custom": [
+    {
+      "id": "emulators",
+      "label": "Emulators"
+    },
+    {
+      "id": "cocuk-oyunlari",
+      "label": "Çocuk \"Oyunları\""
+    }
+  ],
+  "order": [
+    "smart-recent",
+    "games",
+    "emulators",
+    "retro-snes",
+    "system"
+  ],
+  "hidden": [
+    "builtin-psm"
+  ]
+}
