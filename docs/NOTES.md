@@ -33,7 +33,7 @@ it, kept its saved data, and the framework was removed from the repository.
 draws into a software renderer; a fake host answers with sample titles,
 generated icons and backdrops, a fake SteamGridDB, libretro server, GitHub
 and updater. Shots are button scripts; renders go to
-`.pocket-build/validation/desktop/` (ignored). The README's `screenshots/`
+`.build/validation/desktop/` (ignored). The README's `screenshots/`
 are copies of seven of them, captioned as renders with sample titles.
 
 **Vita3K.** Its window cannot be seen or screenshotted from here, and it

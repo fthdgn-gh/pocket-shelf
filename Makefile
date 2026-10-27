@@ -2,7 +2,7 @@
 # cargo-vita for `build` and `updater`, pspdev for `plugin`.
 #
 #   make test      core, platform module and tools tests, on the desktop
-#   make shots     render every screen to .pocket-build/validation/desktop/
+#   make shots     render every screen to .build/validation/desktop/
 #                  (SHOTS="words" renders the shots whose names hold them)
 #   make build     the VPK at dist/vita/pocket-shelf.vpk
 #   make art       redraw the LiveArea pictures in vita/package/sce_sys/

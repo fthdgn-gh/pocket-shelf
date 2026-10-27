@@ -157,7 +157,7 @@ pins its nightly toolchain in [`vita/rust-toolchain.toml`](./vita/rust-toolchain
 
 ```sh
 make test      # core, platform module and tools tests, on the desktop
-make shots     # render every screen to .pocket-build/validation/desktop/
+make shots     # render every screen to .build/validation/desktop/
 make build     # VPK at dist/vita/pocket-shelf.vpk
 ```
 

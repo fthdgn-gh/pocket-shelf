@@ -40,7 +40,7 @@ glyph changed.
 | Command | Does |
 |---|---|
 | `make test` | Core tests, the platform modules' tests (with `.samples/retroarch-playlists` when present), the tools' tests |
-| `make shots` | Screenshots to `.pocket-build/validation/desktop/`; `SHOTS="words"` for those whose names hold them |
+| `make shots` | Screenshots to `.build/validation/desktop/`; `SHOTS="words"` for those whose names hold them |
 | `make build` | Release VPK to `dist/vita/pocket-shelf.vpk` (`vita/build.sh`); `GITHUB_REF_NAME=shelf-v<version>` sets the version the update check compares |
 | `make art` | Redraw the LiveArea pictures and `template.xml` in `vita/package/sce_sys/` |
 | `make updater` | Build the updater app into `vita/package/updater/` (VitaSDK) |

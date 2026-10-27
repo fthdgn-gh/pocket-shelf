@@ -6,7 +6,7 @@ TITLE_ID = POCKTUPDR
 TITLE    = Pocket Shelf Updater
 TARGET   = updater
 OBJS     = main.o sha1.o head.o
-BUILD    = ../.pocket-build/updater
+BUILD    = ../.build/updater
 
 LIBS = -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub \
 	-lScePgf_stub -lScePvf_stub -lSceCommonDialog_stub -lSceAppMgr_stub -lSceAppUtil_stub \

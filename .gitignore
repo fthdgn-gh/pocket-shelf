@@ -4,7 +4,7 @@ dist/
 .DS_Store
 
 # Per-run output: desktop renders, validation captures, the updater build
-.pocket-build/
+.build/
 
 # The user's own RetroArch playlists and libretro listings for local tests
 .samples/

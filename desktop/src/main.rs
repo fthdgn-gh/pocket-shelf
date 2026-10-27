@@ -3,7 +3,7 @@
 //! `cargo run --release -- [words…]` runs every shot whose name contains
 //! one of the words (all shots without words), each from a fresh start with
 //! the fake host, and writes `<name>.png` to
-//! `.pocket-build/validation/desktop/`.
+//! `.build/validation/desktop/`.
 
 mod fake;
 mod raster;
@@ -223,7 +223,7 @@ const SHOTS: &[Shot] = &[
 
 fn main() {
     let words: Vec<String> = std::env::args().skip(1).collect();
-    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.pocket-build/validation/desktop");
+    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.build/validation/desktop");
     std::fs::create_dir_all(&out).expect("create output folder");
 
     for shot in SHOTS.iter().filter(|shot| words.is_empty() || words.iter().any(|w| shot.name.contains(w.as_str()))) {

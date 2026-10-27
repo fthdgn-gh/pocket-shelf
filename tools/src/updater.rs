@@ -53,7 +53,7 @@ pub fn head_bin(template: &[u8], title_id: &str) -> Vec<u8> {
 }
 
 pub fn run(root: &Path) -> Result<(), String> {
-    let build = root.join(".pocket-build/updater");
+    let build = root.join(".build/updater");
     let out = root.join("vita/package/updater");
     let read = |path: &Path| fs::read(path).map_err(|e| format!("{}: {e} (run `make -C updater` first)", path.display()));
     let eboot = read(&build.join("eboot.bin"))?;
