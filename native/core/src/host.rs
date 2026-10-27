@@ -113,6 +113,47 @@ pub enum PluginState {
     On,
 }
 
+/// A network request (`http.rs`): its id while open.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct NetId(pub i32);
+
+/// What a request's reply becomes.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum NetKind {
+    /// Text kept in memory (an API reply), with an `Authorization` header
+    /// when not empty.
+    Text { authorization: String },
+    /// A file in the data folder: a PNG, a libretro listing
+    /// (`libretro/<console>.txt`, the names its page links to), or the
+    /// update package.
+    Save(String),
+    /// A PNG fitted whole into a 128 px square, to `art/<name>.png`.
+    SaveIcon(String),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum NetState {
+    Busy { received: u64, total: u64 },
+    Done { status: u16, received: u64 },
+    Error(String),
+}
+
+impl NetState {
+    /// From the host's `busy <received> <total>`, `done <status>
+    /// <received>` or `error <reason>`.
+    pub fn parse(line: &str) -> NetState {
+        let mut words = line.splitn(3, ' ');
+        let kind = words.next().unwrap_or("");
+        let a = words.next().unwrap_or("");
+        let b = words.next().unwrap_or("");
+        match kind {
+            "busy" => NetState::Busy { received: a.parse().unwrap_or(0), total: b.parse().unwrap_or(0) },
+            "done" => NetState::Done { status: a.parse().unwrap_or(0), received: b.parse().unwrap_or(0) },
+            _ => NetState::Error(line.strip_prefix("error ").unwrap_or(line).to_string()),
+        }
+    }
+}
+
 pub trait Host {
     /// Microseconds since the process started.
     fn time_us(&self) -> u64;
@@ -154,4 +195,18 @@ pub trait Host {
     /// Add the plugin to Adrenaline's lists or turn it on there (the user
     /// agreed); true when it is now on.
     fn enable_plugin(&mut self) -> bool;
+    /// Start a request on the host's network thread; `None` when it could
+    /// not start (no network, too many open). Polled with `net_state`.
+    fn net_start(&mut self, _url: &str, _kind: NetKind) -> Option<NetId> {
+        None
+    }
+    fn net_state(&mut self, _id: NetId) -> NetState {
+        NetState::Error("no network".into())
+    }
+    /// A finished text request's reply.
+    fn net_text(&mut self, _id: NetId) -> String {
+        String::new()
+    }
+    /// Cancel and forget a request.
+    fn net_close(&mut self, _id: NetId) {}
 }

@@ -7,7 +7,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
-use shelf_core::host::{Event, Host, Picture, PictureKey, PluginState, ScanPhase, Status};
+use shelf_core::host::{Event, Host, NetId, NetKind, NetState, Picture, PictureKey, PluginState, ScanPhase, Status};
 
 use crate::platform::{backdrop, installed};
 
@@ -306,5 +306,27 @@ impl Host for VitaHost {
 
     fn enable_plugin(&mut self) -> bool {
         crate::platform::pspemu::enable_plugin()
+    }
+
+    fn net_start(&mut self, url: &str, kind: NetKind) -> Option<NetId> {
+        use crate::platform::http;
+        let id = match &kind {
+            NetKind::Text { authorization } => http::start(url, authorization, None, false),
+            NetKind::Save(path) => http::start(url, "", Some(path), false),
+            NetKind::SaveIcon(path) => http::start(url, "", Some(path), true),
+        };
+        (id >= 0).then_some(NetId(id))
+    }
+
+    fn net_state(&mut self, id: NetId) -> NetState {
+        NetState::parse(&crate::platform::http::state(id.0))
+    }
+
+    fn net_text(&mut self, id: NetId) -> String {
+        crate::platform::http::text(id.0)
+    }
+
+    fn net_close(&mut self, id: NetId) {
+        crate::platform::http::close(id.0);
     }
 }

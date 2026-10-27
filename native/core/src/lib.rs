@@ -15,6 +15,7 @@ pub mod host;
 pub mod i18n;
 pub mod library;
 pub mod locales;
+pub mod online;
 pub mod shapes;
 pub mod shelf;
 pub mod stats;

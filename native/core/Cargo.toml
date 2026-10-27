@@ -9,3 +9,7 @@ fontdue = "0.9"
 indexmap = "2"
 serde_json = { version = "1", features = ["preserve_order"] }
 unicode-normalization = "0.1"
+
+# The libretro test reads the user's RZIP playlists in .samples.
+[dev-dependencies]
+miniz_oxide = "0.8"

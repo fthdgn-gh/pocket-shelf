@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use shelf_core::host::{Event, Host, Picture, PictureKey, PluginState, ScanPhase, Status, TitleInfo};
+use shelf_core::host::{Event, Host, NetId, NetKind, NetState, Picture, PictureKey, PluginState, ScanPhase, Status, TitleInfo};
 use shelf_core::library::catalog::load_catalog;
 use shelf_core::text::{render_mask, Weight};
 use shelf_core::theme::ACCENT_HAS_ALPHA;
@@ -226,9 +226,92 @@ pub struct FakeHost {
     scanning: Option<u64>,
     /// Adrenaline's boot plugin, as `pspemu::plugin_state` would read it.
     pub plugin: PluginState,
+    /// Network requests open, by id.
+    requests: HashMap<i32, FakeRequest>,
+    next_request: i32,
     /// The launches accepted, by title id.
     pub launched: Vec<String>,
     pub log: Vec<String>,
+}
+
+/// The names the fake libretro server lists for every console: the sample
+/// RetroArch games' labels as No-Intro writes them, and look-alikes
+/// (`LIBRETRO_NAMES` in preview.ts).
+const LIBRETRO_NAMES: [&str; 10] = [
+    "Star Knight Saga (USA)",
+    "Star Knight Saga (Japan)",
+    "Pixel Quest (USA)",
+    "Pixel Quest (Europe)",
+    "Pixel Quest 2 (USA)",
+    "Turbo Hedgehog (World)",
+    "Slug Brigade",
+    "Maze Muncher",
+    "Monkey Escape (USA)",
+    "Crystal Quest (USA)",
+];
+
+/// The one API key the fake SteamGridDB accepts (`PREVIEW_KEY`).
+pub const PREVIEW_KEY: &str = "0123456789abcdef0123456789abcdef";
+
+/// A fake request: polls so far, its reply's status, text and size.
+struct FakeRequest {
+    polls: u32,
+    status: u16,
+    text: String,
+    size: u64,
+}
+
+/// SteamGridDB's reply to a GET (`installNet` in preview.ts).
+fn steamgriddb_reply(url: &str, authorization: &str) -> (u16, String) {
+    let reply = |data: String| format!("{{\"success\":true,\"data\":{data}}}");
+    if authorization != format!("Bearer {PREVIEW_KEY}") {
+        return (401, "{\"success\":false,\"errors\":[\"Authentication Required\"]}".into());
+    }
+    if let Some(term) = url.split("/search/autocomplete/").nth(1) {
+        let term = percent_decode(term);
+        // A game id per term, so each title gets pictures of its own.
+        let id = 100 + (term.chars().map(|c| c as u32).sum::<u32>() % 800) * 10;
+        let games = [
+            format!("{{\"id\":{id},\"name\":{},\"release_date\":1339459200}}", json_string(&term)),
+            format!("{{\"id\":{},\"name\":{},\"release_date\":1484870400}}", id + 1, json_string(&format!("{term} 2"))),
+            format!("{{\"id\":{},\"name\":{},\"release_date\":1454371200}}", id + 2, json_string(&format!("{term} Remastered"))),
+            format!("{{\"id\":{},\"name\":{},\"release_date\":0}}", id + 3, json_string(&format!("{term}: The Animation"))),
+        ];
+        return (200, reply(format!("[{}]", games.join(","))));
+    }
+    for (part, kind, count, offset) in [("/icons/game/", "icon", 14, 0), ("/heroes/game/", "hero", 6, 50)] {
+        if let Some(rest) = url.split(part).nth(1) {
+            let game: u32 = rest.split(|c: char| !c.is_ascii_digit()).next().and_then(|n| n.parse().ok()).unwrap_or(0);
+            let items: Vec<String> = (0..count)
+                .map(|i| format!("{{\"id\":{},\"url\":\"https://cdn2.steamgriddb.com/{kind}/{i}.png\"}}", game * 100 + offset + i))
+                .collect();
+            return (200, reply(format!("[{}]", items.join(","))));
+        }
+    }
+    (200, reply("[]".into()))
+}
+
+fn json_string(text: &str) -> String {
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// `%XX` escapes back to their bytes.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(b) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
+                out.push(b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Frames a fake scan takes, and its phases' shares of the steps.
@@ -255,6 +338,8 @@ impl FakeHost {
             first_start: false,
             scanning: None,
             plugin: PluginState::Missing,
+            requests: HashMap::new(),
+            next_request: 1,
             launched: Vec::new(),
             log: Vec::new(),
         }
@@ -407,5 +492,49 @@ impl Host for FakeHost {
     fn enable_plugin(&mut self) -> bool {
         self.plugin = PluginState::On;
         true
+    }
+
+    /// A request finishes after six polls with a canned reply; a download
+    /// lands in the data folder so the pickers list it.
+    fn net_start(&mut self, url: &str, kind: NetKind) -> Option<NetId> {
+        let request = match kind {
+            NetKind::Text { authorization } => {
+                let (status, text) = steamgriddb_reply(url, &authorization);
+                FakeRequest { polls: 0, status, size: text.len() as u64, text }
+            }
+            NetKind::Save(path) | NetKind::SaveIcon(path) if path.starts_with("libretro/") => {
+                self.files.insert(path, format!("{}\n", LIBRETRO_NAMES.join("\n")).into_bytes());
+                FakeRequest { polls: 0, status: 200, text: String::new(), size: 900 * 1024 }
+            }
+            NetKind::Save(path) | NetKind::SaveIcon(path) => {
+                // libretro's title screens are missing on the fake server.
+                let status = if url.contains("/Named_Titles/") { 404 } else { 200 };
+                if status == 200 {
+                    self.files.insert(path, b"PNG".to_vec());
+                }
+                FakeRequest { polls: 0, status, text: String::new(), size: 480 * 1024 }
+            }
+        };
+        let id = self.next_request;
+        self.next_request += 1;
+        self.requests.insert(id, request);
+        Some(NetId(id))
+    }
+
+    fn net_state(&mut self, id: NetId) -> NetState {
+        let Some(request) = self.requests.get_mut(&id.0) else { return NetState::Error("unknown request".into()) };
+        request.polls += 1;
+        if request.polls < 6 {
+            return NetState::Busy { received: request.size * request.polls as u64 / 6, total: request.size };
+        }
+        NetState::Done { status: request.status, received: request.size }
+    }
+
+    fn net_text(&mut self, id: NetId) -> String {
+        self.requests.get(&id.0).map(|r| r.text.clone()).unwrap_or_default()
+    }
+
+    fn net_close(&mut self, id: NetId) {
+        self.requests.remove(&id.0);
     }
 }
