@@ -156,6 +156,11 @@ the user.
 - Side by side as **Pocket Shelf Next**, `PSHLFNEXT` (2026-10-27).
 - **Everything carries over**; dropping or adding features waits until the
   port is complete (2026-10-27).
+- **The status bar's layout** comes now, ahead of the rest of the new
+  features (the user, 2026-10-27): the status items take the width of the
+  ones shown, each of Wi-Fi, Bluetooth, battery and clock can be hidden,
+  and the items sit right or left. Saved in `status-bar.json`, not
+  `settings.json`, which the current app rewrites with only its own keys.
 - **A text size setting** comes after the port (the user, 2026-10-27): the
   roles' sizes are one table (`Role::style`), so a setting can scale it.
 - **Smaller text** (2026-10-27): each role is about two steps under its

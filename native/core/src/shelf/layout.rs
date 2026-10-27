@@ -156,11 +156,11 @@ pub fn cascade_slot(detail: DetailLevel, offset: i32) -> CascadeSlot {
 
 // Top bar: 16 of padding, L and R (24 wide, 6 gap each) around the category
 // names, the status items at the right in `STATUS_W`. Names are at most
-// `TAB_MAX` wide, `TAB_GAP` apart.
+// `TAB_MAX` wide, `TAB_GAP` apart. The status items take the width of the
+// ones shown (the current app kept 128 for them).
 pub const BAR_H: f32 = 30.0;
 pub const BAR_SIDE: f32 = 16.0;
 pub const PILL_ROOM: f32 = 24.0 + 6.0;
-pub const STATUS_W: f32 = 128.0;
 pub const TAB_MAX: f32 = 120.0;
 pub const TAB_GAP: f32 = 16.0;
 

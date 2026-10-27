@@ -141,6 +141,14 @@ language's own letters), Done shows the results in a Search tab in front,
 the other face button on that tab closes it and returns to the title
 selected before.
 
+**The status items** take the width of the ones shown: Wi-Fi only while
+connected, and each of Wi-Fi, Bluetooth, battery and clock can be turned
+off in Appearance ▸ Status bar (the Clock row's last value is Off), right of
+R or left of L (`StatusLayout`, saved in `status-bar.json`: the current app
+rewrites `settings.json` with only the keys it knows). The tab names have
+the rest of the bar. This is the first feature the current app does not
+have; its texts were added to `src/locales/*.ts` for the five languages.
+
 **Languages**: `locales.rs` is generated from the current app's
 `src/locales/*.ts` (`bun run next:locales`, `tools/locales.ts`), one
 `Messages` struct and a constant per language; `i18n.rs` has `fill`,
@@ -156,7 +164,8 @@ List, `40`–`42` Cascade, `50`–`53` tabs, `60`–`63` themes, `70`–`72` the
 page, `80`–`82` saved data, `90` test titles, `91` launching, `92`–`93` the
 Adrenaline drawer, `100`–`105` the SELECT menu, `110`–`115` the keyboard and
 search, `120`–`134` the editor, pickers and category manager, `140`–`150`
-rescan and Diagnostics, `64`–`66` Turkish and German.
+rescan and Diagnostics, `160`–`164` the status items' layout, `64`–`66`
+Turkish and German.
 
 ## Timing
 

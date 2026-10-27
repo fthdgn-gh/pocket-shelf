@@ -16,9 +16,10 @@ pub const DATA: &str = "ux0:data/PocketShelf";
 
 /// Whether this build may write `path` in the data folder: only the files
 /// whose writers reproduce the current app's output byte for byte
-/// (`core/src/library/round_trip.rs`).
+/// (`core/src/library/round_trip.rs`), and this build's own
+/// `status-bar.json` (the current app does not read it).
 fn writable(path: &str) -> bool {
-    matches!(path, "settings.json" | "categories.json" | "recent.json" | "titles.cache.json") || removable(path)
+    matches!(path, "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json") || removable(path)
 }
 
 /// A title's changes, `titles/<id>.json`: the one kind of file this build

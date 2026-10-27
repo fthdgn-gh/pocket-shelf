@@ -49,6 +49,59 @@ keyed!(
 
 pub const SETTINGS_FILE: &str = "settings.json";
 
+keyed!(
+    /// Where the status items sit in the top bar.
+    StatusPosition { Right = "right", Left = "left" }
+);
+
+/// Which status items show and where (Pocket Shelf Next's own setting, in
+/// `status-bar.json`: the current app rewrites `settings.json` with only
+/// the keys it knows, which would drop these).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct StatusLayout {
+    pub position: StatusPosition,
+    pub wifi: bool,
+    pub bluetooth: bool,
+    pub battery: bool,
+    pub clock: bool,
+}
+
+pub const STATUS_BAR_FILE: &str = "status-bar.json";
+
+impl Default for StatusLayout {
+    fn default() -> Self {
+        StatusLayout { position: StatusPosition::Right, wifi: true, bluetooth: true, battery: true, clock: true }
+    }
+}
+
+impl StatusLayout {
+    /// The saved layout; a missing or unusable value keeps its default.
+    pub fn parse(bytes: &[u8]) -> StatusLayout {
+        let mut layout = StatusLayout::default();
+        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return layout };
+        if let Some(p) = raw.get("position").and_then(Value::as_str).and_then(StatusPosition::from_key) {
+            layout.position = p;
+        }
+        let flag = |key: &str, default: bool| raw.get(key).and_then(Value::as_bool).unwrap_or(default);
+        layout.wifi = flag("wifi", layout.wifi);
+        layout.bluetooth = flag("bluetooth", layout.bluetooth);
+        layout.battery = flag("battery", layout.battery);
+        layout.clock = flag("clock", layout.clock);
+        layout
+    }
+
+    /// Two-space JSON and a newline, as the app's other files.
+    pub fn render(&self) -> String {
+        let mut map = Map::new();
+        map.insert("position".into(), self.position.key().into());
+        map.insert("wifi".into(), self.wifi.into());
+        map.insert("bluetooth".into(), self.bluetooth.into());
+        map.insert("battery".into(), self.battery.into());
+        map.insert("clock".into(), self.clock.into());
+        serde_json::to_string_pretty(&Value::Object(map)).expect("json") + "\n"
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Settings {
     pub language: Language,
@@ -68,6 +121,8 @@ pub struct Settings {
     /// Category and title selected when the settings were saved.
     pub category: Option<String>,
     pub title: Option<String>,
+    /// The status items' layout, saved in its own file (not rendered here).
+    pub layout: StatusLayout,
 }
 
 impl Settings {
@@ -89,6 +144,7 @@ impl Settings {
             scraper: ScrapeSource::Auto,
             category: None,
             title: None,
+            layout: StatusLayout::default(),
         }
     }
 
@@ -167,6 +223,15 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_status_layout_round_trips_and_defaults() {
+        let layout = StatusLayout { position: StatusPosition::Left, wifi: false, bluetooth: true, battery: false, clock: true };
+        assert_eq!(StatusLayout::parse(layout.render().as_bytes()), layout);
+        assert_eq!(layout.render(), "{\n  \"position\": \"left\",\n  \"wifi\": false,\n  \"bluetooth\": true,\n  \"battery\": false,\n  \"clock\": true\n}\n");
+        assert_eq!(StatusLayout::parse(br#"{"position":"top","clock":false}"#), StatusLayout { clock: false, ..Default::default() });
+        assert_eq!(StatusLayout::parse(b"nope"), StatusLayout::default());
+    }
 
     #[test]
     fn unusable_values_keep_the_defaults() {

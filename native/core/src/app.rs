@@ -160,6 +160,9 @@ impl App {
             if let Some(bytes) = host.read(SETTINGS_FILE) {
                 settings = Settings::parse(&bytes, settings);
             }
+            if let Some(bytes) = host.read(crate::library::settings::STATUS_BAR_FILE) {
+                settings.layout = crate::library::settings::StatusLayout::parse(&bytes);
+            }
             self.theme = theme_by_id(settings.theme);
             self.language = settings.language;
             let library = Library::load(host);

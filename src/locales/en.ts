@@ -69,6 +69,13 @@ export const en = {
   clock: "Clock",
   clockFormats: { system: "System", "12": "12-hour", "24": "24-hour" },
   batteryPercent: "Battery percent",
+  /** Pocket Shelf Next: where the status items sit, and each item shown or not. */
+  statusPosition: "Position",
+  left: "Left",
+  right: "Right",
+  wifi: "Wi-Fi",
+  bluetooth: "Bluetooth",
+  battery: "Battery",
   categoriesRow: "Categories",
   manage: "Manage",
   confirm: "Confirm",

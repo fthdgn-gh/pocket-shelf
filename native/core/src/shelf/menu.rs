@@ -22,6 +22,10 @@ pub enum Item {
     Backdrop,
     IconBox,
     StatusBar,
+    StatusPosition,
+    ShowWifi,
+    ShowBluetooth,
+    ShowBattery,
     Clock,
     BatteryPercent,
     Categories,
@@ -45,7 +49,7 @@ pub fn items(page: Page) -> &'static [Item] {
     match page {
         Page::Main => &[Open(Page::Appearance), Open(Page::Library), Open(Page::Updates), Confirm, Language, Diagnostics],
         Page::Appearance => &[Theme, View, Details, Backdrop, IconBox, Open(Page::Status)],
-        Page::Status => &[StatusBar, Clock, BatteryPercent],
+        Page::Status => &[StatusBar, StatusPosition, ShowWifi, ShowBluetooth, ShowBattery, BatteryPercent, Clock],
         Page::Library => &[Categories, FetchArt, CleanArt, Rescan],
         Page::Updates => &[UpdateChannel, CheckUpdates],
     }

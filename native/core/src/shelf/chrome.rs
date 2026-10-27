@@ -2,14 +2,14 @@
 //! items (`components/status-bar.tsx`) and the footer
 //! (`components/footer.tsx`).
 
-use super::layout::{BAR_H, BAR_SIDE, PILL_ROOM, STATUS_W, TAB_GAP, TAB_MAX};
+use super::layout::{BAR_H, BAR_SIDE, PILL_ROOM, TAB_GAP, TAB_MAX};
 use super::tween::Tween;
 use crate::gfx::{Color, Gfx, Rect};
 use crate::host::Status;
 use crate::i18n::fill;
 use crate::locales::Messages;
 use crate::library::categories::Category;
-use crate::library::settings::{ClockFormat, ConfirmMode, Settings};
+use crate::library::settings::{ClockFormat, ConfirmMode, Settings, StatusPosition};
 use crate::shapes::{Icon, Symbol};
 use crate::text::Role;
 use crate::theme::{is_light, Theme};
@@ -73,11 +73,6 @@ pub struct HeaderInput<'a> {
 }
 
 impl Header {
-    /// The room for the names: the bar less its padding, L and R, and the
-    /// status items.
-    fn room(status_bar: bool) -> f32 {
-        W - BAR_SIDE * 2.0 - PILL_ROOM * 2.0 - if status_bar { STATUS_W } else { 0.0 }
-    }
 
     fn measure(&mut self, gfx: &mut Gfx, tabs: &[Category]) {
         let labels: Vec<(String, String)> = tabs.iter().map(|c| (c.id.clone(), c.label.clone())).collect();
@@ -101,7 +96,13 @@ impl Header {
     pub fn draw(&mut self, gfx: &mut Gfx, input: &HeaderInput) {
         let theme = input.theme;
         self.measure(gfx, input.tabs);
-        let room = Header::room(input.settings.status_bar);
+        // The status items take the width of the ones shown (and 6 apart
+        // from L or R); the names have the rest.
+        let items = if input.settings.status_bar { status_parts(gfx, input.settings, input.status) } else { Vec::new() };
+        let items_w = parts_width(&items);
+        let status_w = if items.is_empty() { 0.0 } else { items_w + 6.0 };
+        let left = input.settings.layout.position == StatusPosition::Left;
+        let room = W - BAR_SIDE * 2.0 - PILL_ROOM * 2.0 - status_w;
         let index = self.names.iter().position(|n| n.id == input.current).unwrap_or(0);
         // The current name in the middle between L and R, at every press.
         let target = self.names.get(index).map_or(0.0, |n| n.left + n.width / 2.0 - room / 2.0);
@@ -113,10 +114,10 @@ impl Header {
         }
         let scroll = self.scroll.at(input.now);
 
-        let names_x = BAR_SIDE + PILL_ROOM;
+        let names_x = BAR_SIDE + if left { status_w } else { 0.0 } + PILL_ROOM;
         let many = self.names.len() > 1;
         if many {
-            shoulder(gfx, true, BAR_SIDE, (BAR_H - 16.0) / 2.0);
+            shoulder(gfx, true, names_x - PILL_ROOM, (BAR_H - 16.0) / 2.0);
             shoulder(gfx, false, names_x + room + 6.0, (BAR_H - 16.0) / 2.0);
         }
 
@@ -145,8 +146,9 @@ impl Header {
         }
         gfx.clip(None);
 
-        if input.settings.status_bar {
-            status_items(gfx, theme, input.settings, input.status, W - BAR_SIDE, BAR_H / 2.0);
+        if !items.is_empty() {
+            let x = if left { BAR_SIDE } else { W - BAR_SIDE - items_w };
+            draw_parts(gfx, theme, input.settings, input.status, &items, x, BAR_H / 2.0);
         }
     }
 
@@ -164,33 +166,64 @@ fn shoulder(gfx: &mut Gfx, left: bool, x: f32, y: f32) {
     gfx.text_centered(Role::Label, cx, y + 11.2, WHITE, letter);
 }
 
-/// Wi-Fi, Bluetooth, the battery and the time, right-aligned at `right`,
-/// centered on `cy`. A reading the host cannot give is left out; Wi-Fi
-/// shows only while connected, Bluetooth only while on.
-fn status_items(gfx: &mut Gfx, theme: &Theme, settings: &Settings, status: &Status, right: f32, cy: f32) {
-    let clock24 = match settings.clock {
-        ClockFormat::System => status.clock24,
-        ClockFormat::H24 => Some(true),
-        ClockFormat::H12 => Some(false),
-    };
-    let clock = format_clock(status.hour, status.minute, clock24);
-    let width = gfx.measure(Role::BodyBold, &clock);
-    let baseline = (cy - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
-    let mut x = right - width;
-    gfx.text(Role::BodyBold, x, baseline, theme.text, &clock);
-    if let Some(percent) = status.battery {
-        x -= 8.0 + 27.0;
-        battery(gfx, theme, settings.battery_percent, percent, status.charging, x, cy - 6.0);
+/// A status item shown in the top bar.
+#[derive(Clone, PartialEq, Debug)]
+enum Part {
+    Wifi(u8),
+    Bluetooth,
+    Battery(u8),
+    Clock(String),
+}
+
+/// The status items to show, with their widths: Wi-Fi, Bluetooth, the
+/// battery and the time, each when the layout shows it and the host could
+/// read it (Wi-Fi only while connected, Bluetooth only while on).
+fn status_parts(gfx: &mut Gfx, settings: &Settings, status: &Status) -> Vec<(Part, f32)> {
+    let layout = &settings.layout;
+    let mut parts = Vec::new();
+    if let Some(wifi) = status.wifi.filter(|&w| w > 0 && layout.wifi) {
+        parts.push((Part::Wifi(wifi_level(wifi)), 12.0));
     }
-    if status.bluetooth == Some(true) {
-        x -= 8.0 + 12.0;
-        gfx.icon(Icon::Bluetooth, x, cy - 6.0, theme.text);
+    if status.bluetooth == Some(true) && layout.bluetooth {
+        parts.push((Part::Bluetooth, 12.0));
     }
-    if let Some(wifi) = status.wifi.filter(|&w| w > 0) {
-        x -= 8.0 + 12.0;
-        let level = wifi_level(wifi);
-        gfx.icon(Icon::Wifi { level, lit: false }, x, cy - 6.0, theme.text.with_a(0x44));
-        gfx.icon(Icon::Wifi { level, lit: true }, x, cy - 6.0, theme.text);
+    if let Some(percent) = status.battery.filter(|_| layout.battery) {
+        parts.push((Part::Battery(percent), BATTERY_W + 3.0));
+    }
+    if layout.clock {
+        let clock24 = match settings.clock {
+            ClockFormat::System => status.clock24,
+            ClockFormat::H24 => Some(true),
+            ClockFormat::H12 => Some(false),
+        };
+        let clock = format_clock(status.hour, status.minute, clock24);
+        let width = gfx.measure(Role::BodyBold, &clock);
+        parts.push((Part::Clock(clock), width));
+    }
+    parts
+}
+
+/// The items' width, 8 apart.
+fn parts_width(parts: &[(Part, f32)]) -> f32 {
+    parts.iter().map(|(_, w)| w).sum::<f32>() + 8.0 * parts.len().saturating_sub(1) as f32
+}
+
+/// Draw the items from `x`, centered on `cy`.
+fn draw_parts(gfx: &mut Gfx, theme: &Theme, settings: &Settings, status: &Status, parts: &[(Part, f32)], mut x: f32, cy: f32) {
+    for (part, width) in parts {
+        match part {
+            Part::Wifi(level) => {
+                gfx.icon(Icon::Wifi { level: *level, lit: false }, x, cy - 6.0, theme.text.with_a(0x44));
+                gfx.icon(Icon::Wifi { level: *level, lit: true }, x, cy - 6.0, theme.text);
+            }
+            Part::Bluetooth => gfx.icon(Icon::Bluetooth, x, cy - 6.0, theme.text),
+            Part::Battery(percent) => battery(gfx, theme, settings.battery_percent, *percent, status.charging, x, cy - 6.0),
+            Part::Clock(clock) => {
+                let baseline = (cy - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
+                gfx.text(Role::BodyBold, x, baseline, theme.text, clock);
+            }
+        }
+        x += width + 8.0;
     }
 }
 
