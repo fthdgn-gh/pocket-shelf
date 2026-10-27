@@ -74,8 +74,8 @@ the colored tiles with initials stand in for game icons.
    [![Newest release](https://img.shields.io/github/v/release/fthdgn-gh/pocket-shelf?include_prereleases&sort=semver&label=newest%20release)](https://github.com/fthdgn-gh/pocket-shelf/releases)
 
    There is no stable release yet. The current one is the beta
-   [`shelf-v0.2.0-beta.2`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.2.0-beta.2)
-   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.2.0-beta.2/pocket-shelf.vpk)).
+   [`shelf-v0.2.0-beta.3`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.2.0-beta.3)
+   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.2.0-beta.3/pocket-shelf.vpk)).
    GitHub marks betas as pre-releases, so its "Latest" label does not point to
    them. Releases come in three channels:
    - **Stable:** tested on hardware.
@@ -222,7 +222,7 @@ Three GitHub Actions workflows build and publish the VPK:
 The tag's version must be the `version` in `vita/Cargo.toml`:
 
 ```sh
-git tag shelf-v0.2.0-beta.2   # beta: published as a pre-release
+git tag shelf-v0.2.0-beta.3   # beta: published as a pre-release
 git tag shelf-v0.2.0          # stable: published as the latest release
 git push origin <tag>
 ```
