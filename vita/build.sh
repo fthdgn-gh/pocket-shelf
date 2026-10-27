@@ -15,7 +15,7 @@ export PATH="$VITASDK/bin:$HOME/.cargo/bin:$PATH"
 # else Cargo.toml's.
 rustup run nightly-2026-05-28 cargo vita build vpk --release
 out=target/armv7-sony-vita-newlibeabihf/release
-vita-make-fself -c "$out/pocket-shelf-next.velf" "$out/eboot.bin"
+vita-make-fself -c "$out/pocket-shelf.velf" "$out/eboot.bin"
 
 # param.sfo as tools/vita.ts writes it for the PocketJS build: ATTRIBUTE2=12,
 # and APP_VER, the version the system shows, as MM.mm of Cargo.toml's

@@ -1,5 +1,5 @@
 [package]
-name = "pocket-shelf-next"
+name = "pocket-shelf"
 # The app's version: APP_VER, the LiveArea text, the release tag's check,
 # and the update check (vita/build.rs) read it.
 version = "0.2.0"
