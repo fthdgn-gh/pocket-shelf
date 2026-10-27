@@ -115,6 +115,13 @@ pub enum Step {
 }
 
 impl HeldDirection {
+    /// Start a held direction's count over without a new press: after a tab
+    /// change, a direction still held waits the first delay again and moves
+    /// one at a time before it speeds up.
+    pub fn restart(&mut self) {
+        self.frames = 0;
+    }
+
     /// The first direction held this frame, in the order left, right, up,
     /// down (`DIRECTIONS` in `input.ts`).
     pub fn update(&mut self, held: Option<Direction>) -> Option<Step> {
@@ -246,6 +253,21 @@ mod tests {
         assert_eq!(move_selection(Cascade, Right, 0, 3, false), Some(1));
         assert_eq!(move_selection(Cascade, Down, 0, 3, false), None);
         assert_eq!(move_selection(Cascade, Right, 2, 3, true), Some(0));
+    }
+
+    #[test]
+    fn restart_drops_back_to_single_steps() {
+        let mut held = HeldDirection::default();
+        held.update(Some(Down));
+        let mut last = None;
+        for _ in 0..200 {
+            last = held.update(Some(Down)).or(last);
+        }
+        assert_eq!(last, Some(Step::Repeat(Down, 20)));
+        held.restart();
+        // No press of its own; the first repeat after the delay is one step.
+        let steps: Vec<Step> = (0..REPEAT_DELAY).filter_map(|_| held.update(Some(Down))).collect();
+        assert_eq!(steps, [Step::Repeat(Down, 1)]);
     }
 
     #[test]
