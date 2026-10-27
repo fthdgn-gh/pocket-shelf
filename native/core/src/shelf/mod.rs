@@ -493,6 +493,12 @@ impl Shelf {
         request
     }
 
+    /// Save the status items' layout (`status-bar.json`).
+    fn save_layout(&mut self, host: &mut dyn Host) {
+        let text = self.settings.layout.render();
+        host.write(crate::library::settings::STATUS_BAR_FILE, text.as_bytes());
+    }
+
     /// Open the keyboard for `target`, starting from `text`.
     fn open_keyboard(&mut self, target: keyboard::Target, text: &str) {
         self.keyboard = Some(keyboard::Keyboard::new(target, text, self.settings.language));
@@ -616,7 +622,35 @@ impl Shelf {
             }
             Item::IconBox => s.icon_box = !s.icon_box,
             Item::StatusBar => s.status_bar = !s.status_bar,
-            Item::Clock => s.clock = cycle_by(crate::library::settings::ClockFormat::ALL, s.clock, delta),
+            // The layout is Pocket Shelf Next's own file.
+            Item::StatusPosition | Item::ShowWifi | Item::ShowBluetooth | Item::ShowBattery => {
+                use crate::library::settings::StatusPosition;
+                let l = &mut s.layout;
+                match self.menu.item() {
+                    Item::StatusPosition => {
+                        l.position = if l.position == StatusPosition::Right { StatusPosition::Left } else { StatusPosition::Right }
+                    }
+                    Item::ShowWifi => l.wifi = !l.wifi,
+                    Item::ShowBluetooth => l.bluetooth = !l.bluetooth,
+                    _ => l.battery = !l.battery,
+                }
+                self.save_layout(host);
+                return;
+            }
+            Item::Clock => {
+                // System, 24-hour, 12-hour, then Off (the layout's clock).
+                use crate::library::settings::ClockFormat;
+                let steps = [Some(ClockFormat::System), Some(ClockFormat::H24), Some(ClockFormat::H12), None];
+                let now = if s.layout.clock { Some(s.clock) } else { None };
+                match cycle_by(&steps, now, delta) {
+                    Some(format) => {
+                        s.clock = format;
+                        s.layout.clock = true;
+                    }
+                    None => s.layout.clock = false,
+                }
+                self.save_layout(host);
+            }
             Item::BatteryPercent => s.battery_percent = !s.battery_percent,
             Item::UpdateChannel => s.updates = cycle_by(crate::library::settings::UpdateChannel::ALL, s.updates, delta),
             Item::Confirm => {
@@ -1055,9 +1089,17 @@ impl Shelf {
             Item::Backdrop => (t.backdrop, on_off(s.backdrop), None, Both),
             Item::IconBox => (t.icon_box, on_off(s.icon_box), None, Both),
             Item::StatusBar => (t.show_status_bar, on_off(s.status_bar), None, Both),
+            Item::StatusPosition => {
+                let left = s.layout.position == crate::library::settings::StatusPosition::Left;
+                (t.status_position, Some(if left { t.left } else { t.right }.into()), None, Both)
+            }
+            Item::ShowWifi => (t.wifi, on_off(s.layout.wifi), None, Both),
+            Item::ShowBluetooth => (t.bluetooth, on_off(s.layout.bluetooth), None, Both),
+            Item::ShowBattery => (t.battery, on_off(s.layout.battery), None, Both),
             Item::Clock => {
                 let c = &t.clock_formats;
                 let name = match s.clock {
+                    _ if !s.layout.clock => t.off,
                     ClockFormat::System => c.system,
                     ClockFormat::H24 => c.h24,
                     ClockFormat::H12 => c.h12,
@@ -1480,6 +1522,29 @@ mod tests {
         assert!(shelf.tabs.iter().all(|c| c.id != "homebrew"));
         press(&mut shelf, &mut host, START);
         assert!(shelf.library.config.hidden.is_empty());
+    }
+
+    #[test]
+    fn the_status_layout_is_saved_in_its_own_file() {
+        use crate::library::settings::{StatusLayout, StatusPosition, STATUS_BAR_FILE};
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        // Appearance > Status bar > Position: left; then the clock off (left
+        // from System).
+        for button in [SELECT, RIGHT, UP, RIGHT, DOWN, RIGHT] {
+            press(&mut shelf, &mut host, button);
+        }
+        for _ in 0..5 {
+            press(&mut shelf, &mut host, DOWN);
+        }
+        press(&mut shelf, &mut host, LEFT);
+        let saved = StatusLayout::parse(&host.files.0[STATUS_BAR_FILE]);
+        assert_eq!(saved, StatusLayout { position: StatusPosition::Left, clock: false, ..Default::default() });
+        // settings.json does not carry the layout.
+        let settings = host.files.0.get(SETTINGS_FILE).map(|b| String::from_utf8(b.clone()).unwrap()).unwrap_or_default();
+        assert!(!settings.contains("position"));
+        // Right again from Off: the clock is back with its format.
+        press(&mut shelf, &mut host, RIGHT);
+        assert!(StatusLayout::parse(&host.files.0[STATUS_BAR_FILE]).clock);
     }
 
     #[test]
