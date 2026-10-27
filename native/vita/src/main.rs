@@ -150,6 +150,10 @@ fn main() {
         // (`platform::installed::finish_launch`). A request the system refuses returns
         // here and the app goes on.
         if let Some(shelf_core::shelf::Request::Launch(id)) = app.request.take() {
+            // The launch frame's own breakdown: the process ends before the
+            // next frame would log it as slow.
+            let so_far = (now_us() - start) as u32;
+            host.log(&trace.line(frame, so_far, cpu_us));
             host.log(&format!("launch {id}: frames {}  {}", app.stats.frames, app.stats.line()));
             // "Last Played" and the settings are on the card, and the log
             // thread has written the line, before the process ends.

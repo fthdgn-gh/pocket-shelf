@@ -27,7 +27,8 @@ impl Shelf {
         let label = self.library.base_game(&game.id).map(|g| g.title.to_string()).unwrap_or_default();
         let term = if scraper == Scraper::Libretro && !label.is_empty() { label } else { game.title.to_string() };
         let t = self.t();
-        let (online, actions) = Online::start(host, t, scraper, &game.id, folder, &term, &mut self.listings);
+        let art = self.library.art_names().cloned().collect();
+        let (online, actions) = Online::start(host, t, scraper, &game.id, folder, &term, art, &mut self.listings);
         self.online = Some(online);
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);

@@ -489,7 +489,7 @@ impl Shelf {
                 self.open_search();
             }
             if pressed & TRIANGLE != 0 {
-                self.open_editor(host);
+                self.open_editor();
             }
         }
 
@@ -752,8 +752,10 @@ impl Shelf {
     /// "close this application?" prompt.
     fn launch_selected(&mut self, host: &mut dyn Host) -> Option<Request> {
         let game = self.selected_game()?.clone();
+        let started = host.time_us();
         if game.adrenaline {
             let state = host.plugin_state();
+            host.log(&format!("launch: plugin state in {} ms", (host.time_us() - started) / 1000));
             if state != PluginState::On {
                 self.adrenaline = Some((state, false));
                 self.drawer = panel::slide();
@@ -767,7 +769,10 @@ impl Shelf {
         host.write(RECENT_FILE, crate::library::recent::render(&list).as_bytes());
         self.persist(host);
         host.log(&format!("Launch requested: {}", game.id));
-        if !host.launch(&game.id) {
+        let asked = host.time_us();
+        let accepted = host.launch(&game.id);
+        host.log(&format!("launch: host took {} ms (whole step {} ms)", (host.time_us() - asked) / 1000, (host.time_us() - started) / 1000));
+        if !accepted {
             host.log(&format!("Launch rejected: {}", game.id));
             host.write(RECENT_FILE, crate::library::recent::render(&before).as_bytes());
             return None;
