@@ -164,7 +164,13 @@ the user.
 
 ## Decisions
 
-- Side by side as **Pocket Shelf Next**, `PSHLFNEXT` (2026-10-27).
+- Side by side as **Pocket Shelf Next**, `PSHLFNEXT` (2026-10-27), until
+  the cutover: the port is `POCKTSHLF`, "Pocket Shelf", version 0.2.0, first
+  released as `shelf-v0.2.0-beta.1` (the user, 2026-10-27). The tag keeps
+  the `shelf-v` form, the only one installed copies' update check reads.
+  `shelf-build.yml` builds the native port; `build.sh` writes param.sfo as
+  the PocketJS build did (`ATTRIBUTE2=12`, `APP_VER` `00.02`) and packs
+  `src/vita/sce_sys`, `psp/` and `updater/`.
 - **Everything carries over**; dropping or adding features waits until the
   port is complete (2026-10-27).
 - **The status bar's layout** comes now, ahead of the rest of the new
