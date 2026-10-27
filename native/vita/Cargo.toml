@@ -26,9 +26,10 @@ default = ["data-fs"]
 data-fs = []
 
 [package.metadata.vita]
-# Its own bubble until the port matches the current app (native/PLAN.md).
-title_id = "PSHLFNEXT"
-title_name = "Pocket Shelf Next"
+# The app's own title id since the cutover (native/PLAN.md, phase 6): a
+# release replaces ux0:app/POCKTSHLF, and the updater app starts it.
+title_id = "POCKTSHLF"
+title_name = "Pocket Shelf"
 
 # vita-elf-create reads sceUserMainThreadStackSize from the symbol table.
 [package.metadata.vita.profile.release]
