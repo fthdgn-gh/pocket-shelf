@@ -75,6 +75,8 @@ enum Kind {
     Icon,
     /// The update package.
     Package,
+    /// A PNG kept in memory (a Find artwork candidate, written only if used).
+    Bytes,
     /// A thumbnail folder's listing page (libretro's thumbnail server): read
     /// in memory, and the file names it links to written one per line.
     Index,
@@ -150,6 +152,16 @@ fn finish(id: i32, outcome: Outcome) {
 /// first. Returns the request id, or -1 when the request is refused: not an
 /// https URL, a bad path, no free slot, or no network stack.
 pub fn start(url: &str, auth: &str, dest: Option<&str>, icon: bool) -> i32 {
+    start_kind(url, auth, dest, icon, false)
+}
+
+/// Start a GET whose PNG reply stays in memory, at most `FILE_MAX`; read
+/// it with `take_bytes`.
+pub fn start_bytes(url: &str) -> i32 {
+    start_kind(url, "", None, false, true)
+}
+
+fn start_kind(url: &str, auth: &str, dest: Option<&str>, icon: bool, bytes: bool) -> i32 {
     let plain = |text: &str| !text.bytes().any(|byte| byte < 0x20 || byte == 0x7f);
     if url.len() > 1024 || auth.len() > 256 || !plain(url) || !plain(auth) || parse_url(url).is_none() {
         return -1;
@@ -181,6 +193,7 @@ pub fn start(url: &str, auth: &str, dest: Option<&str>, icon: bool) -> i32 {
     let url = String::from(url);
     let auth = String::from(auth);
     let kind = match dest {
+        None if bytes => Kind::Bytes,
         None => Kind::Text,
         Some(UPDATE_VPK) => Kind::Package,
         Some(path) if path.starts_with("libretro/") => Kind::Index,
@@ -348,7 +361,8 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &
     // app can report it.
     let saving = dest.filter(|_| status == 200);
     let limit = match (saving, kind) {
-        (None, _) | (_, Kind::Text) => TEXT_MAX,
+        (None, Kind::Bytes) if status == 200 => FILE_MAX,
+        (None, _) | (_, Kind::Text) | (_, Kind::Bytes) => TEXT_MAX,
         (Some(_), Kind::File | Kind::Icon) => FILE_MAX,
         (Some(_), Kind::Package) => VPK_MAX,
         (Some(_), Kind::Index) => INDEX_MAX,
@@ -429,6 +443,9 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &
             return Err(String::from("response cut short"));
         }
     }
+    if kind == Kind::Bytes && status == 200 && (received < head.len() || head != PNG_SIGNATURE) {
+        return Err(String::from("not a png"));
+    }
     if let (Kind::Index, Some(path)) = (kind, saving) {
         let body = with_slot(id, |slot| core::mem::take(&mut slot.body)).unwrap_or_default();
         let names = listing_names(&String::from_utf8_lossy(&body));
@@ -458,15 +475,9 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &
     Ok(status)
 }
 
-#[cfg(feature = "installed-apps")]
+/// The picture names a thumbnail listing page links to.
 fn listing_names(html: &str) -> Vec<String> {
     crate::platform::retroarch::index_names(html)
-}
-
-/// Without RetroArch support there are no listings to read.
-#[cfg(not(feature = "installed-apps"))]
-fn listing_names(_html: &str) -> Vec<String> {
-    Vec::new()
 }
 
 /// Write `bytes` to `path` through a `.part` file, so a reader never sees half of it.
@@ -482,10 +493,13 @@ fn write_atomic(path: &str, bytes: &[u8]) -> Result<(), String> {
 
 /// The PNG at `path` fitted whole into a 128 px square with clear bars
 /// (`pspemu::fit_png`, as a PSP icon), encoded as an RGBA PNG.
-#[cfg(feature = "installed-apps")]
 fn shrink_icon(path: &str) -> Result<Vec<u8>, String> {
-    let bytes = fs::read(path).map_err(|_| String::from("file read"))?;
-    let (width, height, rgba) = crate::platform::pspemu::fit_png(&bytes).ok_or_else(|| String::from("not a png it can read"))?;
+    shrink_bytes(&fs::read(path).map_err(|_| String::from("file read"))?)
+}
+
+/// A PNG in memory fitted whole into a 128 px square, as an RGBA PNG.
+pub fn shrink_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let (width, height, rgba) = crate::platform::pspemu::fit_png(bytes).ok_or_else(|| String::from("not a png it can read"))?;
     let mut out = Vec::new();
     {
         let mut encoder = png::Encoder::new(&mut out, width, height);
@@ -495,12 +509,6 @@ fn shrink_icon(path: &str) -> Result<Vec<u8>, String> {
         writer.write_image_data(&rgba).map_err(|_| String::from("png encode"))?;
     }
     Ok(out)
-}
-
-/// Without the PNG decoder, the picture is kept as it is.
-#[cfg(not(feature = "installed-apps"))]
-fn shrink_icon(path: &str) -> Result<Vec<u8>, String> {
-    fs::read(path).map_err(|_| String::from("file read"))
 }
 
 /// One line describing a request; see the module comment.
@@ -526,6 +534,11 @@ pub fn state(id: i32) -> String {
 /// The response text of a finished request, with invalid UTF-8 replaced.
 pub fn text(id: i32) -> String {
     with_slot(id, |slot| String::from_utf8_lossy(&slot.body).into_owned()).unwrap_or_default()
+}
+
+/// The reply of a finished request as bytes, taken out of the slot.
+pub fn take_bytes(id: i32) -> Vec<u8> {
+    with_slot(id, |slot| core::mem::take(&mut slot.body)).unwrap_or_default()
 }
 
 /// Cancel a request that is still running and forget it.

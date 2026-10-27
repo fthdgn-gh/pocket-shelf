@@ -93,7 +93,7 @@ fn read_title(title_id: &str) -> Option<Vec<u8>> {
 
 /// Decode, crop to the screen's shape and box-filter down. Returns the
 /// texture's width and height and its RGBA pixels.
-fn decode(bytes: &[u8]) -> Option<Pixels> {
+pub(crate) fn decode(bytes: &[u8]) -> Option<Pixels> {
     let started = crate::host::now_us();
     let mut decoder = png::Decoder::new(bytes);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
