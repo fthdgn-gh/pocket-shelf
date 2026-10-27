@@ -51,8 +51,11 @@ pub struct Picture {
 pub enum PictureKey {
     /// A title's icon (`icon0.png` and its stand-ins).
     Icon(String),
-    /// A title's full-screen picture (`pic0.png` and its stand-ins).
-    Backdrop(String),
+    /// A box art file in `art/`, which a title shows in place of its icon.
+    Art(String),
+    /// A title's full-screen picture: the file the user chose in
+    /// `backdrops/`, or (`file` empty) `pic0.png` and its stand-ins.
+    Backdrop { id: String, file: String },
 }
 
 /// What a running scan is reading (`installed.rs`): one step per app
@@ -110,13 +113,31 @@ pub enum Event {
     Picture(PictureKey, Option<Picture>),
 }
 
+/// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP
+/// or PS1 title with no bubble (`pspemu::plugin_state`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PluginState {
+    NoAdrenaline,
+    /// Not in Adrenaline's plugin lists.
+    Missing,
+    /// In a list, turned off.
+    Off,
+    On,
+}
+
 pub trait Host {
     /// Microseconds since the process started.
     fn time_us(&self) -> u64;
     /// A file in the app's data folder, by a path relative to it.
     fn read(&mut self, path: &str) -> Option<Vec<u8>>;
     /// Write a file in the data folder; false when it could not be written.
+    /// A host may write later, in order (the Vita writes on a worker thread:
+    /// a write to the memory card took 24–30 ms of a frame); `flush` waits
+    /// for every write asked for so far.
     fn write(&mut self, path: &str, data: &[u8]) -> bool;
+    /// Wait until every write and delete asked for so far is done: before a
+    /// launch ends the process.
+    fn flush(&mut self) {}
     /// Delete a file in the data folder; true when it is gone (also when it
     /// was not there).
     fn remove(&mut self, path: &str) -> bool;
@@ -127,8 +148,20 @@ pub trait Host {
     fn scan(&mut self);
     /// Ask for a picture; answered with [`Event::Picture`].
     fn request(&mut self, key: PictureKey);
+    /// Take back a request not yet started (an icon scrolled past); it may
+    /// still be answered if decoding began.
+    fn cancel(&mut self, _key: &PictureKey) {}
     /// Answers that arrived since the last call.
     fn poll(&mut self, events: &mut Vec<Event>);
     /// A line for the app's own log.
     fn log(&mut self, line: &str);
+    /// Accept a launch of a listed title, sent once the frame that asked is
+    /// on screen (the platform's `finish_launch`); false when refused.
+    fn launch(&mut self, id: &str) -> bool;
+    /// Adrenaline's boot plugin, checked before a title with no bubble
+    /// starts.
+    fn plugin_state(&mut self) -> PluginState;
+    /// Add the plugin to Adrenaline's lists or turn it on there (the user
+    /// agreed); true when it is now on.
+    fn enable_plugin(&mut self) -> bool;
 }

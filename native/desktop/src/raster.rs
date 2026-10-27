@@ -18,10 +18,11 @@ impl Canvas {
 
     pub fn run(&mut self, cmds: &[Cmd], textures: &Textures) {
         self.pixels.fill([0.0; 3]);
-        let mut clip = Rect::new(0.0, 0.0, self.w as f32, self.h as f32);
+        // The core cuts every rectangle to its clip; the canvas only keeps
+        // to its own edges.
+        let clip = Rect::new(0.0, 0.0, self.w as f32, self.h as f32);
         for cmd in cmds {
             match *cmd {
-                Cmd::Clip(rect) => clip = rect.unwrap_or(Rect::new(0.0, 0.0, self.w as f32, self.h as f32)),
                 Cmd::Fill { rect, color } => self.each(rect, clip, |_, _| tint([1.0; 4], color)),
                 Cmd::Image { tex, src, dst, tint: color } => {
                     let texture = textures.get(tex);

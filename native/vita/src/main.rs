@@ -107,14 +107,12 @@ fn main() {
         let pad = read_pad();
         let pressed = pad & !previous_pad;
         previous_pad = pad;
-        for (bit, name) in [(buttons::TRIANGLE, "TRIANGLE"), (buttons::SELECT, "SELECT"), (buttons::START, "START")] {
+        // Until the SELECT menu: SELECT the view, START the details, SQUARE
+        // the theme, TRIANGLE the test titles.
+        for (bit, name) in [(buttons::TRIANGLE, "TRIANGLE"), (buttons::SELECT, "SELECT"), (buttons::START, "START"), (buttons::SQUARE, "SQUARE")] {
             if pressed & bit != 0 {
                 host.log(&format!("pressed {name} at frame {frame}"));
             }
-        }
-        if pressed & buttons::SELECT != 0 {
-            host.log(&format!("before reset: frames {}  {}", app.stats.frames, app.stats.line()));
-            slow_logged = 0;
         }
         app.update(&mut host, pad);
         if app.quit {
@@ -127,6 +125,9 @@ fn main() {
         trace.commands = gfx.cmds.len() as u32;
         trace.glyphs = gfx.work.glyphs;
         trace.textures_added = gfx.work.textures_added;
+        if gfx.work.atlas_reset {
+            host.log(&format!("glyph atlas started over ({} times)", gfx.atlas_resets()));
+        }
         trace.draw = lap();
 
         let uploads = unsafe { backend.sync(&mut gfx.textures) };
@@ -143,6 +144,23 @@ fn main() {
         trace.submit = lap();
         let cpu_us = (now_us() - work_start) as u32;
         unsafe { vita2d_swap_buffers() };
+
+        // A launch the host accepted: this frame (with its "Launching" line)
+        // is on screen, so the request goes out and the process ends
+        // (`platform::installed::finish_launch`). A request the system refuses returns
+        // here and the app goes on.
+        if let Some(shelf_core::shelf::Request::Launch(id)) = app.request.take() {
+            host.log(&format!("launch {id}: frames {}  {}", app.stats.frames, app.stats.line()));
+            // "Last Played" and the settings are on the card, and the log
+            // thread has written the line, before the process ends.
+            host.flush();
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            unsafe {
+                vita2d_wait_rendering_done();
+                platform::installed::finish_launch();
+            }
+            host.log(&format!("launch {id} refused by the system"));
+        }
 
         frame += 1;
         if frame == 1 {

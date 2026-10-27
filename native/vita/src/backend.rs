@@ -222,11 +222,6 @@ impl Backend {
                         abgr(tint),
                     );
                 }
-                Cmd::Clip(Some(r)) => {
-                    vita2d_set_clip_rectangle(r.x as i32, r.y as i32, (r.x + r.w) as i32, (r.y + r.h) as i32);
-                    vita2d_enable_clipping();
-                }
-                Cmd::Clip(None) => vita2d_disable_clipping(),
             }
         }
     }

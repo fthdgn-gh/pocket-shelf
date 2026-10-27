@@ -94,8 +94,12 @@ fn read_title(title_id: &str) -> Option<Vec<u8>> {
 /// Decode, crop to the screen's shape and box-filter down. Returns the
 /// texture's width and height and its RGBA pixels.
 fn decode(bytes: &[u8]) -> Option<Pixels> {
+    let started = crate::host::now_us();
     let mut decoder = png::Decoder::new(bytes);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    // A damaged file shows as a damaged picture; the CRC and Adler checks
+    // cost time on every decode.
+    decoder.ignore_checksums(true);
     let mut reader = decoder.read_info().ok()?;
     let (width, height) = {
         let info = reader.info();
@@ -109,6 +113,7 @@ fn decode(bytes: &[u8]) -> Option<Pixels> {
     buffer.try_reserve_exact(size).ok()?;
     buffer.resize(size, 0);
     let info = reader.next_frame(&mut buffer).ok()?;
+    let decoded = crate::host::now_us();
     let channels = match info.color_type {
         png::ColorType::Rgba => 4,
         png::ColorType::Rgb => 3,
@@ -138,22 +143,22 @@ fn decode(bytes: &[u8]) -> Option<Pixels> {
     let cells = (out_w * out_h) as usize;
     let mut sums = vec![0u32; cells * 4];
     let mut counts = vec![0u32; cells];
+    // Each source column's texel column, worked out once: a 64-bit division
+    // per pixel is a library call on the Vita's 32-bit CPU, and it was most
+    // of a backdrop's 0.5–1.4 s on hardware.
+    let columns: Vec<u32> = (0..crop_w).map(|x| (x as u64 * out_w as u64 / crop_w as u64) as u32).collect();
+    let row_bytes = crop_w as usize * channels;
     for y in origin_y..origin_y + crop_h {
-        let start = y as usize * info.line_size;
-        let row = buffer.get(start..start + info.line_size)?;
-        let dest_y = ((y - origin_y) as u64 * out_h as u64 / crop_h as u64) as usize;
-        for x in origin_x..origin_x + crop_w {
-            let at = x as usize * channels;
-            let pixel = row.get(at..at + channels)?;
-            let (r, g, b) = match channels {
-                4 | 3 => (pixel[0], pixel[1], pixel[2]),
-                _ => (pixel[0], pixel[0], pixel[0]),
-            };
-            let dest_x = ((x - origin_x) as u64 * out_w as u64 / crop_w as u64) as usize;
-            let cell = dest_y * out_w as usize + dest_x;
-            sums[cell * 4] += r as u32;
-            sums[cell * 4 + 1] += g as u32;
-            sums[cell * 4 + 2] += b as u32;
+        let start = y as usize * info.line_size + origin_x as usize * channels;
+        let row = buffer.get(start..start + row_bytes)?;
+        let base = ((y - origin_y) as u64 * out_h as u64 / crop_h as u64) as usize * out_w as usize;
+        for (pixel, &column) in row.chunks_exact(channels).zip(&columns) {
+            let (r, g, b) = if channels >= 3 { (pixel[0], pixel[1], pixel[2]) } else { (pixel[0], pixel[0], pixel[0]) };
+            let cell = base + column as usize;
+            let sum = &mut sums[cell * 4..cell * 4 + 3];
+            sum[0] += r as u32;
+            sum[1] += g as u32;
+            sum[2] += b as u32;
             counts[cell] += 1;
         }
     }
@@ -166,6 +171,11 @@ fn decode(bytes: &[u8]) -> Option<Pixels> {
         }
         rgba.push(255);
     }
+    crate::host::log_line(&format!(
+        "backdrop {width}x{height}: decode {} ms, scale {} ms",
+        (decoded - started) / 1000,
+        (crate::host::now_us() - decoded) / 1000
+    ));
     Some((out_w, out_h, rgba))
 }
 
@@ -208,13 +218,17 @@ pub unsafe fn picture(title_id: &str, file: &str) -> Option<Pixels> {
         return None;
     }
     let retro = retro.unwrap_or_default();
+    let read = crate::host::now_us();
     let bytes = match (path, &classic) {
         (Some(path), _) => read_png(&path),
         (None, Some(files)) => crate::platform::pspemu::picture(files),
         (None, None) if !retro.is_empty() => retro.iter().find_map(|path| read_png(path)),
         (None, None) => read_title(title_id),
     };
-    let pixels = bytes.and_then(|bytes| decode(&bytes));
+    let pixels = bytes.and_then(|bytes| {
+        crate::host::log_line(&format!("backdrop {title_id}: read {} KB in {} ms", bytes.len() / 1024, (crate::host::now_us() - read) / 1000));
+        decode(&bytes)
+    });
     // A title's own files do not change while the launcher runs. A file in
     // the data folder can appear later (a download), so it is tried again.
     if pixels.is_none() && file.is_empty() {

@@ -17,7 +17,10 @@ JavaScript engine. It builds as its own bubble, **Pocket Shelf Next**
 Screens are laid out in 480×272 logical units, the numbers the current UI's
 `layout.ts` and class literals use; `Gfx` records commands at 2× (960×544).
 The core emits two primitives: a filled rectangle and a tinted part of a
-texture, plus clip changes. Rounded rectangles, rings, soft shadows and the
+texture. **A clip is applied on the CPU**: each rectangle and its texture
+coordinates are cut to it, so a backend draws no stencil (vita2d's clip
+cost two full-screen stencil draws per change, and the clipped top bar
+flickered on hardware). Rounded rectangles, rings, soft shadows and the
 button symbols are coverage masks computed once on the CPU and drawn tinted;
 an icon's corners are rounded in its RGBA data when it arrives. Text is
 Figtree through `fontdue`, one 1024×1024 glyph atlas, the roles of
@@ -63,11 +66,16 @@ current app writes** (`library/round_trip.rs`): the fixtures in
 current app drops (unknown values, bad ids, labels over 16 characters,
 titles over 40), with the same cases tested.
 
-The Vita host still refuses `write` and `remove` in
-`ux0:data/PocketShelf/`: the development screen changes nothing, and writing
-is turned on with the first screen that does (phase 3: a launch writes
-`recent.json` and `settings.json`). This build's log is
-`ux0:data/PocketShelfNext/log.txt`.
+**The Vita host writes `ux0:data/PocketShelf/` only for the files with a
+round-trip test**: `settings.json`, `categories.json`, `recent.json`,
+`titles.cache.json` and `titles/<id>.json` (`writable` in `vita/host.rs`);
+it deletes only `titles/<id>.json`. **Writes run on a file thread, in
+order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
+in the frame took 24–30 ms, so every view change was a missed refresh.
+`Host::flush` waits for them before a launch ends the process. The folder
+is the current app's, so a
+setting changed in this build is the current app's setting too. This
+build's log is `ux0:data/PocketShelfNext/log.txt`.
 
 **Titles reach the frame loop as `Game` values made on the host's thread**
 (`load_catalog`, then `Event::Titles`), and a `Game`'s strings are
@@ -79,32 +87,63 @@ Vita's 32-bit CPU. With 5,738 titles, the rebuild is 11.6 ms in Vita3K and
 lookups and the hasher changed). The log has a
 `library: <n> titles in <us>` line for each rebuild.
 
-## The development screen
+## The shelf
 
-Until the real views arrive (phase 3), one screen: the current tab's titles
-in a grid, the selected title's backdrop behind it, the tab's name and place
-at the top, and under the grid the title with its platform, category, id
-and favorite mark. The saved theme and selection are used at start. D-pad
-moves (a press wraps, a held direction repeats and stops at the ends), L
-and R change the tab, SQUARE the theme (not saved), TRIANGLE adds or removes
-5,000 test titles (Homebrew), SELECT resets the timing, START quits.
+`core/src/shelf/` draws the current app's shelf from its state every frame:
+the top bar with the sliding tab names and the status items (`chrome.rs`),
+the five views at the three detail levels (`views.rs`), the art with its
+icon box and initials (`art.rs`), backdrops with their wash, the tint wash,
+the Dynamic theme's blend, the footer, and drawers (`panel.rs`). Sizes and
+timings are the current app's (`layout.rs`, `navigation.rs`); the motion
+that `animate` tweens there is a `Tween` per value here, eased out over the
+same time. Tiles are square and the selection ring has radius 3, as in the
+current app.
 
-On a first start (no `titles.tsv`), the scan page shows instead: the mark,
+**Pictures** decode on two threads in the Vita host: icons and box art in
+the order asked, and backdrops, where only the newest request waits
+(`Requests` in `vita/host.rs`). Each frame the shelf asks for the pictures
+near the selection and takes back (`Host::cancel`) the requests for titles
+it scrolled past (`Art::want`). With one queue for both, a fast scroll
+queued an icon for every title passed, and the backdrop of the title the
+user stopped on waited behind them while the previous one stayed up. The
+three most recent backdrops stay in memory after they leave the screen
+(`BACKDROPS_KEPT`, as the current app's `art-files.ts`), so going back to a
+title shows its picture at once. A backdrop decoded in 0.5–1.4 s on
+hardware; its scaling did a 64-bit division per source pixel, a library
+call on the Vita's 32-bit CPU, and now reads each column's texel from a
+table; PNG checksums are skipped. The log splits each backdrop into read,
+decode and scale times.
+
+**Launching** (`launch_selected`): a title with no bubble first needs
+Adrenaline's boot plugin on, and the drawer offers to add it or turn it on;
+then `recent.json` and `settings.json` are written, the host accepts the id
+(`installed::launch`), and once the frame with the "Launching" line is on
+screen the main loop sends the request and the process ends
+(`installed::finish_launch`). A launch the host rejects puts `recent.json`
+back. The VPK carries `psp/pocketshelf.prx`, which an Adrenaline launch
+copies to the memory stick.
+
+**Until the SELECT menu (phase 4)**: SELECT steps the view, START the detail
+level, SQUARE the theme (each saved), TRIANGLE adds or removes 5,000 test
+titles. The footer already shows the current app's hints (Edit, Search,
+Menu).
+
+On a first start (no `titles.tsv`), the scan page shows first: the mark,
 the name, a bar and the phase with its count (`components/scan-page.tsx`),
 fed by `Event::Scan`, until the titles arrive and 8 frames after.
 
-Desktop shots: `20`–`23` tabs, `30`–`33` a first start's scan page, `40`–`42`
-saved data (the user's own category, Favorites, Last Played).
+Desktop shots: `02`–`06` Home, `10`–`13` Carousel, `20`–`22` Grid, `30`–`32`
+List, `40`–`42` Cascade, `50`–`53` tabs, `60`–`63` themes, `70`–`72` the scan
+page, `80`–`82` saved data, `90` test titles, `91` launching, `92`–`93` the
+Adrenaline drawer.
 
 ## Timing
 
-Top right: CPU time per frame and the time from one frame's start to the
-next (averages over 120 frames, then maximums), and frames over 20 ms, since
-the start or the last SELECT. The log gets:
+The log gets (the Diagnostics screen, phase 4, will show the same):
 
-- the scan's time, presses of TRIANGLE, SELECT and START, and the timing line
-  at frames 600 and 1800, before a SELECT reset and at START;
-- **each frame over 25 ms** (a missed display refresh), at most 200 per run
-  or per SELECT, with where its time went: waiting for the GPU, host answers
+- the scan's time, the library's rebuilds, presses of SELECT, START, SQUARE
+  and TRIANGLE, and the timing line at frames 600 and 1800 and at a launch;
+- **each frame over 25 ms** (a missed display refresh), at most 200 per run,
+  with where its time went: waiting for the GPU, host answers
   taken (and how many), update, draw (commands, new glyphs, new textures),
   texture uploads (count, KB), and handing the commands to the GPU.

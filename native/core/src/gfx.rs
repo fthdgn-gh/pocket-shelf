@@ -228,8 +228,6 @@ pub enum Cmd {
     /// Draw the `src` part of a texture (in texels) into `dst`, scaled,
     /// every texel multiplied by `tint`.
     Image { tex: TexId, src: Rect, dst: Rect, tint: Color },
-    /// Later commands draw only inside the rectangle; `None` lifts it.
-    Clip(Option<Rect>),
 }
 
 /// What a frame did that can cost time, for the slow-frame log.
@@ -237,6 +235,8 @@ pub enum Cmd {
 pub struct FrameWork {
     pub glyphs: u32,
     pub textures_added: u32,
+    /// The glyph atlas started over at this frame's start.
+    pub atlas_reset: bool,
 }
 
 /// Everything a frame needs: the commands and the textures they read.
@@ -248,19 +248,37 @@ pub struct Gfx {
     pub work: FrameWork,
     pub(crate) fonts: FontState,
     pub(crate) shapes: HashMap<u64, TexId>,
+    /// The clip, in screen pixels (`Gfx::clip`).
+    clip_px: Option<Rect>,
+}
+
+/// The part of `a` inside `b`; `None` when they do not overlap.
+fn intersect(a: Rect, b: Rect) -> Option<Rect> {
+    let (x0, y0) = (a.x.max(b.x), a.y.max(b.y));
+    let (x1, y1) = (a.right().min(b.right()), a.bottom().min(b.bottom()));
+    (x1 > x0 && y1 > y0).then(|| Rect::new(x0, y0, x1 - x0, y1 - y0))
 }
 
 impl Gfx {
     pub fn new(scale: f32) -> Self {
         let mut textures = Textures::default();
         let fonts = FontState::new(&mut textures);
-        Gfx { textures, cmds: Vec::with_capacity(1024), scale, work: FrameWork::default(), fonts, shapes: HashMap::new() }
+        Gfx { textures, cmds: Vec::with_capacity(1024), scale, work: FrameWork::default(), fonts, shapes: HashMap::new(), clip_px: None }
     }
 
     /// Start a frame: drop the previous frame's commands, keep the textures.
     pub fn begin(&mut self) {
         self.cmds.clear();
+        self.clip_px = None;
         self.work = FrameWork::default();
+        let resets = self.fonts.resets;
+        self.fonts.begin(&mut self.textures);
+        self.work.atlas_reset = self.fonts.resets != resets;
+    }
+
+    /// Times the glyph atlas started over since the start.
+    pub fn atlas_resets(&self) -> u32 {
+        self.fonts.resets
     }
 
     /// Add a texture, counted in the frame's work.
@@ -270,15 +288,34 @@ impl Gfx {
     }
 
     pub(crate) fn raw_fill(&mut self, rect: Rect, color: Color) {
+        let rect = match self.clip_px {
+            Some(clip) => match intersect(rect, clip) {
+                Some(cut) => cut,
+                None => return,
+            },
+            None => rect,
+        };
         if color.a > 0 && rect.w > 0.0 && rect.h > 0.0 {
             self.cmds.push(Cmd::Fill { rect, color });
         }
     }
 
     pub(crate) fn raw_image(&mut self, tex: TexId, src: Rect, dst: Rect, tint: Color) {
-        if tint.a > 0 && dst.w > 0.0 && dst.h > 0.0 {
-            self.cmds.push(Cmd::Image { tex, src, dst, tint });
+        if tint.a == 0 || dst.w <= 0.0 || dst.h <= 0.0 {
+            return;
         }
+        let (src, dst) = match self.clip_px {
+            Some(clip) => {
+                let Some(cut) = intersect(dst, clip) else { return };
+                // The texels that land in the cut part: the same fractions of
+                // the source as of the destination.
+                let (kx, ky) = (src.w / dst.w, src.h / dst.h);
+                let src = Rect::new(src.x + (cut.x - dst.x) * kx, src.y + (cut.y - dst.y) * ky, cut.w * kx, cut.h * ky);
+                (src, cut)
+            }
+            None => (src, dst),
+        };
+        self.cmds.push(Cmd::Image { tex, src, dst, tint });
     }
 
     /// A filled rectangle.
@@ -308,8 +345,13 @@ impl Gfx {
         self.image(tex, src, dst, tint);
     }
 
+    /// Draw only inside `rect` (logical units) until the next call; `None`
+    /// draws everywhere. Each rectangle is cut on the CPU, with its texture
+    /// coordinates: the commands need no clipping from a backend (vita2d's
+    /// goes through the stencil buffer, two full-screen draws per change,
+    /// and the clipped top bar flickered on hardware).
     pub fn clip(&mut self, rect: Option<Rect>) {
         let scale = self.scale;
-        self.cmds.push(Cmd::Clip(rect.map(|r| r.scale(scale).round())));
+        self.clip_px = rect.map(|r| r.scale(scale).round());
     }
 }
