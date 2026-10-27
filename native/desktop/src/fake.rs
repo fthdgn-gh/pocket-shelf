@@ -367,6 +367,12 @@ impl FakeHost {
         self
     }
 
+    /// The SteamGridDB key the fake server accepts, saved.
+    pub fn with_key(mut self) -> Self {
+        self.files.insert("steamgriddb.txt".into(), format!("{PREVIEW_KEY}\n").into_bytes());
+        self
+    }
+
     /// Settings saved with only a language, so the shelf shows it.
     pub fn with_language(mut self, key: &str) -> Self {
         self.files.insert("settings.json".into(), format!("{{\"language\":\"{key}\"}}").into_bytes());

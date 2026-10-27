@@ -16,18 +16,23 @@ pub const DATA: &str = "ux0:data/PocketShelf";
 
 /// Whether this build may write `path` in the data folder: only the files
 /// whose writers reproduce the current app's output byte for byte
-/// (`core/src/library/round_trip.rs`), and this build's own
-/// `status-bar.json` (the current app does not read it).
+/// (`core/src/library/round_trip.rs`; `steamgriddb.txt` is the key and a
+/// newline), and this build's own `status-bar.json` (the current app does
+/// not read it). Downloads go to their files through `http.rs`.
 fn writable(path: &str) -> bool {
-    matches!(path, "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json") || removable(path)
+    matches!(path, "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "steamgriddb.txt")
+        || path.strip_prefix("titles/").is_some_and(|_| removable(path))
 }
 
-/// A title's changes, `titles/<id>.json`: the one kind of file this build
-/// deletes (a title reset to its defaults).
+/// The files this build deletes: a title's changes, `titles/<id>.json` (a
+/// title reset to its defaults), and a PNG in `art/` or `backdrops/` (a
+/// candidate not chosen, Clean up artwork). A name with a `/` is refused.
 fn removable(path: &str) -> bool {
-    path.strip_prefix("titles/")
-        .and_then(|name| name.strip_suffix(".json"))
-        .is_some_and(shelf_core::library::overrides::valid_title_id)
+    if let Some(name) = path.strip_prefix("titles/") {
+        return name.strip_suffix(".json").is_some_and(shelf_core::library::overrides::valid_title_id);
+    }
+    let picture = |name: &str| !name.contains('/') && !name.starts_with('.') && name.to_lowercase().ends_with(".png");
+    path.strip_prefix("art/").or_else(|| path.strip_prefix("backdrops/")).is_some_and(picture)
 }
 /// This build's own folder: its log.
 pub const OWN: &str = "ux0:data/PocketShelfNext";

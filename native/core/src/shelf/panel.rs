@@ -108,6 +108,22 @@ impl Drawer {
         self.y += ROW_H + 2.0;
     }
 
+    /// Dim text, broken into lines, from the current row down.
+    pub fn text(&mut self, gfx: &mut Gfx, text: &str) {
+        let line_h = gfx.line_height(Role::Small);
+        for line in gfx.wrap(Role::Small, text, self.w) {
+            gfx.text_top(Role::Small, self.x, self.y, self.theme.dim, &line);
+            self.y += line_h + 2.0;
+        }
+    }
+
+    /// Leave `h` units of room from the current row down; returns its top.
+    pub fn space(&mut self, h: f32) -> f32 {
+        let top = self.y;
+        self.y += h;
+        top
+    }
+
     /// Dim text, broken into lines, at the bottom above the hints.
     pub fn note(&mut self, gfx: &mut Gfx, text: &str, hint_lines: usize) {
         let lines = gfx.wrap(Role::Small, text, self.w);

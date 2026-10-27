@@ -49,6 +49,10 @@ fn german_first_start() -> fake::FakeHost {
     host
 }
 
+fn keyed() -> fake::FakeHost {
+    fake::FakeHost::new().with_key()
+}
+
 fn saved() -> fake::FakeHost {
     fake::FakeHost::new().with_saved_data()
 }
@@ -135,6 +139,17 @@ const SHOTS: &[Shot] = &[
     shot("162-status-no-wifi", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
     shot("163-status-clock-only", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
     shot("164-status-left-no-clock", &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (LEFT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
+    // Find artwork (editor, sixth row): SteamGridDB without a key, then
+    // with the fake server's key: games, candidates, one applied; libretro
+    // for a RetroArch game (SNES tab).
+    shot("170-find-art-key", &[(0, 4), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    Shot { name: "171-find-art-games", script: &[(0, 4), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: keyed },
+    Shot { name: "172-find-art-icon", script: &[(0, 4), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: keyed },
+    Shot { name: "173-find-art-backdrop", script: &[(0, 4), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (DOWN, TAP), (0, TAP), (0, SETTLE)], setup: keyed },
+    Shot { name: "174-find-art-applied", script: &[(0, 4), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (RIGHT, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, TAP), (CROSS, TAP), (0, TAP), (CROSS, TAP), (0, TAP), (CROSS, TAP), (0, TAP), (0, SETTLE)], setup: keyed },
+    shot("175-find-art-libretro", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    shot("176-find-art-libretro-icon", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    shot("177-find-art-libretro-title-404", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     // Languages: the shelf in Turkish (the dotted capital İ in a drawer
     // heading), the scan page in German.
     Shot { name: "64-turkish", script: &[(0, SETTLE)], setup: turkish },
