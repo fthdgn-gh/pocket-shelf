@@ -4,7 +4,14 @@ name: Pocket Shelf build
 # artifact. shelf-release.yml and shelf-nightly.yml call it and publish the
 # result; run it by hand (Actions ▸ Pocket Shelf build ▸ Run workflow) to check
 # a build without publishing anything.
+#
+# It also runs on every push to main. GitHub lets a run restore caches saved on
+# its own branch or on the default branch only, so main's run is what gives
+# releases (tags) and pull request branches a warm cache: the Vita standard
+# library, the dependencies and cargo-vita, instead of building them again.
 on:
+  push:
+    branches: [main]
   workflow_call:
   workflow_dispatch:
 
@@ -39,6 +46,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          # One cache for every caller (this workflow, release, nightly), and
+          # ~/.cargo/bin in it, so cargo-vita is restored rather than built.
+          shared-key: shelf-vpk
+          cache-bin: true
           workspaces: |
             vita -> target
             core -> target
