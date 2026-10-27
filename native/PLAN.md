@@ -145,7 +145,12 @@ the user.
    Fetch artwork (one request at a time, busy replies waited out, runs
    against the desktop fake server) and Clean up artwork. libretro name
    lists are read and parsed on a host thread (9,301 PlayStation names took
-   690 ms in the frame). Left: updates with the updater app.* Network and TLS (`http`, `net`), SteamGridDB and libretro
+   690 ms in the frame). Updates: the check, the drawer, download, unpack,
+   the updater app (packed as `updater/`) and its report after the restart,
+   against a desktop fake GitHub and updater. The updater app installs and
+   starts `POCKTSHLF` only, so under `PSHLFNEXT` the check runs but
+   Download says this build cannot download updates, and there is no check
+   at start; the install is seen on hardware after the cutover.* Network and TLS (`http`, `net`), SteamGridDB and libretro
    scrapers, art and backdrop pickers, Fetch artwork, Clean up artwork,
    updates with the updater app. Port `steamgriddb`, `libretro`, `updates`,
    `accent`, `status` tests.

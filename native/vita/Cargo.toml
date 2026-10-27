@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 shelf-core = { path = "../core" }
-vitasdk-sys = { version = "0.3.3", features = ["SceAppMgr_stub", "SceAppUtil_stub", "SceCtrl_stub", "SceGxm_stub", "SceLibKernel_stub", "SceKernelThreadMgr_stub", "SceNet_stub", "SceNetCtl_stub", "ScePower_stub", "SceRegistryMgr_stub", "SceRtc_stub", "SceSqlite_stub", "SceSysmodule_stub"] }
+vitasdk-sys = { version = "0.3.3", features = ["SceAppMgr_stub", "SceAppUtil_stub", "SceCtrl_stub", "SceGxm_stub", "SceLibKernel_stub", "SceKernelThreadMgr_stub", "SceNet_stub", "SceNetCtl_stub", "ScePower_stub", "SceRegistryMgr_stub", "SceRtc_stub", "SceSqlite_stub", "SceSysmodule_stub", "ScePromoterUtil_stub"] }
 vita2d-sys = "0.1.1"
 png = "0.17"
 # Raw deflate for CSO disc images and RetroArch's compressed playlists.
@@ -20,11 +20,10 @@ rustls-rustcrypto = "0.0.2-alpha"
 webpki-roots = "1"
 
 # The platform modules keep the current host's switches; this build has the
-# data folder, and the app's own update arrives in phase 5.
+# data folder.
 [features]
 default = ["data-fs"]
 data-fs = []
-self-update = []
 
 [package.metadata.vita]
 # Its own bubble until the port matches the current app (native/PLAN.md).

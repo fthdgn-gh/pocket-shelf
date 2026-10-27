@@ -12,6 +12,7 @@ pub mod menu;
 pub mod navigation;
 pub mod panel;
 mod tools;
+mod update;
 mod online;
 pub mod tween;
 mod views;
@@ -110,6 +111,8 @@ impl TileAnim {
 pub enum Request {
     /// Start this title (phase 3's launch, `installed::launch`).
     Launch(String),
+    /// Start the updater app, which installs the downloaded release.
+    Updater,
 }
 
 pub struct Shelf {
@@ -182,6 +185,9 @@ pub struct Shelf {
     /// Pictures Fetch artwork applied since the title changes were written.
     fetch_unsaved: u32,
     cleanup: Option<artwork::Cleanup>,
+    update: update::UpdateFlow,
+    /// This build (the host's `build`), for the update check.
+    pub build: crate::updates::BuildInfo,
     /// Diagnostics' highlighted row while open, and its lines (the app's
     /// frame timing and startup marks, filled while it is open).
     diagnostics: Option<usize>,
@@ -253,6 +259,8 @@ impl Shelf {
             fetch: None,
             fetch_unsaved: 0,
             cleanup: None,
+            update: Default::default(),
+            build: crate::updates::BuildInfo::local(),
             diagnostics: None,
             diagnostics_lines: Vec::new(),
             reset_stats: false,
@@ -418,6 +426,8 @@ impl Shelf {
             } else if pressed & cancel != 0 {
                 self.keyboard = None;
             }
+        } else if self.update.open {
+            self.update_input(host, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.online.is_some() {
             self.online_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.fetch.is_some() {
@@ -508,6 +518,13 @@ impl Shelf {
         // Before the selection is compared: a backdrop fetched for the
         // selected title is asked for like a newly selected one.
         self.fetch_frame(host);
+        if self.frame == 1 {
+            self.updates_at_start(host);
+        }
+        self.update_frame(host);
+        if std::mem::take(&mut self.update.launch) {
+            request = Some(Request::Updater);
+        }
         let after = (self.tab.clone(), self.selected_game().map(|g| (g.id.clone(), g.backdrop.clone())));
         // The "Launching" line goes when the selection moves; the backdrop
         // is asked for once it rests, from the first frame on.
@@ -727,8 +744,10 @@ impl Shelf {
                 self.open_cleanup(host);
                 return;
             }
-            // Updates arrive with the updater.
-            Item::CheckUpdates => return,
+            Item::CheckUpdates => {
+                self.check_updates(host);
+                return;
+            }
         }
         if self.settings.status_bar {
             self.status = host.status();
@@ -1007,6 +1026,9 @@ impl Shelf {
         if self.picker.is_some() {
             self.draw_picker(gfx);
         }
+        if self.update.open {
+            self.draw_update(gfx);
+        }
         if self.keyboard.is_some() {
             self.draw_keyboard(gfx);
         }
@@ -1201,7 +1223,7 @@ impl Shelf {
                 (t.update_channel, Some(name.into()), None, Both)
             }
             // This build's version, as `buildLabel` shows a local build's.
-            Item::CheckUpdates => (t.check_updates, Some(format!("{} (next)", env!("CARGO_PKG_VERSION"))), None, Right),
+            Item::CheckUpdates => (t.check_updates, Some(crate::updates::build_label(&self.build)), None, Right),
             Item::Confirm => (t.confirm, None, Some(chrome::Button::confirm(s.confirm)), Both),
             Item::Language => {
                 // Each language under its own name, whatever the current one.

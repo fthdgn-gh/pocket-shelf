@@ -80,7 +80,7 @@ unsafe fn find(title_id: &str) -> Option<&'static Title> {
 
 /// Title id of this VPK, when the build supplied one. It is omitted from the
 /// list so the library never offers to launch itself.
-const SELF_TITLE_ID: &str = match option_env!("VITA_DEFAULT_TITLE_ID") {
+pub(crate) const SELF_TITLE_ID: &str = match option_env!("VITA_DEFAULT_TITLE_ID") {
     Some(id) => id,
     None => "",
 };
@@ -690,7 +690,6 @@ pub unsafe fn launch(title_id: &str) -> bool {
 /// Start `title_id` after the current frame, as `launch` does, for an app
 /// the scan does not list: Pocket Shelf's updater (`update.rs`), installed
 /// moments before. Only called with that constant id.
-#[cfg(feature = "self-update")]
 pub(crate) unsafe fn launch_unlisted(title_id: &str) -> bool {
     let Ok(uri) = CString::new(format!("psgm:play?titleid={title_id}")) else {
         return false;

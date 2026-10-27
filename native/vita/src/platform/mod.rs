@@ -20,6 +20,7 @@ pub mod psm;
 pub mod pspemu;
 pub mod retroarch;
 pub mod seplugins;
+pub mod update;
 
 /// The current app's data folder (`hosts/vita/src/datafs.rs`).
 pub fn data_dir() -> String {

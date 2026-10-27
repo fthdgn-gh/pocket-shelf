@@ -244,4 +244,44 @@ pub trait Host {
     /// [`Listing::parse`](crate::online::libretro::Listing::parse) off the
     /// frame; answered with [`Event::Listing`] under `folder`.
     fn listing(&mut self, _folder: &str) {}
+
+    // --- The app's own update (`updates.rs`, the Vita's `update.rs`) -------
+
+    /// This build's version, channel and commit.
+    fn build(&self) -> crate::updates::BuildInfo {
+        crate::updates::BuildInfo::local()
+    }
+    /// Milliseconds since 1970 (the update check's record); 0 when unknown.
+    fn unix_ms(&self) -> u64 {
+        0
+    }
+    /// Whether this build can install its own update. The updater app
+    /// installs and starts `POCKTSHLF` only, so a build under another title
+    /// id checks but does not download.
+    fn can_install_update(&self) -> bool {
+        false
+    }
+    /// Unpack and check the downloaded package on a worker thread; false
+    /// while a step runs.
+    fn update_unpack(&mut self) -> bool {
+        false
+    }
+    /// Install the updater app on a worker thread; false unless unpacked.
+    fn update_install(&mut self) -> bool {
+        false
+    }
+    /// Start the updater once this frame is shown; this process then ends.
+    fn update_launch(&mut self) -> bool {
+        false
+    }
+    /// `idle`, `busy <done> <total>`, `done <version>`, `installing`,
+    /// `installed` or `error <reason>`.
+    fn update_state(&mut self) -> String {
+        "error unavailable".into()
+    }
+    /// The updater's report from its last run, read once at start: "",
+    /// `ok` or `error <reason>`.
+    fn update_result(&mut self) -> String {
+        String::new()
+    }
 }

@@ -149,7 +149,11 @@ fn main() {
         // is on screen, so the request goes out and the process ends
         // (`platform::installed::finish_launch`). A request the system refuses returns
         // here and the app goes on.
-        if let Some(shelf_core::shelf::Request::Launch(id)) = app.request.take() {
+        if let Some(request) = app.request.take() {
+            let id = match request {
+                shelf_core::shelf::Request::Launch(id) => id,
+                shelf_core::shelf::Request::Updater => String::from("the updater"),
+            };
             // The launch frame's own breakdown: the process ends before the
             // next frame would log it as slow.
             let so_far = (now_us() - start) as u32;

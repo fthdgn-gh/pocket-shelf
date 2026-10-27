@@ -53,6 +53,18 @@ fn keyed() -> fake::FakeHost {
     fake::FakeHost::new().with_key()
 }
 
+fn installable() -> fake::FakeHost {
+    let mut host = fake::FakeHost::new();
+    host.installable = true;
+    host
+}
+
+fn updated() -> fake::FakeHost {
+    let mut host = fake::FakeHost::new();
+    host.update_report = "ok".into();
+    host
+}
+
 fn saved() -> fake::FakeHost {
     fake::FakeHost::new().with_saved_data()
 }
@@ -160,6 +172,18 @@ const SHOTS: &[Shot] = &[
     shot("183-fetch-art-key", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
     shot("185-clean-up", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
     shot("186-clean-up-confirm", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    // Updates (SELECT > Updates > Check for updates) against a fake GitHub
+    // offering 0.2.0-beta.1 over the fake build's 0.1.0 (beta): offered;
+    // Download refused under the side-by-side title id; with the real one,
+    // download, unpack, install and the updater's start; the report after
+    // the restart.
+    shot("190-update-available", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    shot("191-update-not-supported", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    Shot { name: "192-update-downloading", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, 3)], setup: installable },
+    Shot { name: "193-update-unpacking", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, 30)], setup: installable },
+    Shot { name: "194-update-ready", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, 80)], setup: installable },
+    Shot { name: "195-update-restarting", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE), (CIRCLE, TAP), (0, 80), (CIRCLE, TAP), (0, 40)], setup: installable },
+    Shot { name: "196-update-done", script: &[(0, SETTLE)], setup: updated },
     // Languages: the shelf in Turkish (the dotted capital İ in a drawer
     // heading), the scan page in German.
     Shot { name: "64-turkish", script: &[(0, SETTLE)], setup: turkish },
