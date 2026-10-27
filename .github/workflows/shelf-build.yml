@@ -39,6 +39,15 @@ jobs:
           "$VITASDK/bin/vdpm" install libvita2d taihen
           echo "$VITASDK/bin" >> "$GITHUB_PATH"
 
+      # The pinned nightly, its rust-src included, restored with its files'
+      # times: installed fresh, the standard library's sources were newer
+      # than every cached build, and cargo rebuilt std and all 120 crates on
+      # top of it each run.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.rustup/toolchains/${{ env.VITA_RUST }}-x86_64-unknown-linux-gnu
+          key: rustup-${{ env.VITA_RUST }}
+
       - name: Install Rust
         run: |
           rustup toolchain install "$VITA_RUST" --profile minimal --component rust-src
@@ -56,11 +65,22 @@ jobs:
           # it saved; cargo rebuilds what a different compiler made anyway.
           add-rust-environment-hash-key: false
           workspaces: |
-            vita -> target
             core -> target
             platform-tests -> target
             tools -> target
           key: ${{ env.VITA_RUST }}
+
+      # The Vita build's target folder (the standard library and the
+      # dependencies built for armv7-sony-vita), whole: the rust-cache step
+      # above keeps the desktop crates'. The newest one for this toolchain and
+      # lockfile is restored; the app's own crates rebuild from the checkout.
+      - uses: actions/cache@v4
+        with:
+          path: vita/target
+          key: vita-target-${{ env.VITA_RUST }}-${{ hashFiles('vita/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            vita-target-${{ env.VITA_RUST }}-${{ hashFiles('vita/Cargo.lock') }}-
+            vita-target-${{ env.VITA_RUST }}-
 
       - name: Install cargo-vita
         run: |
