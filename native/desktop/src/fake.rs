@@ -276,6 +276,12 @@ impl FakeHost {
         self
     }
 
+    /// Settings saved with only a language, so the shelf shows it.
+    pub fn with_language(mut self, key: &str) -> Self {
+        self.files.insert("settings.json".into(), format!("{{\"language\":\"{key}\"}}").into_bytes());
+        self
+    }
+
     /// Saved data as a user of the current app has it: settings with a
     /// selection, a category of their own, changed titles, "Last Played".
     pub fn with_saved_data(mut self) -> Self {

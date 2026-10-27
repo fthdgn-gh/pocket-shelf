@@ -130,7 +130,10 @@ the user.
    PSM, system apps, RetroArch, and Adrenaline with the plugin consent
    drawer; the exit sequence from `finish_launch`. After this phase the port
    can replace the current app for daily use.
-4. **Panels.** SELECT menu and its groups, all settings, languages (five
+4. **Panels.** *In progress (2026-10-27). Done: the SELECT menu with every
+   setting, the five languages (generated from `src/locales/`), the
+   keyboard and search; 90 core tests. Next: title editor, category
+   manager, rescan, Diagnostics.* SELECT menu and its groups, all settings, languages (five
    locales), keyboard (three pages) and search, title editor, category
    manager, rescan, Diagnostics with startup and frame timing.
 5. **Online.** Network and TLS (`http`, `net`), SteamGridDB and libretro

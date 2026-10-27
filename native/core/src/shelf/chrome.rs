@@ -3,10 +3,11 @@
 //! (`components/footer.tsx`).
 
 use super::layout::{BAR_H, BAR_SIDE, PILL_ROOM, STATUS_W, TAB_GAP, TAB_MAX};
-use super::texts;
 use super::tween::Tween;
 use crate::gfx::{Color, Gfx, Rect};
 use crate::host::Status;
+use crate::i18n::fill;
+use crate::locales::Messages;
 use crate::library::categories::Category;
 use crate::library::settings::{ClockFormat, ConfirmMode, Settings};
 use crate::shapes::{Icon, Symbol};
@@ -238,6 +239,13 @@ pub enum Button {
     Face(Symbol),
     Select,
     Start,
+    /// The D-pad with its up and down arms lit (move), or left and right
+    /// (change).
+    DpadVertical,
+    DpadHorizontal,
+    /// The L and R shoulder buttons, 24 wide.
+    ShoulderL,
+    ShoulderR,
 }
 
 impl Button {
@@ -256,6 +264,23 @@ impl Button {
             Button::Face(symbol) => {
                 gfx.button(symbol, x, y);
                 16.0
+            }
+            Button::DpadVertical | Button::DpadHorizontal => {
+                // `dpad-*.svg`: a gray cross, the two arms in use white.
+                gfx.round_rect(Rect::new(x + 5.5, y + 1.0, 5.0, 14.0), 1.2, 0.0, PILL);
+                gfx.round_rect(Rect::new(x + 1.0, y + 5.5, 14.0, 5.0), 1.2, 0.0, PILL);
+                if self == Button::DpadVertical {
+                    gfx.fill(Rect::new(x + 6.6, y + 2.0, 2.8, 3.2), WHITE);
+                    gfx.fill(Rect::new(x + 6.6, y + 10.8, 2.8, 3.2), WHITE);
+                } else {
+                    gfx.fill(Rect::new(x + 2.0, y + 6.6, 3.2, 2.8), WHITE);
+                    gfx.fill(Rect::new(x + 10.8, y + 6.6, 3.2, 2.8), WHITE);
+                }
+                16.0
+            }
+            Button::ShoulderL | Button::ShoulderR => {
+                shoulder(gfx, self == Button::ShoulderL, x, y);
+                24.0
             }
             Button::Select | Button::Start => {
                 let label = if self == Button::Select { "SELECT" } else { "START" };
@@ -284,8 +309,59 @@ pub fn hints(gfx: &mut Gfx, theme: &Theme, items: &[(Button, &str)], mut x: f32,
     x
 }
 
+/// Width of one hint: its button, a gap and its label.
+fn hint_width(gfx: &mut Gfx, button: Button, label: &str) -> f32 {
+    let button_w = match button {
+        Button::Face(_) | Button::DpadVertical | Button::DpadHorizontal => 16.0,
+        Button::ShoulderL | Button::ShoulderR => 24.0,
+        Button::Select | Button::Start => {
+            let text = if button == Button::Select { "SELECT" } else { "START" };
+            (gfx.measure(Role::Tiny, text) + 12.0).round()
+        }
+    };
+    button_w + 4.0 + gfx.measure(Role::Small, label)
+}
+
+/// Hints centered on `cx` from `top`, a hint never split: hints that do not
+/// fit `max_w` go to the next line, since a translated label can be longer
+/// than the English one (`Prompt` with `center`). Returns the height.
+pub fn hints_centered(gfx: &mut Gfx, theme: &Theme, items: &[(Button, &str)], cx: f32, top: f32, max_w: f32) -> f32 {
+    let (widths, lines) = hint_lines(gfx, items, max_w);
+    for (n, line) in lines.iter().enumerate() {
+        let line_w: f32 = widths[line.clone()].iter().sum::<f32>() + 12.0 * (line.len().saturating_sub(1)) as f32;
+        let cy = top + n as f32 * 20.0 + 8.0;
+        hints(gfx, theme, &items[line.clone()], (cx - line_w / 2.0).round(), cy);
+    }
+    lines.len() as f32 * 20.0 - 4.0
+}
+
+/// The height `hints_centered` will take, without drawing.
+pub fn hints_height(gfx: &mut Gfx, items: &[(Button, &str)], max_w: f32) -> f32 {
+    hint_lines(gfx, items, max_w).1.len() as f32 * 20.0 - 4.0
+}
+
+/// Each hint's width, and the hints on each line.
+fn hint_lines(gfx: &mut Gfx, items: &[(Button, &str)], max_w: f32) -> (Vec<f32>, Vec<std::ops::Range<usize>>) {
+    let widths: Vec<f32> = items.iter().map(|(b, l)| hint_width(gfx, *b, l)).collect();
+    let mut lines: Vec<std::ops::Range<usize>> = Vec::new();
+    let (mut start, mut width) = (0, 0.0);
+    for (i, w) in widths.iter().enumerate() {
+        let next = if i == start { *w } else { width + 12.0 + w };
+        if i > start && next > max_w {
+            lines.push(start..i);
+            start = i;
+            width = *w;
+        } else {
+            width = next;
+        }
+    }
+    lines.push(start..items.len());
+    (widths, lines)
+}
+
 /// What the footer draws from.
 pub struct FooterInput<'a> {
+    pub t: &'a Messages,
     pub theme: &'a Theme,
     pub settings: &'a Settings,
     /// Home shows its own start button, except at "Basic".
@@ -302,26 +378,26 @@ const TERM_W: f32 = 96.0;
 /// The button legend on the left, the position in the tab on the right; on
 /// the search tab the term before the position.
 pub fn footer(gfx: &mut Gfx, input: &FooterInput) {
-    let theme = input.theme;
+    let (theme, t) = (input.theme, input.t);
     let top = crate::H - FOOTER_H;
     let cy = top + FOOTER_H / 2.0;
     let baseline = (cy - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
     match input.launching {
         Some(title) => {
-            gfx.text(Role::SmallBold, BAR_SIDE, baseline, theme.accent, &texts::launching(title));
+            gfx.text(Role::SmallBold, BAR_SIDE, baseline, theme.accent, &fill(t.launching, &[("title", title)]));
         }
         None => {
             let confirm = input.settings.confirm;
             let mut items: Vec<(Button, &str)> = Vec::new();
             if !input.own_launch {
-                items.push((Button::confirm(confirm), texts::LAUNCH));
+                items.push((Button::confirm(confirm), t.launch));
             }
-            items.push((Button::Face(Symbol::Triangle), texts::EDIT));
-            items.push((Button::Face(Symbol::Square), texts::SEARCH));
+            items.push((Button::Face(Symbol::Triangle), t.edit));
+            items.push((Button::Face(Symbol::Square), t.search));
             if input.search_term.is_empty() {
-                items.push((Button::Select, texts::MENU));
+                items.push((Button::Select, t.menu));
             } else {
-                items.push((Button::cancel(confirm), texts::CLOSE));
+                items.push((Button::cancel(confirm), t.close));
             }
             hints(gfx, theme, &items, BAR_SIDE, cy);
         }
