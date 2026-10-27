@@ -139,7 +139,13 @@ the user.
    and updates are phase 5.* SELECT menu and its groups, all settings, languages (five
    locales), keyboard (three pages) and search, title editor, category
    manager, rescan, Diagnostics with startup and frame timing.
-5. **Online.** Network and TLS (`http`, `net`), SteamGridDB and libretro
+5. **Online.** *In progress 2026-10-27. Done: HTTPS in the port (rustls),
+   SteamGridDB and libretro logic with tests, Find artwork in the editor
+   (candidates kept in memory, only the one used written; on hardware),
+   Fetch artwork (one request at a time, busy replies waited out, runs
+   against the desktop fake server) and Clean up artwork. libretro name
+   lists are read and parsed on a host thread (9,301 PlayStation names took
+   690 ms in the frame). Left: updates with the updater app.* Network and TLS (`http`, `net`), SteamGridDB and libretro
    scrapers, art and backdrop pickers, Fetch artwork, Clean up artwork,
    updates with the updater app. Port `steamgriddb`, `libretro`, `updates`,
    `accent`, `status` tests.

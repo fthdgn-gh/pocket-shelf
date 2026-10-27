@@ -3,6 +3,7 @@
 //! games, PSX and PSP, no key). The title editor finds pictures for one
 //! title; Fetch artwork goes through many.
 
+pub mod fetch;
 pub mod flow;
 pub mod libretro;
 pub mod steamgriddb;
