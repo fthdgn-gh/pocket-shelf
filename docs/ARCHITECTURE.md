@@ -217,6 +217,20 @@ and goes through the same commit as Pocket Shelf's keyboard. A search
 therefore runs on enter, where Pocket Shelf's keyboard counts the matches
 while typing.
 
+**Pocket Shelf's keyboard** (`shelf/keyboard.rs`) follows the Vita's
+layout: three letter rows (Shift and Delete beside the bottom one), a
+digits page and a symbols page, and a bottom row of the page key, comma,
+space, full stop, cursor keys and Enter, the widths filling the 832 px
+field. The text is kept as characters with a cursor; typing, space and
+Delete act at it, L and R move it. Shift capitalizes one letter, or locks
+on a second press. The confirm button held 30 frames on a letter (or a
+finger resting 0.5 s on it, `Gesture::hold`) replaces the letter it typed
+with a strip of its accents, the language's own first; the other face
+button closes the strip before the keyboard. Up and down land on the key
+drawn under the highlighted one (`column_under`), whatever their widths.
+Every character on the pages and in the strips is checked against both
+Figtree weights in a test.
+
 **Sort orders** (`library/order.rs`, SELECT ▸ Sort, the first row): each
 tab's order in `sort.json`, name A–Z when absent, which is the scan's order
 and costs nothing. The played and installed orders sort the tab's indexes

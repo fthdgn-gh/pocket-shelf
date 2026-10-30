@@ -24,7 +24,7 @@ pub struct TouchFrame<'a> {
 
 impl TouchFrame<'_> {
     /// No touch.
-    pub const NONE: TouchFrame<'static> = TouchFrame { gesture: Gesture { tap: None, moved: (0.0, 0.0), from: None, down: false }, hits: &[] };
+    pub const NONE: TouchFrame<'static> = TouchFrame { gesture: Gesture { tap: None, moved: (0.0, 0.0), from: None, down: false, hold: None }, hits: &[] };
 }
 
 impl Shelf {
@@ -73,13 +73,32 @@ impl Shelf {
                 Some(Hit::Tab(id)) if !self.panel_open() => self.open_tab(&id),
                 Some(Hit::Key(row, col)) => {
                     if let Some(keyboard) = &mut self.keyboard {
-                        keyboard.row = row;
-                        keyboard.col = col;
+                        // A tap beside a letter's accents closes them.
+                        if !keyboard.close_accents() {
+                            keyboard.focus(row, col);
+                            *pressed |= confirm;
+                        }
+                    }
+                }
+                Some(Hit::Accent(index)) => {
+                    if let Some(accents) = self.keyboard.as_mut().and_then(|k| k.accents.as_mut()) {
+                        accents.index = index.min(accents.keys.len() - 1);
                         *pressed |= confirm;
                     }
                 }
                 Some(Hit::Back) => *pressed |= cancel,
                 _ => {}
+            }
+        }
+        // A finger held on a letter: the letter's accents (typed, then
+        // replaced, as a held confirm button does).
+        if let (Some((x, y)), Some(keyboard)) = (gesture.hold, &mut self.keyboard) {
+            if let Some(Hit::Key(row, col)) = hit_at(touch.hits, x, y).cloned() {
+                keyboard.focus(row, col);
+                if keyboard.accents.is_none() && keyboard.key().action == super::keyboard::Action::Char {
+                    keyboard.press();
+                    keyboard.hold();
+                }
             }
         }
         if gesture.down && gesture.moved == (0.0, 0.0) && gesture.from.is_none() {

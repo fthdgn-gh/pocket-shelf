@@ -26,6 +26,8 @@ pub enum Hit {
     Tab(String),
     /// A key of the on-screen keyboard: row and column.
     Key(usize, usize),
+    /// One of a held letter's accents, by its place in the pop-up.
+    Accent(usize),
     /// The dimmed screen around a drawer: back.
     Back,
     /// A drawer's card: takes the tap, does nothing.
@@ -43,6 +45,9 @@ pub const SLOP: f32 = 16.0;
 /// A touch held longer than this is not a tap (a finger resting on the
 /// screen).
 const TAP_US: u64 = 600_000;
+/// A finger resting this long without moving is a hold (a letter's
+/// accents); it lifts without a tap.
+pub const HOLD_US: u64 = 500_000;
 /// A flick keeps going at its release speed, slowing by this factor each
 /// frame, until under `FLICK_STOP` pixels a frame.
 const FLICK_DECAY: f32 = 0.9;
@@ -61,6 +66,9 @@ pub struct Gesture {
     pub from: Option<(f32, f32)>,
     /// A finger is on the screen (a flick has stopped).
     pub down: bool,
+    /// A finger rested `HOLD_US` without moving, at the point it touched
+    /// down: once per touch.
+    pub hold: Option<(f32, f32)>,
 }
 
 /// Turns where the finger is each frame into gestures.
@@ -70,6 +78,8 @@ pub struct Touch {
     start: Option<((f32, f32), u64)>,
     last: (f32, f32),
     dragging: bool,
+    /// The touch became a hold: it lifts without a tap.
+    held: bool,
     /// The last frames' movement, newest last.
     recent: Vec<(f32, f32)>,
     /// A flick's speed and where its drag began.
@@ -86,11 +96,12 @@ impl Touch {
                 self.start = Some((at, now));
                 self.last = at;
                 self.dragging = false;
+                self.held = false;
                 self.recent.clear();
                 self.flick = None;
                 Gesture { down: true, ..Gesture::default() }
             }
-            (Some(at), Some((from, _))) => {
+            (Some(at), Some((from, since))) => {
                 let moved = (at.0 - self.last.0, at.1 - self.last.1);
                 self.last = at;
                 if !self.dragging && ((at.0 - from.0).powi(2) + (at.1 - from.1).powi(2)).sqrt() >= SLOP {
@@ -105,12 +116,16 @@ impl Touch {
                     self.remember(moved);
                     return Gesture { moved, from: Some(from), down: true, ..Gesture::default() };
                 }
+                if !self.held && now.saturating_sub(since) >= HOLD_US {
+                    self.held = true;
+                    return Gesture { hold: Some(from), down: true, ..Gesture::default() };
+                }
                 Gesture { down: true, ..Gesture::default() }
             }
             (None, Some((from, at))) => {
                 self.start = None;
                 if !self.dragging {
-                    let tap = (now.saturating_sub(at) <= TAP_US).then_some(from);
+                    let tap = (!self.held && now.saturating_sub(at) <= TAP_US).then_some(from);
                     return Gesture { tap, ..Gesture::default() };
                 }
                 let n = self.recent.len().max(1) as f32;
@@ -163,11 +178,16 @@ mod tests {
     }
 
     #[test]
-    fn a_resting_finger_is_not_a_tap() {
+    fn a_resting_finger_is_a_hold_once_and_not_a_tap() {
         let mut touch = Touch::default();
         let mut frames = vec![Some((100.0, 50.0)); 40];
         frames.push(None);
-        assert_eq!(run(&mut touch, &frames).last().unwrap().tap, None);
+        let g = run(&mut touch, &frames);
+        let holds: Vec<usize> = g.iter().enumerate().filter(|(_, g)| g.hold.is_some()).map(|(i, _)| i).collect();
+        // 0.5 s at 60 frames a second, once.
+        assert_eq!(holds, [30]);
+        assert_eq!(g[30].hold, Some((100.0, 50.0)));
+        assert_eq!(g.last().unwrap().tap, None);
     }
 
     #[test]

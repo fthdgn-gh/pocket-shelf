@@ -101,6 +101,7 @@ pub struct Messages {
     pub now_hidden: &'static str,
     pub one_visible: &'static str,
     pub key_space: &'static str,
+    pub key_cursor: &'static str,
     pub key_delete: &'static str,
     pub key_letters: &'static str,
     pub keyboard_for: KeyboardFor,
@@ -432,6 +433,7 @@ impl Messages {
             ("nowHidden", self.now_hidden),
             ("oneVisible", self.one_visible),
             ("keySpace", self.key_space),
+            ("keyCursor", self.key_cursor),
             ("keyDelete", self.key_delete),
             ("keyLetters", self.key_letters),
             ("keyboardFor.title", self.keyboard_for.title),
@@ -694,6 +696,7 @@ pub static EN: Messages = Messages {
     now_hidden: "{name} is hidden",
     one_visible: "At least one category has to stay visible.",
     key_space: "Space",
+    key_cursor: "Cursor",
     key_delete: "Delete",
     key_letters: "Abc",
     keyboard_for: KeyboardFor {
@@ -960,6 +963,7 @@ pub static TR: Messages = Messages {
     now_hidden: "{name} gizlendi",
     one_visible: "En az bir kategori görünür kalmalı.",
     key_space: "Boşluk",
+    key_cursor: "İmleç",
     key_delete: "Sil",
     key_letters: "Abc",
     keyboard_for: KeyboardFor {
@@ -1226,6 +1230,7 @@ pub static DE: Messages = Messages {
     now_hidden: "{name} ist ausgeblendet",
     one_visible: "Mindestens eine Kategorie muss sichtbar bleiben.",
     key_space: "Leertaste",
+    key_cursor: "Cursor",
     key_delete: "Löschen",
     key_letters: "Abc",
     keyboard_for: KeyboardFor {
@@ -1492,6 +1497,7 @@ pub static FR: Messages = Messages {
     now_hidden: "{name} est masquée",
     one_visible: "Au moins une catégorie doit rester visible.",
     key_space: "Espace",
+    key_cursor: "Curseur",
     key_delete: "Effacer",
     key_letters: "Abc",
     keyboard_for: KeyboardFor {
@@ -1758,6 +1764,7 @@ pub static ES: Messages = Messages {
     now_hidden: "{name} está oculta",
     one_visible: "Al menos una categoría debe quedar visible.",
     key_space: "Espacio",
+    key_cursor: "Cursor",
     key_delete: "Borrar",
     key_letters: "Abc",
     keyboard_for: KeyboardFor {

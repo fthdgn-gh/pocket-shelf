@@ -215,7 +215,25 @@ touch screen:
   value; drag to move through a long list; tap outside the menu to go back.
   In a box art or backdrop list, the first tap shows the picture and a
   second one uses it.
-- Tap keys on the on-screen keyboard.
+- Tap keys on the on-screen keyboard; hold a letter for its accents.
+
+**Pocket Shelf's keyboard** (SELECT ▸ Keyboard ▸ Pocket Shelf) is laid out
+like the Vita's: letters in three rows with Shift and Delete beside the
+bottom one, 123 for digits and punctuation (and #+= for other symbols),
+and a cursor in the text.
+
+| Button | On the keyboard |
+| --- | --- |
+| D-pad | Move over the keys |
+| ○ or ✕ (your confirm button) | Press the key; held on a letter, its accents |
+| □ | Delete the character before the cursor |
+| △ | Space |
+| L / R | Move the cursor |
+| START | Done |
+| The other face button | Close the accents, then the keyboard |
+
+Shift pressed once capitalizes the next letter; pressed twice, every letter
+until it is pressed again.
 
 ## Data
 

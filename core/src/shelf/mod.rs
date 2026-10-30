@@ -41,6 +41,9 @@ use crate::library::Library;
 use crate::theme::{dynamic_theme, theme_by_id, Theme, ThemeId};
 use crate::{H, W};
 
+/// Frames the confirm button is held on a letter before its accents show
+/// (0.5 s).
+const KEY_HOLD_FRAMES: u32 = 30;
 /// Frames the selection rests before its backdrop is asked for (0.25 s).
 const BACKDROP_DELAY: u32 = 15;
 /// Backdrops kept after they leave the screen, newest first, so going
@@ -206,6 +209,8 @@ pub struct Shelf {
     /// A drag's distance not yet turned into a step of the selection or a
     /// panel's highlight.
     drag_left: f32,
+    /// Frames the confirm button has been held on the keyboard.
+    key_hold: u32,
     /// Text to type with the system keyboard, opened at the next frame
     /// (opening needs the host).
     keyboard_wanted: Option<(keyboard::Target, String)>,
@@ -289,6 +294,7 @@ impl Shelf {
             diagnostics: None,
             diagnostics_lines: Vec::new(),
             drag_left: 0.0,
+            key_hold: 0,
             keyboard_wanted: None,
             system_keyboard: None,
             reset_stats: false,
@@ -474,25 +480,43 @@ impl Shelf {
                 },
                 None => {}
             }
+            // As on the Vita's keyboard: the confirm button presses the key
+            // (held on a letter, its accents), square deletes, triangle
+            // types a space, L and R move the cursor, START is Enter.
             let mut done = false;
             if pressed & confirm != 0 {
                 done = keyboard.press();
+                self.key_hold = 0;
+            } else if pad & confirm != 0 {
+                self.key_hold += 1;
+                if self.key_hold == KEY_HOLD_FRAMES {
+                    keyboard.hold();
+                }
             }
             if pressed & SQUARE != 0 {
+                keyboard.close_accents();
                 keyboard.backspace();
             }
+            if pressed & TRIANGLE != 0 {
+                keyboard.close_accents();
+                keyboard.space();
+            }
             if pressed & L != 0 {
-                keyboard.toggle_shift();
+                keyboard.close_accents();
+                keyboard.move_cursor(-1);
             }
             if pressed & R != 0 {
-                keyboard.next_page();
+                keyboard.close_accents();
+                keyboard.move_cursor(1);
             }
             if pressed & START != 0 {
                 done = true;
             }
             if done {
                 self.commit_keyboard(host);
-            } else if pressed & cancel != 0 {
+            } else if pressed & cancel != 0 && !keyboard.close_accents() {
+                // The other face button closes a letter's accents first,
+                // then the keyboard.
                 self.keyboard = None;
             }
         } else if self.update.open {
@@ -691,7 +715,7 @@ impl Shelf {
     /// The keyboard's Done: the text goes to what it was typed for.
     fn commit_keyboard(&mut self, host: &mut dyn Host) {
         let Some(keyboard) = self.keyboard.take() else { return };
-        let text = keyboard.text.trim().to_string();
+        let text = keyboard.text().trim().to_string();
         match &keyboard.target {
             keyboard::Target::Library => self.apply_search(&text),
             keyboard::Target::Title => self.commit_title(host, &text),
@@ -1253,19 +1277,18 @@ impl Shelf {
     /// from the bottom edge with what is typed, the keys and the hints.
     fn draw_keyboard(&mut self, gfx: &mut Gfx) {
         use crate::gfx::Rect;
+        use crate::shapes::Icon;
         use crate::text::Role;
-        use keyboard::{Action, Page, Target};
+        use crate::touch::Hit;
+        use keyboard::{Action, Page, Shift, Target, KEY_GAP};
         let theme = self.theme;
         let t = self.t();
         let Some(kb) = &self.keyboard else { return };
-        let (target, text, page, shift, row, col) = (kb.target.clone(), kb.text.clone(), kb.page, kb.shift, kb.row, kb.col);
+        let (target, text, page, shift, row, col) = (kb.target.clone(), kb.text(), kb.page, kb.shift, kb.row, kb.col);
+        let (before, after) = kb.split();
+        let accents = kb.accents.clone();
+        let capitals = kb.capitals();
         let rows = kb.rows();
-        // The page key and the R hint name the page the next press leads to.
-        let next_page = match page {
-            Page::Letters => t.symbols,
-            Page::Symbols => "Áçñ",
-            Page::Accents => t.key_letters,
-        };
         let heading = self.keyboard_heading(&target);
         let note = if target == Target::Library && !text.trim().is_empty() {
             let count = self.found_count(&text).to_string();
@@ -1278,68 +1301,132 @@ impl Shelf {
         let hints = [
             (confirm, t.key),
             (chrome::Button::Face(crate::shapes::Symbol::Square), t.key_delete),
-            (chrome::Button::ShoulderL, t.shift),
-            (chrome::Button::ShoulderR, next_page),
+            (chrome::Button::Face(crate::shapes::Symbol::Triangle), t.key_space),
+            (chrome::Button::ShoulderLR, t.key_cursor),
             (chrome::Button::Start, t.done),
             (cancel, t.cancel),
         ];
 
-        // The card's height from its content: the heading, the field, the
+        // The card's height from its content: the heading, the field, four
         // key rows and the hints, 8 apart, 20 above and 16 below.
+        let rows_h = 4.0 * 48.0 + 3.0 * KEY_GAP;
         let label_h = gfx.line_height(Role::Label);
         let hints_h = chrome::hints_height(gfx, &hints, 912.0);
-        let height = 20.0 + label_h + 8.0 + 52.0 + 8.0 + 4.0 + 8.0 + 5.0 * 48.0 + 8.0 * 4.0 + 8.0 + 4.0 + 8.0 + hints_h + 16.0;
+        let height = 20.0 + label_h + 8.0 + 52.0 + 8.0 + 4.0 + 8.0 + rows_h + 8.0 + 4.0 + 8.0 + hints_h + 16.0;
         let slide = self.drawer.at(self.now);
         gfx.fill(Rect::new(0.0, 0.0, crate::W, crate::H), theme.scrim.alpha(slide.min(1.0)));
         // Outside the keyboard: cancel, as the other face button.
-        gfx.hit(Rect::new(0.0, 0.0, crate::W, crate::H), crate::touch::Hit::Back);
+        gfx.hit(Rect::new(0.0, 0.0, crate::W, crate::H), Hit::Back);
         let card = Rect::new(16.0, crate::H - 16.0 - height + (1.0 - slide) * 160.0, crate::W - 32.0, height);
         gfx.shadow(card, 24.0, 16.0, crate::gfx::BLACK.with_a(80));
         gfx.round_rect(card, 24.0, 0.0, theme.panel);
-        gfx.hit(card, crate::touch::Hit::Block);
+        gfx.hit(card, Hit::Block);
         let left = (crate::W - 832.0) / 2.0;
         let mut y = card.y + 20.0;
         gfx.text_top(Role::Label, left + 4.0, y, theme.dim, &crate::i18n::upper(heading, self.settings.language));
         y += label_h + 8.0;
-        // The field: text longer than it shows its end, where the caret is;
-        // a note at its right end takes its width from the text.
+
+        // The field: the text with the cursor, kept in view; a note at its
+        // right end takes its width from the text.
         let field = Rect::new(left, y, 832.0, 52.0);
         gfx.round_rect(field, 12.0, 0.0, theme.tile);
         let note_w = if note.is_empty() { 0.0 } else { gfx.measure(Role::Small, &note) + 24.0 };
-        let shown = gfx.fit_tail(Role::BodyBold, &format!("{text}_"), 792.0 - note_w);
+        let room = 792.0 - note_w;
         let mid = |gfx: &mut Gfx, role: Role| (field.y + 26.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
         let base = mid(gfx, Role::BodyBold);
-        gfx.text(Role::BodyBold, field.x + 20.0, base, theme.text, &shown);
+        // Text before the cursor that does not fit shows its end; the text
+        // after it fills what is left.
+        let before_w = gfx.measure(Role::BodyBold, &before);
+        let shown_before = if before_w > room - 48.0 { gfx.fit_tail(Role::BodyBold, &before, room - 48.0) } else { before.clone() };
+        let caret_x = gfx.text(Role::BodyBold, field.x + 20.0, base, theme.text, &shown_before);
+        gfx.fill(Rect::new(caret_x + 1.0, field.y + 12.0, 3.0, 28.0), theme.accent);
+        let after_room = field.x + 20.0 + room - (caret_x + 6.0);
+        if !after.is_empty() && after_room > 24.0 {
+            let shown_after = gfx.fit(Role::BodyBold, &after, after_room);
+            gfx.text(Role::BodyBold, caret_x + 6.0, base, theme.text, &shown_after);
+        }
         if !note.is_empty() {
             let base = mid(gfx, Role::Small);
             gfx.text_right(Role::Small, field.right() - 20.0, base, theme.dim, &note);
         }
         y += 52.0 + 8.0 + 4.0 + 8.0;
+
+        // The keys, each row centered; the highlighted key's place, for the
+        // accents over it.
+        let mut held_at: Option<Rect> = None;
         for (r, keys) in rows.iter().enumerate() {
-            let width: f32 = keys.iter().map(|k| if k.wide() { 160.0 } else { 76.0 }).sum::<f32>() + 8.0 * (keys.len() - 1) as f32;
+            let width: f32 = keys.iter().map(|k| k.width()).sum::<f32>() + KEY_GAP * (keys.len() - 1) as f32;
             let mut x = ((crate::W - width) / 2.0).round();
             for (c, key) in keys.iter().enumerate() {
-                let w = if key.wide() { 160.0 } else { 76.0 };
-                let active = r == row && c == col;
-                gfx.round_rect(Rect::new(x, y, w, 48.0), 12.0, 0.0, if active { theme.accent } else { theme.tile });
+                let w = key.width();
+                let rect = Rect::new(x, y, w, 48.0);
+                let active = r == row && c == col && accents.is_none();
+                if r == row && c == col {
+                    held_at = Some(rect);
+                }
+                gfx.round_rect(rect, 12.0, 0.0, if active { theme.accent } else { theme.tile });
                 // The key and half the gap around it.
-                gfx.hit(Rect::new(x - 4.0, y - 4.0, w + 8.0, 56.0), crate::touch::Hit::Key(r, c));
-                let label: String = match key.action {
-                    Action::Char => (if shift { key.upper } else { key.lower }).to_string(),
-                    Action::Symbols => next_page.to_string(),
-                    Action::Shift => t.shift.to_string(),
-                    Action::Space => t.key_space.to_string(),
-                    Action::Delete => t.key_delete.to_string(),
-                    Action::Done => t.done.to_string(),
+                gfx.hit(Rect::new(x - KEY_GAP / 2.0, y - KEY_GAP / 2.0, w + KEY_GAP, 48.0 + KEY_GAP), Hit::Key(r, c));
+                let ink = if active { theme.panel } else { theme.text };
+                let label: Option<String> = match key.action {
+                    Action::Char => Some((if capitals { key.upper } else { key.lower }).to_string()),
+                    Action::Shift => Some(t.shift.to_string()),
+                    Action::Delete => Some(t.key_delete.to_string()),
+                    Action::Page => Some(if page == Page::Letters { "123" } else { t.key_letters }.to_string()),
+                    Action::MorePage => Some(if page == Page::Digits { "#+=" } else { "123" }.to_string()),
+                    Action::Space => Some(t.key_space.to_string()),
+                    Action::Enter => Some(t.done.to_string()),
+                    Action::Left | Action::Right => None,
                 };
-                let role = if active { Role::SmallBold } else { Role::Small };
-                let base = (y + 24.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
-                gfx.text_centered(role, x + w / 2.0, base, if active { theme.panel } else { theme.text }, &label);
-                x += w + 8.0;
+                match label {
+                    Some(label) => {
+                        let role = if active { Role::BodyBold } else { Role::Body };
+                        let label = gfx.fit(role, &label, w - 16.0);
+                        let base = (y + 24.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
+                        // Shift in the accent color while on, with a bar under
+                        // it while locked.
+                        let on = key.action == Action::Shift && shift != Shift::Off && !active;
+                        gfx.text_centered(role, x + w / 2.0, base, if on { theme.accent } else { ink }, &label);
+                        if key.action == Action::Shift && shift == Shift::Locked {
+                            gfx.fill(Rect::new(x + w / 2.0 - 16.0, y + 38.0, 32.0, 3.0), if active { ink } else { theme.accent });
+                        }
+                    }
+                    None => {
+                        let icon = if key.action == Action::Left { Icon::ArrowLeft } else { Icon::ArrowRight };
+                        gfx.icon(icon, x + (w - 16.0) / 2.0, y + 8.0, ink);
+                    }
+                }
+                x += w + KEY_GAP;
             }
-            y += 48.0 + 8.0;
+            y += 48.0 + KEY_GAP;
         }
-        y += 4.0 + 8.0;
+
+        // A held letter's accents in a strip over it (under it on the top
+        // row, which would cover the text), the chosen one lit.
+        if let (Some(accents), Some(at)) = (&accents, held_at) {
+            let n = accents.keys.len() as f32;
+            let strip_w = n * keyboard::KEY_W + (n - 1.0) * KEY_GAP + 16.0;
+            let strip_x = (at.x + at.w / 2.0 - strip_w / 2.0).clamp(card.x + 8.0, card.right() - 8.0 - strip_w);
+            let above = at.y - 48.0 - 24.0;
+            let strip_y = if above < field.bottom() { at.y + 48.0 + 8.0 } else { above };
+            let strip = Rect::new(strip_x, strip_y, strip_w, 48.0 + 16.0);
+            gfx.shadow(strip, 16.0, 12.0, crate::gfx::BLACK.with_a(90));
+            gfx.round_rect(strip, 16.0, 0.0, theme.line);
+            gfx.hit(strip, Hit::Block);
+            let mut x = strip.x + 8.0;
+            for (i, key) in accents.keys.iter().enumerate() {
+                let lit = i == accents.index;
+                let rect = Rect::new(x, strip.y + 8.0, keyboard::KEY_W, 48.0);
+                gfx.round_rect(rect, 12.0, 0.0, if lit { theme.accent } else { theme.tile });
+                gfx.hit(rect, Hit::Accent(i));
+                let role = if lit { Role::BodyBold } else { Role::Body };
+                let base = (rect.y + 24.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
+                let c = if capitals { key.upper } else { key.lower };
+                gfx.text_centered(role, rect.x + rect.w / 2.0, base, if lit { theme.panel } else { theme.text }, &c.to_string());
+                x += keyboard::KEY_W + KEY_GAP;
+            }
+        }
+        y += 4.0;
         chrome::hints_centered(gfx, &theme, &hints, crate::W / 2.0, y, 912.0);
     }
 
@@ -1958,6 +2045,18 @@ mod tests {
     }
 
     #[test]
+    fn shift_pressed_twice_on_the_keyboard_types_capitals() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        shelf.settings.keyboard = crate::library::settings::KeyboardKind::Own;
+        for button in [SQUARE, DOWN, DOWN, CIRCLE, CIRCLE, RIGHT, CIRCLE, CIRCLE] {
+            press(&mut shelf, &mut host, button);
+        }
+        let keyboard = shelf.keyboard.as_ref().expect("keyboard open");
+        assert_eq!(keyboard.shift, keyboard::Shift::Locked);
+        assert_eq!(keyboard.text(), "ZZ");
+    }
+
+    #[test]
     fn the_menu_steps_a_setting_and_saves_it() {
         let (mut shelf, mut host) = setup(true, PluginState::On);
         // SELECT, down to Appearance, down to View, right: Carousel.
@@ -1989,7 +2088,7 @@ mod tests {
         let before = shelf.selected_game().map(|g| g.id.to_string());
         press(&mut shelf, &mut host, SQUARE);
         assert!(shelf.keyboard.is_some());
-        shelf.keyboard.as_mut().unwrap().text = "vita".into();
+        shelf.keyboard.as_mut().unwrap().set_text("vita");
         press(&mut shelf, &mut host, START);
         assert_eq!(shelf.tab, SEARCH_ID);
         assert_eq!(shelf.tabs[0].id, SEARCH_ID);
@@ -2002,7 +2101,7 @@ mod tests {
     }
 
     fn type_text(shelf: &mut Shelf, host: &mut TestHost, text: &str) {
-        shelf.keyboard.as_mut().expect("keyboard open").text = text.into();
+        shelf.keyboard.as_mut().expect("keyboard open").set_text(text);
         press(shelf, host, START);
     }
 
