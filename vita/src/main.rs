@@ -54,6 +54,18 @@ fn read_pad() -> u32 {
     map.iter().filter(|(vita, _)| raw.buttons & *vita != 0).fold(0, |pad, (_, bit)| pad | bit)
 }
 
+/// The first finger on the front touch screen, in screen pixels: the panel
+/// reports 1920×1088, twice the screen's 960×544.
+fn read_touch() -> Option<(f32, f32)> {
+    let mut data: SceTouchData = unsafe { core::mem::zeroed() };
+    let read = unsafe { sceTouchPeek(SCE_TOUCH_PORT_FRONT, &mut data, 1) };
+    if read < 1 || data.reportNum == 0 {
+        return None;
+    }
+    let report = data.report[0];
+    Some((report.x as f32 / 2.0, report.y as f32 / 2.0))
+}
+
 fn main() {
     let mut host = VitaHost::new();
     host.log("start");
@@ -65,6 +77,7 @@ fn main() {
         vita2d_set_vblank_wait(1);
         vita2d_set_clear_color(0xff00_0000);
         sceCtrlSetSamplingMode(SCE_CTRL_MODE_DIGITAL);
+        sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
     }
 
     let mut app = App::new();
@@ -114,7 +127,7 @@ fn main() {
                 host.log(&format!("pressed {name} at frame {frame}"));
             }
         }
-        app.update(&mut host, pad);
+        app.update(&mut host, pad, read_touch());
         if app.quit {
             host.log(&format!("quit: frames {}  {}", app.stats.frames, app.stats.line()));
             break;

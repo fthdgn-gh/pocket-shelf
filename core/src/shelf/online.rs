@@ -39,7 +39,7 @@ impl Shelf {
     }
 
     /// Carry out what the flow asks.
-    fn online_actions(&mut self, host: &mut dyn Host, actions: Vec<Action>) {
+    pub(super) fn online_actions(&mut self, host: &mut dyn Host, actions: Vec<Action>) {
         for action in actions {
             match action {
                 Action::AskText { key, text } => self.open_keyboard(if key { Target::ApiKey } else { Target::Search }, &text),
@@ -177,6 +177,8 @@ impl Shelf {
             Flow::Games => {
                 let count = online.games.len() + 1;
                 let first = online.row.saturating_sub(ONLINE_ROWS / 2).min(count.saturating_sub(ONLINE_ROWS));
+                drawer.index = first;
+                drawer.selectable = true;
                 for i in first..(first + ONLINE_ROWS).min(count) {
                     if i == 0 {
                         let term = gfx.fit(Role::BodyBold, &online.term, 340.0);

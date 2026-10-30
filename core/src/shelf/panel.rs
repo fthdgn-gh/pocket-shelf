@@ -8,6 +8,7 @@ use crate::gfx::{Gfx, Rect};
 use crate::shapes::Icon;
 use crate::text::Role;
 use crate::theme::Theme;
+use crate::touch::Hit;
 use crate::{H, W};
 
 const MARGIN: f32 = 16.0;
@@ -48,6 +49,12 @@ pub struct Drawer {
     /// Where the next row goes, and the bottom of the content.
     pub y: f32,
     pub bottom: f32,
+    /// The next row's index in the panel's list, for a tap: callers whose
+    /// list scrolls set it to the first row shown.
+    pub index: usize,
+    /// Every row can be tapped (a list of files or games); otherwise only
+    /// rows that open or step something (`Step::Right`, `Step::Both`).
+    pub selectable: bool,
 }
 
 /// The drawer's slide: 180 ms from off screen.
@@ -60,12 +67,16 @@ impl Drawer {
     /// and the heading in capitals.
     pub fn open(gfx: &mut Gfx, theme: &Theme, title: &str, size: Size, slide: f32) -> Drawer {
         gfx.fill(Rect::new(0.0, 0.0, W, H), theme.scrim.alpha(slide.min(1.0)));
+        // A tap on the dimmed screen goes back; one on the card does
+        // nothing unless it lands on a row or a hint.
+        gfx.hit(Rect::new(0.0, 0.0, W, H), Hit::Back);
         let width = size.width();
         let x = W - MARGIN - width + (1.0 - slide) * (width + MARGIN);
         let card = Rect::new(x, MARGIN, width, H - 2.0 * MARGIN);
         gfx.shadow(card, 24.0, 16.0, crate::gfx::BLACK.with_a(80));
         gfx.round_rect(card, 24.0, 0.0, theme.panel);
-        let mut drawer = Drawer { theme: *theme, x: x + PAD_X, w: width - 2.0 * PAD_X, y: MARGIN + PAD_Y, bottom: H - MARGIN - PAD_Y };
+        gfx.hit(card, Hit::Block);
+        let mut drawer = Drawer { theme: *theme, x: x + PAD_X, w: width - 2.0 * PAD_X, y: MARGIN + PAD_Y, bottom: H - MARGIN - PAD_Y, index: 0, selectable: false };
         let heading = title.to_uppercase();
         gfx.text_top(Role::Label, drawer.x + 16.0, drawer.y, theme.dim, &heading);
         drawer.y += gfx.line_height(Role::Label) + 4.0 + 4.0 + 4.0;
@@ -77,6 +88,11 @@ impl Drawer {
     pub fn row(&mut self, gfx: &mut Gfx, label: &str, value: Option<&str>, icon: Option<Button>, active: bool, step: Step) {
         let theme = self.theme;
         let rect = Rect::new(self.x, self.y, self.w, ROW_H);
+        let index = self.index;
+        self.index += 1;
+        if self.selectable || step != Step::None {
+            gfx.hit(rect, Hit::Row(index));
+        }
         if active {
             gfx.round_rect(rect, 16.0, 0.0, theme.text.with_a(0x1c));
         }
@@ -88,6 +104,10 @@ impl Drawer {
         if active && step != Step::None {
             right -= 16.0;
             gfx.icon(Icon::ArrowRight, right, rect.y + 10.0, theme.dim);
+            if step == Step::Both {
+                // A finger-wide place around the small arrow.
+                gfx.hit(Rect::new(right - 16.0, rect.y, 48.0, ROW_H), Hit::Arrow(index, 1));
+            }
             right -= 8.0;
         }
         if let Some(icon) = icon {
@@ -108,6 +128,7 @@ impl Drawer {
         }
         if active && step == Step::Both {
             gfx.icon(Icon::ArrowLeft, right - 16.0, rect.y + 10.0, theme.dim);
+            gfx.hit(Rect::new(right - 32.0, rect.y, 48.0, ROW_H), Hit::Arrow(index, -1));
         }
         self.y += ROW_H + 4.0;
     }

@@ -19,7 +19,7 @@ use crate::text::Role;
 
 /// Editor rows: favorite, category, title, box art, backdrop, find artwork,
 /// reset.
-const EDITOR_ROWS: usize = 7;
+pub(super) const EDITOR_ROWS: usize = 7;
 const FIND_ART_ROW: usize = 5;
 /// Room for a value beside its label.
 const VALUE_W: f32 = 320.0;
@@ -285,6 +285,8 @@ impl Shelf {
         ];
         let slide = self.drawer.at(self.now);
         let mut drawer = Drawer::open(gfx, &theme, &upper(t.editor_title, self.settings.language), panel::Size::Wide, slide);
+        // Every row does something, Reset included.
+        drawer.selectable = true;
         for (i, (label, value, step)) in rows.iter().enumerate() {
             let value = (!value.is_empty()).then_some(value.as_str());
             drawer.row(gfx, label, value, None, i == row, *step);
@@ -340,7 +342,7 @@ impl Shelf {
         self.picker.as_ref().and_then(|p| p.listed.get(row.wrapping_sub(2)).cloned())
     }
 
-    fn picker_count(&self) -> usize {
+    pub(super) fn picker_count(&self) -> usize {
         self.picker.as_ref().map_or(0, |p| p.listed.len())
     }
 
@@ -404,23 +406,38 @@ impl Shelf {
                 };
             }
         }
-        let cant_read = self.t().cant_read;
-        let row = self.picker.as_ref().map_or(0, |p| p.row);
-        let file = self.picker_file(row);
-        let Some(picker) = &mut self.picker else { return };
-        if picker.row != before || triangle {
-            // A new row: its picture after the highlight rests; a file known
-            // not to decode says so at once.
-            picker.preview = None;
-            picker.waiting = false;
-            picker.preview_wait = PREVIEW_DELAY;
-            let file = file.as_ref();
-            picker.note = if file.is_some_and(|f| picker.decodes.get(f) == Some(&false)) { cant_read.to_string() } else { String::new() };
+        if self.picker.as_ref().is_some_and(|p| p.row != before) || triangle {
+            self.picker_moved();
         }
         if confirm {
             self.picker_confirm(host);
         } else if cancel {
             self.picker = None;
+        }
+    }
+
+    /// A new row in the picker: its picture after the highlight rests; a
+    /// file known not to decode says so at once.
+    fn picker_moved(&mut self) {
+        let cant_read = self.t().cant_read;
+        let row = self.picker.as_ref().map_or(0, |p| p.row);
+        let file = self.picker_file(row);
+        let Some(picker) = &mut self.picker else { return };
+        picker.preview = None;
+        picker.waiting = false;
+        picker.preview_wait = PREVIEW_DELAY;
+        let file = file.as_ref();
+        picker.note = if file.is_some_and(|f| picker.decodes.get(f) == Some(&false)) { cant_read.to_string() } else { String::new() };
+    }
+
+    /// Highlight a picker row by touch, as the buttons would.
+    pub(super) fn picker_focus(&mut self, row: usize) {
+        let count = self.picker_count() + 2;
+        let Some(picker) = &mut self.picker else { return };
+        let row = row.min(count - 1);
+        if picker.row != row {
+            picker.row = row;
+            self.picker_moved();
         }
     }
 
@@ -558,6 +575,8 @@ impl Shelf {
             }
         }
         let first = row.saturating_sub(PICKER_ROWS / 2).min(total.saturating_sub(PICKER_ROWS));
+        drawer.index = first;
+        drawer.selectable = true;
         for i in first..(first + PICKER_ROWS).min(total) {
             let label = gfx.fit(Role::BodyBold, &entry(i), 480.0);
             drawer.row(gfx, &label, None, None, i == row, Step::None);
@@ -766,6 +785,8 @@ impl Shelf {
         let mut drawer = Drawer::open(gfx, &theme, &upper(t.categories_row, self.settings.language), panel::Size::Wide, slide);
         let count = categories.len() + 1;
         let first = row.saturating_sub(CATEGORY_ROWS / 2).min(count.saturating_sub(CATEGORY_ROWS));
+        drawer.index = first;
+        drawer.selectable = true;
         for i in first..(first + CATEGORY_ROWS).min(count) {
             if i == 0 {
                 drawer.row(gfx, t.new_category, None, Some(Button::Plus), i == row, Step::None);

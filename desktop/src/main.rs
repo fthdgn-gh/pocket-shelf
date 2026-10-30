@@ -23,6 +23,24 @@ struct Shot {
 }
 
 const TAP: u32 = 2;
+
+/// A script step that puts a finger on the front touch screen at `(x, y)`
+/// pixels instead of pressing buttons: a flag above the buttons' bits, then
+/// x/2 and y/2 in nine bits each (even pixels).
+const TOUCH: u32 = 1 << 12;
+const fn touch(x: u32, y: u32) -> u32 {
+    TOUCH | ((x / 2) << 13) | ((y / 2) << 22)
+}
+
+/// The finger a script step puts down, and the buttons it holds.
+fn decode(step: u32) -> (u32, Option<(f32, f32)>) {
+    if step & TOUCH == 0 {
+        return (step, None);
+    }
+    let x = ((step >> 13) & 511) * 2;
+    let y = ((step >> 22) & 511) * 2;
+    (0, Some((x as f32, y as f32)))
+}
 const SETTLE: u32 = 40;
 
 fn plain() -> fake::FakeHost {
@@ -294,6 +312,19 @@ const SHOTS: &[Shot] = &[
     // A portrait box art for Gravity Daze, fitted whole: the ring around it.
     Shot { name: "243-tall-art-home", script: &[(0, SETTLE)], setup: tall_art },
     Shot { name: "244-tall-art-carousel", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: tall_art },
+    // Touch: a tap on the next Home tile selects it, a second one on it
+    // asks to launch; a tab name; the footer's Menu hint, then a row; a
+    // drag and flick along Home; typing on the keyboard (each drawer
+    // tapped once it has slid in); a row's arrow in
+    // the editor; a tap outside a drawer closes it.
+    shot("250-touch-tile", &[(0, 4), (touch(320, 140), TAP), (0, SETTLE)]),
+    shot("251-touch-tile-launch", &[(0, 4), (touch(320, 140), TAP), (0, TAP), (touch(140, 140), TAP), (0, SETTLE)]),
+    shot("252-touch-tab", &[(0, 4), (touch(496, 26), TAP), (0, SETTLE)]),
+    shot("253-touch-menu-row", &[(0, 4), (touch(300, 518), TAP), (0, SETTLE), (touch(600, 152), TAP), (0, SETTLE)]),
+    shot("254-touch-drag", &[(0, 4), (touch(700, 150), 1), (touch(660, 150), 1), (touch(620, 150), 1), (touch(580, 150), 1), (touch(540, 150), 1), (touch(500, 150), 1), (touch(460, 150), 1), (touch(420, 150), 1), (0, SETTLE)]),
+    shot("255-touch-keyboard", &[(0, 4), (touch(180, 518), TAP), (0, SETTLE), (touch(102, 268), TAP), (0, TAP), (touch(186, 268), TAP), (0, SETTLE)]),
+    shot("256-touch-editor-arrow", &[(0, 4), (touch(80, 518), TAP), (0, TAP), (touch(896, 96), TAP), (0, SETTLE)]),
+    shot("257-touch-outside-closes", &[(0, 4), (touch(300, 518), TAP), (0, TAP), (touch(120, 300), TAP), (0, SETTLE)]),
 ];
 
 fn main() {
@@ -305,11 +336,12 @@ fn main() {
         let mut host = (shot.setup)();
         let mut gfx = Gfx::new();
         let mut app = App::new();
-        for &(pad, frames) in shot.script {
+        for &(step, frames) in shot.script {
+            let (pad, finger) = decode(step);
             for _ in 0..frames {
                 let started = Instant::now();
                 app.events(&mut host, &mut gfx);
-                app.update(&mut host, pad);
+                app.update(&mut host, pad, finger);
                 app.draw(&mut gfx);
                 // What a backend does once it has let go of freed textures.
                 gfx.textures.recycle_freed();

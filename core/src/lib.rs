@@ -22,6 +22,7 @@ pub mod shelf;
 pub mod stats;
 pub mod text;
 pub mod theme;
+pub mod touch;
 pub mod updates;
 
 /// The screen in pixels: the Vita's 960×544.

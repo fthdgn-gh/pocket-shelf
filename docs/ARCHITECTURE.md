@@ -189,6 +189,22 @@ off in Appearance ▸ Status bar (the Clock row's last value is Off), right of
 R or left of L (`StatusLayout`, saved in `status-bar.json`: 0.1 rewrote `settings.json`
 with only the keys it knew). The tab names have the rest of the bar.
 
+**Touch** (`touch.rs`, `shelf/touch.rs`): the Vita host reads the front
+panel each frame (`sceTouchPeek`, 1920×1088, halved to screen pixels) and
+passes the first finger to `App::update`. `Touch` turns it into a tap (a
+finger lifted within 16 px of where it touched down and within 0.6 s), a
+drag past those 16 px, and a flick that continues at the release speed,
+slowing by 0.9 a frame. **What can be tapped is recorded while drawing**
+(`Gfx::hit`, cut to the clip): tiles and List rows, tab names, L and R,
+button hints, the Launch pill, drawer rows and their arrows, keyboard keys,
+and the scrim around a drawer. A tap is tested against the last frame's
+records, the topmost first, and mostly becomes the button press the
+screens already handle (`Hit::Button`, a row's confirm, the scrim's back),
+after moving the panel's highlight or the shelf's selection. A drag moves
+the selection along the view's axis, a step per tile pitch, or the open
+panel's highlight a row per 56 px, stopping at the ends. Desktop shot
+scripts put a finger down with `touch(x, y)` (shots 250–257).
+
 **Sort orders** (`library/order.rs`, SELECT ▸ Sort, the first row): each
 tab's order in `sort.json`, name A–Z when absent, which is the scan's order
 and costs nothing. The played and installed orders sort the tab's indexes

@@ -11,6 +11,7 @@ use crate::library::catalog::Game;
 use crate::library::settings::{DetailLevel, ViewMode};
 use crate::shapes::Symbol;
 use crate::text::Role;
+use crate::touch::Hit;
 use crate::{H, W};
 
 /// Top of the view: under the top bar.
@@ -164,6 +165,8 @@ impl Shelf {
             return;
         }
         let k = rect.w / side;
+        // Tiles are drawn farthest first, so the selected one is on top.
+        gfx.hit(rect, Hit::Tile(index));
         let game = &self.library.games()[game_index];
         if selected {
             // Around the part the picture covers: a PSP icon's rectangle,
@@ -225,6 +228,9 @@ impl Shelf {
         let label_w = gfx.measure(Role::BodyBold, launch);
         let pill = Rect::new(HOME_LEFT, y, 12.0 + 32.0 + 12.0 + label_w + 28.0, 52.0);
         gfx.round_rect(pill, 26.0, 0.0, theme.text);
+        if let Some(bit) = Button::confirm(self.settings.confirm).bit() {
+            gfx.hit(pill, Hit::Button(bit));
+        }
         Button::confirm(self.settings.confirm).draw(gfx, pill.x + 12.0, y + 10.0);
         let baseline = (y + 26.0 - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
         gfx.text(Role::BodyBold, pill.x + 56.0, baseline, theme.bg_bottom, launch);
@@ -326,6 +332,7 @@ impl Shelf {
             }
             let selected = index == self.selected;
             let row = Rect::new(area.x, y, area.w, LIST_ROW_H);
+            gfx.hit(row, Hit::Tile(index));
             if selected {
                 gfx.round_rect(row, 16.0, 0.0, theme.text.with_a(0x1c));
             }

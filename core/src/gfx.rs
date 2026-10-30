@@ -244,6 +244,8 @@ pub struct Gfx {
     pub(crate) shapes: HashMap<u64, TexId>,
     /// The clip, in screen pixels (`Gfx::clip`).
     clip_px: Option<Rect>,
+    /// What can be tapped where, in drawing order (`touch::Hit`).
+    pub hits: Vec<(Rect, crate::touch::Hit)>,
 }
 
 /// The part of `a` inside `b`; `None` when they do not overlap.
@@ -263,13 +265,14 @@ impl Gfx {
     pub fn new() -> Self {
         let mut textures = Textures::default();
         let fonts = FontState::new(&mut textures);
-        Gfx { textures, cmds: Vec::with_capacity(1024), text_scale: 1.0, work: FrameWork::default(), fonts, shapes: HashMap::new(), clip_px: None }
+        Gfx { textures, cmds: Vec::with_capacity(1024), text_scale: 1.0, work: FrameWork::default(), fonts, shapes: HashMap::new(), clip_px: None, hits: Vec::new() }
     }
 
     /// Start a frame: drop the previous frame's commands, keep the textures.
     pub fn begin(&mut self) {
         self.cmds.clear();
         self.clip_px = None;
+        self.hits.clear();
         self.work = FrameWork::default();
         let resets = self.fonts.resets;
         self.fonts.begin(&mut self.textures);
@@ -343,6 +346,19 @@ impl Gfx {
         let (sw, sh) = (dst.w / scale, dst.h / scale);
         let src = Rect::new((tw - sw) / 2.0, (th - sh) / 2.0, sw, sh);
         self.image(tex, src, dst, tint);
+    }
+
+    /// Record that `rect` does `hit` when tapped, inside the clip; later
+    /// records lie over earlier ones.
+    pub fn hit(&mut self, rect: Rect, hit: crate::touch::Hit) {
+        let rect = match self.clip_px {
+            Some(clip) => match intersect(rect, clip) {
+                Some(cut) => cut,
+                None => return,
+            },
+            None => rect,
+        };
+        self.hits.push((rect, hit));
     }
 
     /// Draw only inside `rect` until the next call; `None`

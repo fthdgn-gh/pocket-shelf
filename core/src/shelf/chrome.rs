@@ -12,6 +12,8 @@ use crate::library::settings::{ClockFormat, ConfirmMode, Settings, StatusPositio
 use crate::shapes::{Icon, Symbol};
 use crate::text::Role;
 use crate::theme::{is_light, Theme};
+use crate::touch::Hit;
+use crate::app::buttons;
 use crate::W;
 
 pub const FOOTER_H: f32 = 52.0;
@@ -121,6 +123,9 @@ impl Header {
         if many {
             shoulder(gfx, true, names_x - PILL_ROOM, (BAR_H - 32.0) / 2.0);
             shoulder(gfx, false, names_x + room + 12.0, (BAR_H - 32.0) / 2.0);
+            // L and R the bar's height, a little wider than the pills.
+            gfx.hit(Rect::new(names_x - PILL_ROOM - 8.0, 0.0, 64.0, BAR_H), Hit::Button(buttons::L));
+            gfx.hit(Rect::new(names_x + room + 4.0, 0.0, 64.0, BAR_H), Hit::Button(buttons::R));
         }
 
         gfx.clip(Some(Rect::new(names_x, 0.0, room, BAR_H)));
@@ -142,6 +147,8 @@ impl Header {
             let (role, color) = if active { (Role::BodyBold, theme.text) } else { (Role::Body, theme.dim) };
             let center = names_x + left + name.width / 2.0;
             gfx.text_top_centered(role, center, top, color.alpha(opacity), &name.label);
+            // The name and half the gap on each side, inside the clip.
+            gfx.hit(Rect::new(names_x + left - TAB_GAP / 2.0, 0.0, name.width + TAB_GAP, BAR_H), Hit::Tab(name.id.clone()));
             if active {
                 gfx.round_rect(Rect::new(center - 14.0, top + line + 6.0, 28.0, 4.0), 2.0, 0.0, theme.accent.alpha(opacity));
             }
@@ -287,6 +294,22 @@ pub enum Button {
 }
 
 impl Button {
+    /// The pad button a tap on this hint stands for; none for the D-pad's
+    /// "Move" and "Change" and the plus, which show what a row does.
+    pub fn bit(self) -> Option<u32> {
+        match self {
+            Button::Face(Symbol::Circle) => Some(buttons::CIRCLE),
+            Button::Face(Symbol::Cross) => Some(buttons::CROSS),
+            Button::Face(Symbol::Square) => Some(buttons::SQUARE),
+            Button::Face(Symbol::Triangle) => Some(buttons::TRIANGLE),
+            Button::Select => Some(buttons::SELECT),
+            Button::Start => Some(buttons::START),
+            Button::ShoulderL => Some(buttons::L),
+            Button::ShoulderR => Some(buttons::R),
+            Button::ShoulderLR | Button::DpadVertical | Button::DpadHorizontal | Button::Plus => None,
+        }
+    }
+
     /// The confirm button and the other face button under a confirm setting.
     pub fn confirm(mode: ConfirmMode) -> Button {
         Button::Face(if mode == ConfirmMode::Circle { Symbol::Circle } else { Symbol::Cross })
@@ -353,8 +376,23 @@ pub fn hints(gfx: &mut Gfx, theme: &Theme, items: &[(Button, &str)], mut x: f32,
         if i > 0 {
             x += 16.0;
         }
-        x += button.draw(gfx, x, cy - 16.0) + 8.0;
+        let start = x;
+        let width = button.draw(gfx, x, cy - 16.0);
+        x += width + 8.0;
         x = gfx.text(Role::Small, x, baseline, theme.dim, label) + 8.0;
+        // The symbol and its label, finger-high; L and R side by side
+        // ("Move" in the category manager) each stand for their own.
+        let place = Rect::new(start - 8.0, cy - 24.0, x - start + 8.0, 48.0);
+        match button.bit() {
+            Some(bit) => gfx.hit(place, Hit::Button(bit)),
+            None if *button == Button::ShoulderLR => {
+                // The L pill at 0, the R pill at 56 (48 wide each); the
+                // label goes with R.
+                gfx.hit(Rect::new(start - 8.0, cy - 24.0, 60.0, 48.0), Hit::Button(buttons::L));
+                gfx.hit(Rect::new(start + 52.0, cy - 24.0, x - start - 52.0, 48.0), Hit::Button(buttons::R));
+            }
+            None => {}
+        }
     }
     x
 }
@@ -416,6 +454,9 @@ pub fn text_with_button(gfx: &mut Gfx, theme: &Theme, text: &str, button: Button
     let baseline = (cy - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
     let (before, after) = text.split_once("{button}").unwrap_or((text, ""));
     let mut x = gfx.text(Role::Small, x, baseline, theme.dim, before.trim_end()) + 8.0;
+    if let Some(bit) = button.bit() {
+        gfx.hit(Rect::new(x - 8.0, cy - 24.0, 48.0, 48.0), Hit::Button(bit));
+    }
     x += button.draw(gfx, x, cy - 16.0) + 8.0;
     gfx.text(Role::Small, x, baseline, theme.dim, after.trim_start());
 }

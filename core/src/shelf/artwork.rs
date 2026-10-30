@@ -44,6 +44,21 @@ pub struct Cleanup {
     pub(super) targets: (Vec<String>, Vec<String>),
 }
 
+impl Cleanup {
+    /// The highlighted row: the mode, or Remove.
+    pub(super) fn row(&self) -> usize {
+        self.row
+    }
+
+    /// Highlight a row by touch; a new row disarms Remove.
+    pub(super) fn set_row(&mut self, row: usize) {
+        if self.row != row {
+            self.row = row;
+            self.armed = false;
+        }
+    }
+}
+
 fn source_name(t: &crate::locales::Messages, source: ScrapeSource) -> &'static str {
     match source {
         ScrapeSource::Auto => t.source_auto,

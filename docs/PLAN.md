@@ -218,6 +218,10 @@ the user.
   Play time from TrackPlug or RetroArch's runtime logs waits until
   RetroArch titles need it.
 
+- **Touch everywhere** (the user, 2026-10-30): the shelf, every menu and
+  drawer, and the keyboard; a tap selects a tile and a second tap on it
+  launches; the front panel only.
+
 ## Follow-ups
 
 - **Icon texture budget**: *done 2026-10-30, hardware run pending.* Icon

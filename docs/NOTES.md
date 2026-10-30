@@ -306,6 +306,15 @@ updates**.
 - **The tab names slide** so the current one is centered between L and R at
   every press; a name an end cuts shows in part, faint.
 
+## Touch
+
+- **The front panel reports 1920×1088**, twice the screen in each
+  direction (`sceTouchPeek` after `sceTouchSetSamplingState` for the front
+  port); the app halves it. The rear panel is not read (it is touched by
+  accident while holding the console). Taps, drags and flicks are tested
+  on the desktop only; the slop (16 px), the tap time (0.6 s) and the
+  flick's slowing are not yet tuned on hardware.
+
 ## Drawing on the Vita
 
 - **vita2d's clip flickered the top bar** on hardware: each clip change drew

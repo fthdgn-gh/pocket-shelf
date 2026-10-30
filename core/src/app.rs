@@ -69,6 +69,10 @@ pub struct App {
     first_frame_at: u64,
     pub stats: FrameStats,
     pub quit: bool,
+    /// The front touch screen's gestures.
+    touch: crate::touch::Touch,
+    /// What the last frame drew to tap (`Gfx::hits`).
+    hits: Vec<(Rect, crate::touch::Hit)>,
 }
 
 impl Default for App {
@@ -99,6 +103,8 @@ impl App {
             first_frame_at: 0,
             stats: FrameStats::default(),
             quit: false,
+            touch: crate::touch::Touch::default(),
+            hits: Vec::new(),
         }
     }
 
@@ -176,7 +182,9 @@ impl App {
         count
     }
 
-    pub fn update(&mut self, host: &mut dyn Host, pad: u32) {
+    /// One frame: the buttons held, and where a finger is on the front
+    /// touch screen in pixels (`None` when none is).
+    pub fn update(&mut self, host: &mut dyn Host, pad: u32, finger: Option<(f32, f32)>) {
         let now = host.time_us();
         if self.frame == 0 {
             // A fresh install checks the channel it was released on.
@@ -223,7 +231,9 @@ impl App {
             return;
         }
         if let Some(shelf) = &mut self.shelf {
-            self.request = shelf.update(host, pad, now);
+            let gesture = self.touch.update(finger, now);
+            let touch = crate::shelf::TouchFrame { gesture, hits: &self.hits };
+            self.request = shelf.update(host, pad, now, &touch);
             // Diagnostics counts frames from when it opens.
             if std::mem::take(&mut shelf.reset_stats) {
                 self.stats.reset();
@@ -270,6 +280,7 @@ impl App {
             if self.scan.is_some() {
                 self.draw_scan(gfx);
             }
+            self.hits.clear();
             return;
         }
         let lines = match &self.shelf {
@@ -282,6 +293,8 @@ impl App {
             }
             shelf.draw(gfx);
         }
+        // The next frame's taps land on what this one drew.
+        self.hits.clone_from(&gfx.hits);
     }
 
     /// The first start's page: the mark, the

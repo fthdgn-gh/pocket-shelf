@@ -197,7 +197,22 @@ counts as unused, and so does box art whose name matches no title.
 | ○ or ✕ (your choice in the menu) | Launch / back |
 | △ | Edit the selected title |
 | □ | Search |
-| SELECT | Menu: appearance, library, updates, confirm button, language, diagnostics |
+| SELECT | Menu: sort, appearance, library, updates, confirm button, language, diagnostics |
+
+**Touch screen.** Everything the buttons do can also be done on the front
+touch screen:
+
+- Tap a title to select it; tap the selected title to start it.
+- Drag along the row (Home, Carousel, Cascade) or up and down the Grid and
+  the List to move through the titles; a flick keeps going and slows down.
+- Tap a tab name, or L or R, to change tabs.
+- Tap a button hint at the bottom of the screen (△ Edit, □ Search,
+  SELECT Menu, and the hints in each menu) to do what it says.
+- In a menu, tap a row to open or change it, or its ◀ ▶ arrows to step its
+  value; drag to move through a long list; tap outside the menu to go back.
+  In a box art or backdrop list, the first tap shows the picture and a
+  second one uses it.
+- Tap keys on the on-screen keyboard.
 
 ## Data
 

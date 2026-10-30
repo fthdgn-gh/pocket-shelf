@@ -13,6 +13,8 @@ pub mod panel;
 mod tools;
 mod update;
 mod online;
+mod touch;
+pub use touch::TouchFrame;
 pub mod tween;
 mod views;
 
@@ -201,6 +203,9 @@ pub struct Shelf {
     /// Diagnostics' highlighted row while open, and its lines (the app's
     /// frame timing and startup marks, filled while it is open).
     diagnostics: Option<usize>,
+    /// A drag's distance not yet turned into a step of the selection or a
+    /// panel's highlight.
+    drag_left: f32,
     pub diagnostics_lines: Vec<(String, String)>,
     /// Diagnostics opened: the app resets its frame timing.
     pub reset_stats: bool,
@@ -278,6 +283,7 @@ impl Shelf {
             build: crate::updates::BuildInfo::local(),
             diagnostics: None,
             diagnostics_lines: Vec::new(),
+            drag_left: 0.0,
             reset_stats: false,
             online: None,
             online_tex: [None, None],
@@ -420,14 +426,14 @@ pub(super) fn cycle_by<T: Copy + PartialEq>(all: &[T], current: T, delta: i32) -
 
 impl Shelf {
     /// One frame of input and loading. `now` is the host's clock in µs.
-    pub fn update(&mut self, host: &mut dyn Host, pad: u32, now: u64) -> Option<Request> {
+    pub fn update(&mut self, host: &mut dyn Host, pad: u32, now: u64, touch: &touch::TouchFrame) -> Option<Request> {
         self.now = now;
         // The status arrives with the shelf; it is read again every second.
         if self.frame > 0 && self.frame % STATUS_EVERY == 0 && self.settings.status_bar {
             self.status = host.status();
         }
         self.frame += 1;
-        let pressed = pad & !self.previous;
+        let mut pressed = pad & !self.previous;
         self.previous = pad;
         let before = (self.tab.clone(), self.selected_game().map(|g| (g.id.clone(), g.backdrop.clone())));
         let (confirm, cancel) = if self.settings.confirm == ConfirmMode::Circle { (CIRCLE, CROSS) } else { (CROSS, CIRCLE) };
@@ -435,7 +441,10 @@ impl Shelf {
             .into_iter()
             .find(|(bit, _)| pad & bit != 0)
             .map(|(_, d)| d);
-        let step = self.held.update(direction);
+        let mut step = self.held.update(direction);
+        // A tap stands for the buttons of what it lands on; a drag moves
+        // the selection or the open panel's highlight.
+        self.apply_touch(host, touch, &mut pressed, &mut step, confirm, cancel);
         let mut request = None;
 
         if let Some(keyboard) = &mut self.keyboard {
@@ -1220,9 +1229,12 @@ impl Shelf {
         let height = 20.0 + label_h + 8.0 + 52.0 + 8.0 + 4.0 + 8.0 + 5.0 * 48.0 + 8.0 * 4.0 + 8.0 + 4.0 + 8.0 + hints_h + 16.0;
         let slide = self.drawer.at(self.now);
         gfx.fill(Rect::new(0.0, 0.0, crate::W, crate::H), theme.scrim.alpha(slide.min(1.0)));
+        // Outside the keyboard: cancel, as the other face button.
+        gfx.hit(Rect::new(0.0, 0.0, crate::W, crate::H), crate::touch::Hit::Back);
         let card = Rect::new(16.0, crate::H - 16.0 - height + (1.0 - slide) * 160.0, crate::W - 32.0, height);
         gfx.shadow(card, 24.0, 16.0, crate::gfx::BLACK.with_a(80));
         gfx.round_rect(card, 24.0, 0.0, theme.panel);
+        gfx.hit(card, crate::touch::Hit::Block);
         let left = (crate::W - 832.0) / 2.0;
         let mut y = card.y + 20.0;
         gfx.text_top(Role::Label, left + 4.0, y, theme.dim, &crate::i18n::upper(heading, self.settings.language));
@@ -1248,6 +1260,8 @@ impl Shelf {
                 let w = if key.wide() { 160.0 } else { 76.0 };
                 let active = r == row && c == col;
                 gfx.round_rect(Rect::new(x, y, w, 48.0), 12.0, 0.0, if active { theme.accent } else { theme.tile });
+                // The key and half the gap around it.
+                gfx.hit(Rect::new(x - 4.0, y - 4.0, w + 8.0, 56.0), crate::touch::Hit::Key(r, c));
                 let label: String = match key.action {
                     Action::Char => (if shift { key.upper } else { key.lower }).to_string(),
                     Action::Symbols => next_page.to_string(),
@@ -1412,6 +1426,8 @@ impl Shelf {
         let mut drawer = panel::Drawer::open(gfx, &theme, &heading, panel::Size::Wide, slide);
         let items = menu::items(self.menu.page);
         let first = self.menu.first_visible();
+        drawer.index = first;
+        drawer.selectable = true;
         for (index, item) in items.iter().enumerate().skip(first).take(menu::VISIBLE) {
             let (label, value, icon, step) = self.menu_row(*item);
             drawer.row(gfx, label, value.as_deref(), icon, index == self.menu.row, step);
@@ -1658,8 +1674,8 @@ mod tests {
     }
 
     fn press(shelf: &mut Shelf, host: &mut TestHost, button: u32) -> Option<Request> {
-        let request = shelf.update(host, button, 0);
-        shelf.update(host, 0, 0);
+        let request = shelf.update(host, button, 0, &TouchFrame::NONE);
+        shelf.update(host, 0, 0, &TouchFrame::NONE);
         request
     }
 
@@ -1741,7 +1757,7 @@ mod tests {
     /// Rest on the selection until its backdrop is asked for, and answer.
     fn rest(shelf: &mut Shelf, host: &mut TestHost, gfx: &mut Gfx) {
         for _ in 0..BACKDROP_DELAY + 1 {
-            shelf.update(host, 0, 0);
+            shelf.update(host, 0, 0, &TouchFrame::NONE);
         }
         if let Some(key) = host.backdrops.last().cloned().filter(|k| shelf.wanted.as_ref() == Some(k)) {
             if shelf.backdrop.as_ref().is_none_or(|b| b.key != key) {
@@ -1780,8 +1796,8 @@ mod tests {
         let asked = host.backdrops.len();
         // Once the selected backdrop is answered, the next title's is asked
         // for ahead, and only once.
-        shelf.update(&mut host, 0, 0);
-        shelf.update(&mut host, 0, 0);
+        shelf.update(&mut host, 0, 0, &TouchFrame::NONE);
+        shelf.update(&mut host, 0, 0, &TouchFrame::NONE);
         assert_eq!((shelf.list.len(), shelf.selected), (3, 0));
         let (index, button) = (1, RIGHT);
         let next = shelf.game(index).map(|g| PictureKey::Backdrop { id: g.id.to_string(), file: String::new() }).unwrap();
@@ -1814,6 +1830,65 @@ mod tests {
         assert_eq!(shelf.settings.text_size, TextSize::Smaller, "stops at Smaller");
         assert_eq!(TextSize::parse(&host.files.0[TEXT_SIZE_FILE]), TextSize::Smaller);
         assert!(!host.files.0.get(SETTINGS_FILE).is_some_and(|f| String::from_utf8_lossy(f).contains("smaller")));
+    }
+
+    /// A tap on the center of the place the last draw recorded for `hit`.
+    fn tap(shelf: &mut Shelf, host: &mut TestHost, gfx: &mut Gfx, hit: crate::touch::Hit) -> Option<Request> {
+        // Two frames a second apart: what the first draws starts its
+        // entrance or slide, the second shows it in place.
+        for _ in 0..2 {
+            let later = shelf.now + 1_000_000;
+            shelf.update(host, 0, later, &TouchFrame::NONE);
+            gfx.begin();
+            shelf.draw(gfx);
+        }
+        // A point of `hit`'s place where nothing drawn later lies over it.
+        let (rect, _) = gfx.hits.iter().rev().find(|(_, h)| *h == hit).cloned().unwrap_or_else(|| panic!("{hit:?} not drawn"));
+        let points = (0..20).flat_map(|i| (0..20).map(move |j| (rect.x + rect.w * (i as f32 + 0.5) / 20.0, rect.y + rect.h * (j as f32 + 0.5) / 20.0)));
+        let point = points
+            .into_iter()
+            .find(|&(x, y)| crate::touch::hit_at(&gfx.hits, x, y) == Some(&hit))
+            .unwrap_or_else(|| panic!("{hit:?} is covered"));
+        let gesture = crate::touch::Gesture { tap: Some(point), ..Default::default() };
+        let hits = gfx.hits.clone();
+        let now = shelf.now;
+        let request = shelf.update(host, 0, now, &TouchFrame { gesture, hits: &hits });
+        shelf.update(host, 0, now, &TouchFrame::NONE);
+        request
+    }
+
+    #[test]
+    fn a_tap_selects_a_tile_and_a_second_one_launches_it() {
+        use crate::touch::Hit;
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let mut gfx = Gfx::new();
+        let infos: Vec<TitleInfo> = ["PCSA00001", "PCSA00002", "PCSA00003"]
+            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None })
+            .into();
+        shelf.set_titles(load_catalog(&infos), false);
+        shelf.tab = "games".into();
+        shelf.refresh();
+        shelf.selected = 0;
+        assert_eq!(tap(&mut shelf, &mut host, &mut gfx, Hit::Tile(1)), None);
+        assert_eq!(shelf.selected, 1);
+        assert_eq!(tap(&mut shelf, &mut host, &mut gfx, Hit::Tile(1)), Some(Request::Launch("PCSA00002".into())));
+    }
+
+    #[test]
+    fn a_tap_on_a_row_opens_it_and_one_outside_goes_back() {
+        use crate::touch::Hit;
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let mut gfx = Gfx::new();
+        // The footer's Menu hint, then the second row: Appearance.
+        tap(&mut shelf, &mut host, &mut gfx, Hit::Button(SELECT));
+        assert!(shelf.menu.open);
+        tap(&mut shelf, &mut host, &mut gfx, Hit::Row(1));
+        assert_eq!(shelf.menu.page, menu::Page::Appearance);
+        // Outside the drawer: back to the main page, then closed.
+        tap(&mut shelf, &mut host, &mut gfx, Hit::Back);
+        assert_eq!(shelf.menu.page, menu::Page::Main);
+        tap(&mut shelf, &mut host, &mut gfx, Hit::Back);
+        assert!(!shelf.menu.open);
     }
 
     #[test]
