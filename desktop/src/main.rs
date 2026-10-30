@@ -274,7 +274,7 @@ fn main() {
 
     for shot in SHOTS.iter().filter(|shot| words.is_empty() || words.iter().any(|w| shot.name.contains(w.as_str()))) {
         let mut host = (shot.setup)();
-        let mut gfx = Gfx::new(2.0);
+        let mut gfx = Gfx::new();
         let mut app = App::new();
         for &(pad, frames) in shot.script {
             for _ in 0..frames {

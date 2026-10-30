@@ -1,4 +1,4 @@
-//! Geometry shared by the views, in logical units.
+//! Geometry shared by the views, in screen pixels.
 
 use crate::library::settings::DetailLevel;
 
@@ -13,12 +13,12 @@ pub struct Home {
 /// all aligned at the top. The less text under the row, the larger the tiles.
 pub fn home(detail: DetailLevel) -> Home {
     match detail {
-        DetailLevel::Basic => Home { tile: 128.0, small: 84.0, gap: 12.0 },
-        DetailLevel::Normal => Home { tile: 96.0, small: 64.0, gap: 12.0 },
-        DetailLevel::Detailed => Home { tile: 88.0, small: 56.0, gap: 12.0 },
+        DetailLevel::Basic => Home { tile: 256.0, small: 168.0, gap: 24.0 },
+        DetailLevel::Normal => Home { tile: 192.0, small: 128.0, gap: 24.0 },
+        DetailLevel::Detailed => Home { tile: 176.0, small: 112.0, gap: 24.0 },
     }
 }
-pub const HOME_LEFT: f32 = 20.0;
+pub const HOME_LEFT: f32 = 40.0;
 /// Tiles drawn after the selected one; about four and a half are on screen.
 pub const HOME_AFTER: i32 = 6;
 
@@ -59,9 +59,9 @@ pub struct ShelfRow {
 /// its frame).
 pub fn shelf(detail: DetailLevel) -> ShelfRow {
     match detail {
-        DetailLevel::Basic => ShelfRow { tile: 124.0, gap: 26.0, row: 172.0 },
-        DetailLevel::Normal => ShelfRow { tile: 112.0, gap: 24.0, row: 156.0 },
-        DetailLevel::Detailed => ShelfRow { tile: 100.0, gap: 22.0, row: 140.0 },
+        DetailLevel::Basic => ShelfRow { tile: 248.0, gap: 52.0, row: 344.0 },
+        DetailLevel::Normal => ShelfRow { tile: 224.0, gap: 48.0, row: 312.0 },
+        DetailLevel::Detailed => ShelfRow { tile: 200.0, gap: 44.0, row: 280.0 },
     }
 }
 
@@ -72,13 +72,13 @@ pub const GRID_ROWS: usize = 2;
 /// "Detailed" adds a line under the grid, so its tiles are smaller.
 pub fn grid(detail: DetailLevel) -> (f32, f32) {
     match detail {
-        DetailLevel::Detailed => (64.0, 10.0),
-        _ => (72.0, 10.0),
+        DetailLevel::Detailed => (128.0, 20.0),
+        _ => (144.0, 20.0),
     }
 }
 
-pub const LIST_ROW_H: f32 = 30.0;
-pub const LIST_GAP: f32 = 4.0;
+pub const LIST_ROW_H: f32 = 60.0;
+pub const LIST_GAP: f32 = 8.0;
 /// Rows that fit in the list.
 pub const LIST_ROWS: usize = 6;
 
@@ -92,15 +92,15 @@ pub fn carousel_layout(screen_w: f32, detail: DetailLevel) -> (f32, f32) {
 /// selected tile's side and the row the tiles are centered in.
 pub fn cascade(detail: DetailLevel) -> (f32, f32) {
     match detail {
-        DetailLevel::Basic => (144.0, 168.0),
-        DetailLevel::Normal => (128.0, 152.0),
-        DetailLevel::Detailed => (112.0, 136.0),
+        DetailLevel::Basic => (288.0, 336.0),
+        DetailLevel::Normal => (256.0, 304.0),
+        DetailLevel::Detailed => (224.0, 272.0),
     }
 }
-pub const CASCADE_LEFT: f32 = 28.0;
+pub const CASCADE_LEFT: f32 = 56.0;
 pub const CASCADE_SHRINK: f32 = 0.8;
 /// Space between the selected tile and the next one.
-pub const CASCADE_GAP: f32 = 6.0;
+pub const CASCADE_GAP: f32 = 12.0;
 /// Part of a tile's width behind the tile in front, from the third tile on.
 pub const CASCADE_OVERLAP: f32 = 0.25;
 /// Tiles shown after the selected one; the one after them waits invisible.
@@ -146,7 +146,7 @@ pub fn cascade_slot(detail: DetailLevel, offset: i32) -> CascadeSlot {
     }
     CascadeSlot {
         x: x.round(),
-        y: -2.0 * offset as f32,
+        y: -4.0 * offset as f32,
         scale: CASCADE_SHRINK.powi(offset),
         opacity: if offset > CASCADE_DEPTH { 0.0 } else { 1.0 },
         shade: CASCADE_SHADE[(offset as usize).min(CASCADE_SHADE.len() - 1)],
@@ -154,15 +154,15 @@ pub fn cascade_slot(detail: DetailLevel, offset: i32) -> CascadeSlot {
     }
 }
 
-// Top bar: 16 of padding, L and R (24 wide, 6 gap each) around the category
-// names, the status items at the right in `STATUS_W`. Names are at most
-// `TAB_MAX` wide, `TAB_GAP` apart. The status items take the width of the
-// ones shown (Pocket Shelf 0.1 kept 128 for them).
-pub const BAR_H: f32 = 30.0;
-pub const BAR_SIDE: f32 = 16.0;
-pub const PILL_ROOM: f32 = 24.0 + 6.0;
-pub const TAB_MAX: f32 = 120.0;
-pub const TAB_GAP: f32 = 16.0;
+// Top bar: 32 of padding, L and R (48 wide, 12 gap each) around the category
+// names, the status items at the right. Names are at most `TAB_MAX` wide,
+// `TAB_GAP` apart. The status items take the width of the ones shown
+// (Pocket Shelf 0.1 kept 256 for them).
+pub const BAR_H: f32 = 60.0;
+pub const BAR_SIDE: f32 = 32.0;
+pub const PILL_ROOM: f32 = 48.0 + 12.0;
+pub const TAB_MAX: f32 = 240.0;
+pub const TAB_GAP: f32 = 32.0;
 
 #[cfg(test)]
 mod tests {
@@ -174,7 +174,7 @@ mod tests {
     fn carousel_centers_the_first_tile() {
         for detail in LEVELS {
             let ShelfRow { tile, gap, .. } = shelf(detail);
-            assert_eq!(carousel_layout(480.0, detail), (tile + gap, (480.0 - tile) / 2.0));
+            assert_eq!(carousel_layout(960.0, detail), (tile + gap, (960.0 - tile) / 2.0));
         }
     }
 
@@ -182,10 +182,10 @@ mod tests {
     fn selected_shelf_tile_clears_its_neighbors_and_fits_its_row() {
         for detail in LEVELS {
             let ShelfRow { tile, gap, row } = shelf(detail);
-            let selected_half = tile * 1.25 / 2.0 + 3.0 * 1.25;
+            let selected_half = tile * 1.25 / 2.0 + 6.0 * 1.25;
             let neighbor_half = tile * 0.9 / 2.0;
             assert!(tile + gap - selected_half - neighbor_half > 0.0);
-            assert!(tile * 1.25 + 3.0 * 1.25 <= row - 8.0);
+            assert!(tile * 1.25 + 6.0 * 1.25 <= row - 16.0);
         }
     }
 
@@ -196,8 +196,8 @@ mod tests {
             assert_eq!(home_slot(detail, 0), HomeSlot { x: HOME_LEFT, scale: 1.0, opacity: 1.0 });
             let next = home_slot(detail, 1);
             assert_eq!(next.x, HOME_LEFT + tile + gap);
-            assert!(next.x - (HOME_LEFT + tile + 5.0) > 0.0);
-            assert!((next.scale * tile - small).abs() < 0.01);
+            assert!(next.x - (HOME_LEFT + tile + 10.0) > 0.0);
+            assert!((next.scale * tile - small).abs() < 0.02);
             assert_eq!(home_slot(detail, 2).x - next.x, small + gap);
             assert_eq!(home_slot(detail, -1).opacity, 0.0);
         }

@@ -14,7 +14,7 @@ use crate::text::Role;
 use crate::theme::{is_light, Theme};
 use crate::W;
 
-pub const FOOTER_H: f32 = 26.0;
+pub const FOOTER_H: f32 = 52.0;
 /// The button pills' fixed gray (`#3d4350`, as in Pocket Shelf 0.1's icons).
 const PILL: Color = Color::rgb(0x3d4350);
 const WHITE: Color = Color::rgb(0xffffff);
@@ -102,7 +102,7 @@ impl Header {
         // from L or R); the names have the rest.
         let items = if input.settings.status_bar { status_parts(gfx, input.settings, input.status) } else { Vec::new() };
         let items_w = parts_width(&items);
-        let status_w = if items.is_empty() { 0.0 } else { items_w + 6.0 };
+        let status_w = if items.is_empty() { 0.0 } else { items_w + 12.0 };
         let left = input.settings.layout.position == StatusPosition::Left;
         let room = W - BAR_SIDE * 2.0 - PILL_ROOM * 2.0 - status_w;
         let index = self.names.iter().position(|n| n.id == input.current).unwrap_or(0);
@@ -119,13 +119,13 @@ impl Header {
         let names_x = BAR_SIDE + if left { status_w } else { 0.0 } + PILL_ROOM;
         let many = self.names.len() > 1;
         if many {
-            shoulder(gfx, true, names_x - PILL_ROOM, (BAR_H - 16.0) / 2.0);
-            shoulder(gfx, false, names_x + room + 6.0, (BAR_H - 16.0) / 2.0);
+            shoulder(gfx, true, names_x - PILL_ROOM, (BAR_H - 32.0) / 2.0);
+            shoulder(gfx, false, names_x + room + 12.0, (BAR_H - 32.0) / 2.0);
         }
 
         gfx.clip(Some(Rect::new(names_x, 0.0, room, BAR_H)));
         let line = gfx.line_height(Role::BodyBold);
-        let top = ((BAR_H - (line + 3.0 + 2.0)) / 2.0).round();
+        let top = ((BAR_H - (line + 6.0 + 4.0)) / 2.0).round();
         for (i, name) in self.names.iter().enumerate() {
             let left = name.left - scroll;
             if left + name.width < 0.0 || left > room {
@@ -135,15 +135,15 @@ impl Header {
             // of it shows.
             let seen = (left + name.width).min(room) - left.max(0.0);
             let part = (seen / name.width.max(1.0)).clamp(0.0, 1.0);
-            // Whole to within a hundredth of a unit: the slide's arithmetic
+            // Whole to within two hundredths of a pixel: the slide's arithmetic
             // must not turn a name in full view faint.
-            let opacity = if seen >= name.width - 0.01 { 1.0 } else { part * CUT_OPACITY };
+            let opacity = if seen >= name.width - 0.02 { 1.0 } else { part * CUT_OPACITY };
             let active = i == index;
             let (role, color) = if active { (Role::BodyBold, theme.text) } else { (Role::Body, theme.dim) };
             let center = names_x + left + name.width / 2.0;
             gfx.text_top_centered(role, center, top, color.alpha(opacity), &name.label);
             if active {
-                gfx.round_rect(Rect::new(center - 7.0, top + line + 3.0, 14.0, 2.0), 1.0, 0.0, theme.accent.alpha(opacity));
+                gfx.round_rect(Rect::new(center - 14.0, top + line + 6.0, 28.0, 4.0), 2.0, 0.0, theme.accent.alpha(opacity));
             }
         }
         gfx.clip(None);
@@ -164,8 +164,8 @@ impl Header {
 fn shoulder(gfx: &mut Gfx, left: bool, x: f32, y: f32) {
     gfx.icon(if left { Icon::ShoulderL } else { Icon::ShoulderR }, x, y, PILL);
     // The letter sits toward the inner side, as in `btn-l.svg`/`btn-r.svg`.
-    let (letter, cx) = if left { ("L", x + 13.8) } else { ("R", x + 10.7) };
-    gfx.text_centered(Role::Label, cx, y + 11.2, WHITE, letter);
+    let (letter, cx) = if left { ("L", x + 27.6) } else { ("R", x + 21.4) };
+    gfx.text_centered(Role::Label, cx, y + 22.4, WHITE, letter);
 }
 
 /// A status item shown in the top bar.
@@ -184,13 +184,13 @@ fn status_parts(gfx: &mut Gfx, settings: &Settings, status: &Status) -> Vec<(Par
     let layout = &settings.layout;
     let mut parts = Vec::new();
     if let Some(wifi) = status.wifi.filter(|&w| w > 0 && layout.wifi) {
-        parts.push((Part::Wifi(wifi_level(wifi)), 12.0));
+        parts.push((Part::Wifi(wifi_level(wifi)), 24.0));
     }
     if status.bluetooth == Some(true) && layout.bluetooth {
-        parts.push((Part::Bluetooth, 12.0));
+        parts.push((Part::Bluetooth, 24.0));
     }
     if let Some(percent) = status.battery.filter(|_| layout.battery) {
-        parts.push((Part::Battery(percent), BATTERY_W + 3.0));
+        parts.push((Part::Battery(percent), BATTERY_W + 6.0));
     }
     if layout.clock {
         let clock24 = match settings.clock {
@@ -205,9 +205,9 @@ fn status_parts(gfx: &mut Gfx, settings: &Settings, status: &Status) -> Vec<(Par
     parts
 }
 
-/// The items' width, 8 apart.
+/// The items' width, 16 apart.
 fn parts_width(parts: &[(Part, f32)]) -> f32 {
-    parts.iter().map(|(_, w)| w).sum::<f32>() + 8.0 * parts.len().saturating_sub(1) as f32
+    parts.iter().map(|(_, w)| w).sum::<f32>() + 16.0 * parts.len().saturating_sub(1) as f32
 }
 
 /// Draw the items from `x`, centered on `cy`.
@@ -215,23 +215,23 @@ fn draw_parts(gfx: &mut Gfx, theme: &Theme, settings: &Settings, status: &Status
     for (part, width) in parts {
         match part {
             Part::Wifi(level) => {
-                gfx.icon(Icon::Wifi { level: *level, lit: false }, x, cy - 6.0, theme.text.with_a(0x44));
-                gfx.icon(Icon::Wifi { level: *level, lit: true }, x, cy - 6.0, theme.text);
+                gfx.icon(Icon::Wifi { level: *level, lit: false }, x, cy - 12.0, theme.text.with_a(0x44));
+                gfx.icon(Icon::Wifi { level: *level, lit: true }, x, cy - 12.0, theme.text);
             }
-            Part::Bluetooth => gfx.icon(Icon::Bluetooth, x, cy - 6.0, theme.text),
-            Part::Battery(percent) => battery(gfx, theme, settings.battery_percent, *percent, status.charging, x, cy - 6.0),
+            Part::Bluetooth => gfx.icon(Icon::Bluetooth, x, cy - 12.0, theme.text),
+            Part::Battery(percent) => battery(gfx, theme, settings.battery_percent, *percent, status.charging, x, cy - 12.0),
             Part::Clock(clock) => {
                 let baseline = (cy - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
                 gfx.text(Role::BodyBold, x, baseline, theme.text, clock);
             }
         }
-        x += width + 8.0;
+        x += width + 16.0;
     }
 }
 
 /// Battery body, which the charge fills from the left.
-const BATTERY_W: f32 = 24.0;
-const BATTERY_R: f32 = 3.0;
+const BATTERY_W: f32 = 48.0;
+const BATTERY_R: f32 = 6.0;
 /// At or below this charge the battery is drawn in `LOW_BATTERY`.
 const LOW_PERCENT: u8 = 15;
 const LOW_BATTERY: Color = Color::rgb(0xf87171);
@@ -249,23 +249,23 @@ fn battery(gfx: &mut Gfx, theme: &Theme, number: bool, percent: u8, charging: bo
         theme.text
     };
     let empty = theme.text.with_a(0x59);
-    gfx.round_rect(Rect::new(x, y, BATTERY_W, 12.0), BATTERY_R, 0.0, empty);
+    gfx.round_rect(Rect::new(x, y, BATTERY_W, 24.0), BATTERY_R, 0.0, empty);
     if fill_w >= BATTERY_R * 2.0 {
-        gfx.round_rect(Rect::new(x, y, fill_w, 12.0), BATTERY_R, 0.0, fill);
+        gfx.round_rect(Rect::new(x, y, fill_w, 24.0), BATTERY_R, 0.0, fill);
         // A charge short of the right corner ends square.
         if fill_w <= BATTERY_W - BATTERY_R {
-            gfx.fill(Rect::new(x + fill_w - BATTERY_R, y, BATTERY_R, 12.0), fill);
+            gfx.fill(Rect::new(x + fill_w - BATTERY_R, y, BATTERY_R, 24.0), fill);
         }
     } else if fill_w > 0.0 {
-        gfx.round_rect(Rect::new(x, y, fill_w, 12.0), 2.0, 0.0, fill);
+        gfx.round_rect(Rect::new(x, y, fill_w, 24.0), 4.0, 0.0, fill);
     }
     if number {
         // Dark on the dark themes' light charge, light on Daylight's.
         let ink = if is_light(theme) { theme.panel } else { theme.bg_bottom };
-        let baseline = y + 6.0 - gfx.line_height(Role::Tiny) / 2.0 + gfx.ascent(Role::Tiny);
+        let baseline = y + 12.0 - gfx.line_height(Role::Tiny) / 2.0 + gfx.ascent(Role::Tiny);
         gfx.text_centered(Role::Tiny, x + BATTERY_W / 2.0, baseline.round(), ink, &percent.to_string());
     }
-    gfx.round_rect(Rect::new(x + BATTERY_W + 1.0, y + 4.0, 2.0, 4.0), 1.0, 0.0, empty);
+    gfx.round_rect(Rect::new(x + BATTERY_W + 2.0, y + 8.0, 4.0, 8.0), 2.0, 0.0, empty);
 }
 
 /// A button in a prompt.
@@ -278,7 +278,7 @@ pub enum Button {
     /// (change).
     DpadVertical,
     DpadHorizontal,
-    /// The L and R shoulder buttons, 24 wide; both, side by side.
+    /// The L and R shoulder buttons, 48 wide; both, side by side.
     ShoulderL,
     ShoulderR,
     ShoulderLR,
@@ -296,47 +296,47 @@ impl Button {
         Button::Face(if mode == ConfirmMode::Circle { Symbol::Cross } else { Symbol::Circle })
     }
 
-    /// Draw at `(x, y)` (16 high); returns the width.
+    /// Draw at `(x, y)` (32 high); returns the width.
     pub fn draw(self, gfx: &mut Gfx, x: f32, y: f32) -> f32 {
         match self {
             Button::Face(symbol) => {
                 gfx.button(symbol, x, y);
-                16.0
+                32.0
             }
             Button::DpadVertical | Button::DpadHorizontal => {
                 // `dpad-*.svg`: a gray cross, the two arms in use white.
-                gfx.round_rect(Rect::new(x + 5.5, y + 1.0, 5.0, 14.0), 1.2, 0.0, PILL);
-                gfx.round_rect(Rect::new(x + 1.0, y + 5.5, 14.0, 5.0), 1.2, 0.0, PILL);
+                gfx.round_rect(Rect::new(x + 11.0, y + 2.0, 10.0, 28.0), 2.4, 0.0, PILL);
+                gfx.round_rect(Rect::new(x + 2.0, y + 11.0, 28.0, 10.0), 2.4, 0.0, PILL);
                 if self == Button::DpadVertical {
-                    gfx.fill(Rect::new(x + 6.6, y + 2.0, 2.8, 3.2), WHITE);
-                    gfx.fill(Rect::new(x + 6.6, y + 10.8, 2.8, 3.2), WHITE);
+                    gfx.fill(Rect::new(x + 13.2, y + 4.0, 5.6, 6.4), WHITE);
+                    gfx.fill(Rect::new(x + 13.2, y + 21.6, 5.6, 6.4), WHITE);
                 } else {
-                    gfx.fill(Rect::new(x + 2.0, y + 6.6, 3.2, 2.8), WHITE);
-                    gfx.fill(Rect::new(x + 10.8, y + 6.6, 3.2, 2.8), WHITE);
+                    gfx.fill(Rect::new(x + 4.0, y + 13.2, 6.4, 5.6), WHITE);
+                    gfx.fill(Rect::new(x + 21.6, y + 13.2, 6.4, 5.6), WHITE);
                 }
-                16.0
+                32.0
             }
             Button::ShoulderL | Button::ShoulderR => {
                 shoulder(gfx, self == Button::ShoulderL, x, y);
-                24.0
+                48.0
             }
             Button::ShoulderLR => {
                 shoulder(gfx, true, x, y);
-                shoulder(gfx, false, x + 28.0, y);
-                52.0
+                shoulder(gfx, false, x + 56.0, y);
+                104.0
             }
             Button::Plus => {
                 // `plus.svg`.
                 let ink = Color::rgb(0x8b95a7);
-                gfx.fill(Rect::new(x + 7.0, y + 3.5, 2.0, 9.0), ink);
-                gfx.fill(Rect::new(x + 3.5, y + 7.0, 9.0, 2.0), ink);
-                16.0
+                gfx.fill(Rect::new(x + 14.0, y + 7.0, 4.0, 18.0), ink);
+                gfx.fill(Rect::new(x + 7.0, y + 14.0, 18.0, 4.0), ink);
+                32.0
             }
             Button::Select | Button::Start => {
                 let label = if self == Button::Select { "SELECT" } else { "START" };
-                let width = (gfx.measure(Role::Tiny, label) + 12.0).round();
-                gfx.round_rect(Rect::new(x, y + 2.0, width, 12.0), 6.0, 0.0, PILL);
-                let baseline = y + 8.0 - gfx.line_height(Role::Tiny) / 2.0 + gfx.ascent(Role::Tiny);
+                let width = (gfx.measure(Role::Tiny, label) + 24.0).round();
+                gfx.round_rect(Rect::new(x, y + 4.0, width, 24.0), 12.0, 0.0, PILL);
+                let baseline = y + 16.0 - gfx.line_height(Role::Tiny) / 2.0 + gfx.ascent(Role::Tiny);
                 gfx.text_centered(Role::Tiny, x + width / 2.0, baseline.round(), WHITE, label);
                 width
             }
@@ -351,10 +351,10 @@ pub fn hints(gfx: &mut Gfx, theme: &Theme, items: &[(Button, &str)], mut x: f32,
     let baseline = (cy - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
     for (i, (button, label)) in items.iter().enumerate() {
         if i > 0 {
-            x += 8.0;
+            x += 16.0;
         }
-        x += button.draw(gfx, x, cy - 8.0) + 4.0;
-        x = gfx.text(Role::Small, x, baseline, theme.dim, label) + 4.0;
+        x += button.draw(gfx, x, cy - 16.0) + 8.0;
+        x = gfx.text(Role::Small, x, baseline, theme.dim, label) + 8.0;
     }
     x
 }
@@ -362,15 +362,15 @@ pub fn hints(gfx: &mut Gfx, theme: &Theme, items: &[(Button, &str)], mut x: f32,
 /// Width of one hint: its button, a gap and its label.
 fn hint_width(gfx: &mut Gfx, button: Button, label: &str) -> f32 {
     let button_w = match button {
-        Button::Face(_) | Button::DpadVertical | Button::DpadHorizontal | Button::Plus => 16.0,
-        Button::ShoulderL | Button::ShoulderR => 24.0,
-        Button::ShoulderLR => 52.0,
+        Button::Face(_) | Button::DpadVertical | Button::DpadHorizontal | Button::Plus => 32.0,
+        Button::ShoulderL | Button::ShoulderR => 48.0,
+        Button::ShoulderLR => 104.0,
         Button::Select | Button::Start => {
             let text = if button == Button::Select { "SELECT" } else { "START" };
-            (gfx.measure(Role::Tiny, text) + 12.0).round()
+            (gfx.measure(Role::Tiny, text) + 24.0).round()
         }
     };
-    button_w + 4.0 + gfx.measure(Role::Small, label)
+    button_w + 8.0 + gfx.measure(Role::Small, label)
 }
 
 /// Hints centered on `cx` from `top`, a hint never split: hints that do not
@@ -379,16 +379,16 @@ fn hint_width(gfx: &mut Gfx, button: Button, label: &str) -> f32 {
 pub fn hints_centered(gfx: &mut Gfx, theme: &Theme, items: &[(Button, &str)], cx: f32, top: f32, max_w: f32) -> f32 {
     let (widths, lines) = hint_lines(gfx, items, max_w);
     for (n, line) in lines.iter().enumerate() {
-        let line_w: f32 = widths[line.clone()].iter().sum::<f32>() + 12.0 * (line.len().saturating_sub(1)) as f32;
-        let cy = top + n as f32 * 20.0 + 8.0;
+        let line_w: f32 = widths[line.clone()].iter().sum::<f32>() + 24.0 * (line.len().saturating_sub(1)) as f32;
+        let cy = top + n as f32 * 40.0 + 16.0;
         hints(gfx, theme, &items[line.clone()], (cx - line_w / 2.0).round(), cy);
     }
-    lines.len() as f32 * 20.0 - 4.0
+    lines.len() as f32 * 40.0 - 8.0
 }
 
 /// The height `hints_centered` will take, without drawing.
 pub fn hints_height(gfx: &mut Gfx, items: &[(Button, &str)], max_w: f32) -> f32 {
-    hint_lines(gfx, items, max_w).1.len() as f32 * 20.0 - 4.0
+    hint_lines(gfx, items, max_w).1.len() as f32 * 40.0 - 8.0
 }
 
 /// Each hint's width, and the hints on each line.
@@ -397,7 +397,7 @@ fn hint_lines(gfx: &mut Gfx, items: &[(Button, &str)], max_w: f32) -> (Vec<f32>,
     let mut lines: Vec<std::ops::Range<usize>> = Vec::new();
     let (mut start, mut width) = (0, 0.0);
     for (i, w) in widths.iter().enumerate() {
-        let next = if i == start { *w } else { width + 12.0 + w };
+        let next = if i == start { *w } else { width + 24.0 + w };
         if i > start && next > max_w {
             lines.push(start..i);
             start = i;
@@ -415,8 +415,8 @@ fn hint_lines(gfx: &mut Gfx, items: &[(Button, &str)], max_w: f32) -> (Vec<f32>,
 pub fn text_with_button(gfx: &mut Gfx, theme: &Theme, text: &str, button: Button, x: f32, cy: f32) {
     let baseline = (cy - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
     let (before, after) = text.split_once("{button}").unwrap_or((text, ""));
-    let mut x = gfx.text(Role::Small, x, baseline, theme.dim, before.trim_end()) + 4.0;
-    x += button.draw(gfx, x, cy - 8.0) + 4.0;
+    let mut x = gfx.text(Role::Small, x, baseline, theme.dim, before.trim_end()) + 8.0;
+    x += button.draw(gfx, x, cy - 16.0) + 8.0;
     gfx.text(Role::Small, x, baseline, theme.dim, after.trim_start());
 }
 
@@ -434,7 +434,7 @@ pub struct FooterInput<'a> {
 }
 
 /// Room for the search term beside the position.
-const TERM_W: f32 = 96.0;
+const TERM_W: f32 = 192.0;
 
 /// The button legend on the left, the position in the tab on the right; on
 /// the search tab the term before the position.
@@ -469,7 +469,7 @@ pub fn footer(gfx: &mut Gfx, input: &FooterInput) {
     gfx.text(Role::Small, right - width, baseline, theme.faint, &position);
     if !input.search_term.is_empty() {
         let term = format!("\"{}\"", gfx.fit(Role::SmallBold, input.search_term, TERM_W));
-        gfx.text_right(Role::SmallBold, right - width - 8.0, baseline, theme.accent, &term);
+        gfx.text_right(Role::SmallBold, right - width - 16.0, baseline, theme.accent, &term);
     }
 }
 

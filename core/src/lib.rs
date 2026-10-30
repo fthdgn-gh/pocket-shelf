@@ -24,7 +24,6 @@ pub mod text;
 pub mod theme;
 pub mod updates;
 
-/// Logical screen size: the current UI's layout units. The Vita draws them
-/// at 2× (960×544).
-pub const W: f32 = 480.0;
-pub const H: f32 = 272.0;
+/// The screen in pixels: the Vita's 960×544.
+pub const W: f32 = 960.0;
+pub const H: f32 = 544.0;

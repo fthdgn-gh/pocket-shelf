@@ -206,7 +206,7 @@ impl Art {
         self.loaded.get(&source(game)).and_then(|l| l.as_ref()).and_then(|l| l.color)
     }
 
-    /// Draw a title's picture in `rect` (logical units). `side` is the
+    /// Draw a title's picture in `rect`. `side` is the
     /// tile's size before scaling, which sizes the initials; `one` draws one
     /// initial (the list's small tiles).
     #[allow(clippy::too_many_arguments)]
@@ -239,27 +239,27 @@ impl Art {
 }
 
 /// The size the initials' glyphs are rasterized at for initials `size`
-/// units tall: 32 for the large tiles (scaled down to 22–36), 18 for the
-/// grid's, 11 for the list's.
+/// pixels tall: 64 for the large tiles (scaled down to 44–72), 36 for the
+/// grid's, 22 for the list's.
 fn initials_base(size: f32) -> u8 {
-    if size >= 21.0 {
-        32
-    } else if size >= 14.0 {
-        18
+    if size >= 42.0 {
+        64
+    } else if size >= 28.0 {
+        36
     } else {
-        11
+        22
     }
 }
 
-/// The ring around the selected tile: 2 thick, 3 clear of the art, in the
+/// The ring around the selected tile: 4 thick, 6 clear of the art, in the
 /// text color, scaled with the tile (`SelectedFrame`).
 pub fn selected_frame(gfx: &mut Gfx, rect: Rect, k: f32, color: Color) {
-    gfx.round_rect(rect.grow(5.0 * k), 3.0 * k, 2.0 * k, color);
+    gfx.round_rect(rect.grow(10.0 * k), 6.0 * k, 4.0 * k, color);
 }
 
 /// The soft shadow under the selected tile (`TileShadow`, `shadow-lg`).
 pub fn tile_shadow(gfx: &mut Gfx, rect: Rect, opacity: f32) {
-    gfx.shadow(Rect::new(rect.x, rect.y + 3.0, rect.w, rect.h), 0.0, 6.0, BLACK.with_a(90).alpha(opacity));
+    gfx.shadow(Rect::new(rect.x, rect.y + 6.0, rect.w, rect.h), 0.0, 12.0, BLACK.with_a(90).alpha(opacity));
 }
 
 #[cfg(test)]
@@ -334,7 +334,7 @@ mod want_tests {
         let infos = [TitleInfo { id: "PCSA00001".into(), title: "T".into(), platform: "vita".into(), adrenaline: false, console: None }];
         let mut game = load_catalog(&infos).remove(0);
         game.art = Some("PCSA00001-9.png".into());
-        let (mut art, mut host, mut gfx) = (Art::default(), Recorder::default(), Gfx::new(2.0));
+        let (mut art, mut host, mut gfx) = (Art::default(), Recorder::default(), Gfx::new());
         // A read that came before the file landed: cached as no picture.
         art.want(&mut host, std::iter::once(&game));
         art.answer(&mut gfx, &PictureKey::Art("PCSA00001-9.png".into()), None);
@@ -360,7 +360,7 @@ mod want_tests {
             .map(|n| TitleInfo { id: format!("PCSA{n:05}"), title: format!("T {n}"), platform: "vita".into(), adrenaline: false, console: None })
             .collect();
         let games = load_catalog(&infos);
-        let (mut art, mut host, mut gfx) = (Art::default(), Recorder::default(), Gfx::new(2.0));
+        let (mut art, mut host, mut gfx) = (Art::default(), Recorder::default(), Gfx::new());
         // Scroll through every title, three at a time, each answered.
         for start in 0..count - 2 {
             art.want(&mut host, games[start..start + 3].iter());

@@ -1,8 +1,8 @@
 //! Text: Figtree rasterized by `fontdue` into one shared glyph atlas, each
 //! glyph the first time it is drawn at a size.
 //!
-//! Sizes are logical (the current UI's `text-*` classes); glyphs are
-//! rasterized at `size × scale` screen pixels.
+//! Sizes are in screen pixels, times the text size setting
+//! (`Gfx::text_scale`); glyphs are rasterized at that size, rounded.
 
 use std::collections::HashMap;
 
@@ -24,28 +24,27 @@ pub enum Weight {
 
 /// Where a piece of text is used; each role has one size and weight. The
 /// roles are those of Pocket Shelf 0.1, each about two steps smaller than its
-/// `text-*` class there: PocketJS baked fonts at 12, 14, 16, 18, 20, 24 and
-/// 36 px only, and this build rasterizes any size (logical size × scale,
-/// rounded to whole screen pixels), so half sizes such as 11.5 work.
+/// `text-*` class there: PocketJS baked fonts at 24, 28, 32, 36, 40, 48 and
+/// 72 px only (its 12 to 36 at 2×), and this build rasterizes any size.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Role {
-    /// 18, bold (24 in Pocket Shelf 0.1).
+    /// 36 px, bold (48 in Pocket Shelf 0.1).
     Display,
-    /// 15, bold (20).
+    /// 30 px, bold (40).
     Heading,
-    /// 13, bold (16).
+    /// 26 px, bold (32).
     Title,
-    /// 11 (14).
+    /// 22 px (28).
     Body,
-    /// 11, bold (14).
+    /// 22 px, bold (28).
     BodyBold,
-    /// 9 (12).
+    /// 18 px (24).
     Small,
-    /// 9, bold (12).
+    /// 18 px, bold (24).
     SmallBold,
-    /// 9, bold, letters 0.025 em apart (`tracking-wide`).
+    /// 18 px, bold, letters 0.44 px further apart (`tracking-wide`).
     Label,
-    /// 8, bold: numbers inside symbols, such as the battery's.
+    /// 16 px, bold: numbers and names inside symbols, such as the battery's.
     Tiny,
     /// Bold at the given size: the initials on a tile with no icon, sized
     /// to the tile.
@@ -55,15 +54,15 @@ pub enum Role {
 impl Role {
     pub fn style(self) -> (Weight, f32, f32) {
         match self {
-            Role::Display => (Weight::Bold, 18.0, 0.0),
-            Role::Heading => (Weight::Bold, 15.0, 0.0),
-            Role::Title => (Weight::Bold, 13.0, 0.0),
-            Role::Body => (Weight::Regular, 11.0, 0.0),
-            Role::BodyBold => (Weight::Bold, 11.0, 0.0),
-            Role::Small => (Weight::Regular, 9.0, 0.0),
-            Role::SmallBold => (Weight::Bold, 9.0, 0.0),
-            Role::Label => (Weight::Bold, 9.0, 0.22),
-            Role::Tiny => (Weight::Bold, 8.0, 0.0),
+            Role::Display => (Weight::Bold, 36.0, 0.0),
+            Role::Heading => (Weight::Bold, 30.0, 0.0),
+            Role::Title => (Weight::Bold, 26.0, 0.0),
+            Role::Body => (Weight::Regular, 22.0, 0.0),
+            Role::BodyBold => (Weight::Bold, 22.0, 0.0),
+            Role::Small => (Weight::Regular, 18.0, 0.0),
+            Role::SmallBold => (Weight::Bold, 18.0, 0.0),
+            Role::Label => (Weight::Bold, 18.0, 0.44),
+            Role::Tiny => (Weight::Bold, 16.0, 0.0),
             Role::Initials(size) => (Weight::Bold, size as f32, 0.0),
         }
     }
@@ -185,7 +184,7 @@ impl Gfx {
     }
 
     fn px(&self, size: f32) -> u16 {
-        (size * self.scale).round() as u16
+        size.round() as u16
     }
 
     /// Pen advance over `text` in pixels; draws it when `at` is given
@@ -193,7 +192,6 @@ impl Gfx {
     fn run(&mut self, role: Role, text: &str, at: Option<(f32, f32, Color)>) -> f32 {
         let (weight, size, tracking) = self.style(role);
         let px = self.px(size);
-        let tracking = tracking * self.scale;
         let atlas = self.fonts.atlas;
         let mut pen = 0.0;
         let mut previous = None;
@@ -215,17 +213,16 @@ impl Gfx {
         pen
     }
 
-    /// Width of `text` in logical units.
+    /// Width of `text` in pixels.
     pub fn measure(&mut self, role: Role, text: &str) -> f32 {
-        self.run(role, text, None) / self.scale
+        self.run(role, text, None)
     }
 
     /// Draw `text` with its baseline at `baseline`, starting at `x`. Returns
     /// the x after it.
     pub fn text(&mut self, role: Role, x: f32, baseline: f32, color: Color, text: &str) -> f32 {
-        let s = self.scale;
-        let width = self.run(role, text, Some(((x * s).round(), (baseline * s).round(), color)));
-        x + width / s
+        let width = self.run(role, text, Some((x.round(), baseline.round(), color)));
+        x + width
     }
 
     /// Draw `text` with the top of its line box at `top` (the way the
@@ -241,12 +238,11 @@ impl Gfx {
     pub fn text_scaled_centered(&mut self, role: Role, cx: f32, cy: f32, k: f32, color: Color, text: &str) {
         let (weight, size, _) = self.style(role);
         let px = self.px(size);
-        let s = self.scale;
         let width = self.run(role, text, None) * k;
         let (ascent, descent) = self.fonts.line(weight, px);
-        let baseline = cy * s + (ascent + descent) / 2.0 * k;
+        let baseline = cy + (ascent + descent) / 2.0 * k;
         let atlas = self.fonts.atlas;
-        let mut pen = cx * s - width / 2.0;
+        let mut pen = cx - width / 2.0;
         let mut previous = None;
         for ch in text.chars() {
             if let Some(left) = previous {
@@ -281,20 +277,20 @@ impl Gfx {
         self.text(role, right - width, baseline, color, text);
     }
 
-    /// Ascent of a role's line, logical units.
+    /// Ascent of a role's line, pixels.
     pub fn ascent(&self, role: Role) -> f32 {
         let (weight, size, _) = self.style(role);
-        self.fonts.line(weight, self.px(size)).0 / self.scale
+        self.fonts.line(weight, self.px(size)).0
     }
 
-    /// Height of a role's line (ascent + descent), logical units.
+    /// Height of a role's line (ascent + descent), pixels.
     pub fn line_height(&self, role: Role) -> f32 {
         let (weight, size, _) = self.style(role);
         let (ascent, descent) = self.fonts.line(weight, self.px(size));
-        (ascent - descent) / self.scale
+        ascent - descent
     }
 
-    /// `text`, cut at the end with "..." to fit `max` units.
+    /// `text`, cut at the end with "..." to fit `max` pixels.
     pub fn fit(&mut self, role: Role, text: &str, max: f32) -> String {
         if self.measure(role, text) <= max {
             return text.to_string();
@@ -310,7 +306,7 @@ impl Gfx {
         "...".into()
     }
 
-    /// The end of `text` that fits `max` units, led by "..." when it was cut
+    /// The end of `text` that fits `max` pixels, led by "..." when it was cut
     /// (for paths).
     pub fn fit_tail(&mut self, role: Role, text: &str, max: f32) -> String {
         if self.measure(role, text) <= max {
@@ -324,7 +320,7 @@ impl Gfx {
         format!("...{}", chars[start..].iter().collect::<String>())
     }
 
-    /// `text` broken into lines at spaces so each fits `max` units; a word
+    /// `text` broken into lines at spaces so each fits `max` pixels; a word
     /// longer than a line keeps a line of its own.
     pub fn wrap(&mut self, role: Role, text: &str, max: f32) -> Vec<String> {
         let mut lines = Vec::new();
@@ -382,24 +378,24 @@ mod tests {
 
     #[test]
     fn wrap_keeps_words_whole() {
-        let mut gfx = Gfx::new(2.0);
-        let lines = gfx.wrap(Role::Body, "one two three four five six seven", 60.0);
+        let mut gfx = Gfx::new();
+        let lines = gfx.wrap(Role::Body, "one two three four five six seven", 120.0);
         assert!(lines.len() > 1);
         assert_eq!(lines.join(" "), "one two three four five six seven");
         for line in &lines[..lines.len() - 1] {
-            assert!(gfx.measure(Role::Body, line) <= 60.0);
+            assert!(gfx.measure(Role::Body, line) <= 120.0);
         }
-        let long = gfx.wrap(Role::Body, "Supercalifragilistic", 10.0);
+        let long = gfx.wrap(Role::Body, "Supercalifragilistic", 20.0);
         assert_eq!(long, vec!["Supercalifragilistic"]);
     }
 
     #[test]
     fn fits_cut_text() {
-        let mut gfx = Gfx::new(2.0);
-        assert_eq!(gfx.fit(Role::Body, "short", 200.0), "short");
-        let cut = gfx.fit(Role::Body, "The Long Winter of the Northern Lighthouse", 100.0);
-        assert!(cut.ends_with("...") && gfx.measure(Role::Body, &cut) <= 100.0);
-        let tail = gfx.fit_tail(Role::Small, "ux0:/pspemu/ISO/Racing/Some Long Game.cso", 80.0);
+        let mut gfx = Gfx::new();
+        assert_eq!(gfx.fit(Role::Body, "short", 400.0), "short");
+        let cut = gfx.fit(Role::Body, "The Long Winter of the Northern Lighthouse", 200.0);
+        assert!(cut.ends_with("...") && gfx.measure(Role::Body, &cut) <= 200.0);
+        let tail = gfx.fit_tail(Role::Small, "ux0:/pspemu/ISO/Racing/Some Long Game.cso", 160.0);
         assert!(tail.starts_with("...") && tail.ends_with(".cso"));
     }
 }
@@ -412,9 +408,9 @@ mod atlas_tests {
     /// one: glyphs drawn earlier in the frame keep their pixels.
     #[test]
     fn a_full_atlas_starts_over_at_the_next_frame() {
-        let mut gfx = Gfx::new(2.0);
+        let mut gfx = Gfx::new();
         gfx.begin();
-        gfx.text(Role::Body, 0.0, 20.0, crate::gfx::Color::rgb(0xffffff), "Header");
+        gfx.text(Role::Body, 0.0, 40.0, crate::gfx::Color::rgb(0xffffff), "Header");
         let pixels_of = |gfx: &Gfx| {
             let src = gfx.fonts.glyphs[&(Weight::Regular, 22, 'H')].src.unwrap();
             let atlas = gfx.textures.get(gfx.fonts.atlas);
@@ -429,7 +425,7 @@ mod atlas_tests {
         // Fill the atlas with large glyphs in many sizes.
         let mut size = 20u8;
         while !gfx.fonts.full {
-            gfx.text(Role::Initials(size), 0.0, 100.0, crate::gfx::Color::rgb(0xffffff), "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+            gfx.text(Role::Initials(size), 0.0, 200.0, crate::gfx::Color::rgb(0xffffff), "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
             size = size.wrapping_add(1).max(20);
         }
         // Still this frame: the header's glyph keeps its pixels.

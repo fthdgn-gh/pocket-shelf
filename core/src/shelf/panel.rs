@@ -10,10 +10,10 @@ use crate::text::Role;
 use crate::theme::Theme;
 use crate::{H, W};
 
-const MARGIN: f32 = 8.0;
-const PAD_X: f32 = 12.0;
-const PAD_Y: f32 = 10.0;
-pub const ROW_H: f32 = 26.0;
+const MARGIN: f32 = 16.0;
+const PAD_X: f32 = 24.0;
+const PAD_Y: f32 = 20.0;
+pub const ROW_H: f32 = 52.0;
 
 /// The arrows an active row shows: none, a right one for a row that opens
 /// something, both for a value that steps.
@@ -33,8 +33,8 @@ pub enum Size {
 impl Size {
     pub fn width(self) -> f32 {
         match self {
-            Size::Narrow => 232.0,
-            Size::Wide => 284.0,
+            Size::Narrow => 464.0,
+            Size::Wide => 568.0,
         }
     }
 }
@@ -63,12 +63,12 @@ impl Drawer {
         let width = size.width();
         let x = W - MARGIN - width + (1.0 - slide) * (width + MARGIN);
         let card = Rect::new(x, MARGIN, width, H - 2.0 * MARGIN);
-        gfx.shadow(card, 12.0, 8.0, crate::gfx::BLACK.with_a(80));
-        gfx.round_rect(card, 12.0, 0.0, theme.panel);
+        gfx.shadow(card, 24.0, 16.0, crate::gfx::BLACK.with_a(80));
+        gfx.round_rect(card, 24.0, 0.0, theme.panel);
         let mut drawer = Drawer { theme: *theme, x: x + PAD_X, w: width - 2.0 * PAD_X, y: MARGIN + PAD_Y, bottom: H - MARGIN - PAD_Y };
         let heading = title.to_uppercase();
-        gfx.text_top(Role::Label, drawer.x + 8.0, drawer.y, theme.dim, &heading);
-        drawer.y += gfx.line_height(Role::Label) + 2.0 + 2.0 + 2.0;
+        gfx.text_top(Role::Label, drawer.x + 16.0, drawer.y, theme.dim, &heading);
+        drawer.y += gfx.line_height(Role::Label) + 4.0 + 4.0 + 4.0;
         drawer
     }
 
@@ -78,33 +78,33 @@ impl Drawer {
         let theme = self.theme;
         let rect = Rect::new(self.x, self.y, self.w, ROW_H);
         if active {
-            gfx.round_rect(rect, 8.0, 0.0, theme.text.with_a(0x1c));
+            gfx.round_rect(rect, 16.0, 0.0, theme.text.with_a(0x1c));
         }
         let role = if active { Role::BodyBold } else { Role::Body };
         let baseline = (rect.y + ROW_H / 2.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
-        gfx.text(role, rect.x + 8.0, baseline, if active { theme.text } else { theme.dim }, label);
+        gfx.text(role, rect.x + 16.0, baseline, if active { theme.text } else { theme.dim }, label);
         // Right to left: arrow, icon, value, left arrow.
-        let mut right = rect.right() - 8.0;
+        let mut right = rect.right() - 16.0;
         if active && step != Step::None {
+            right -= 16.0;
+            gfx.icon(Icon::ArrowRight, right, rect.y + 10.0, theme.dim);
             right -= 8.0;
-            gfx.icon(Icon::ArrowRight, right, rect.y + 5.0, theme.dim);
-            right -= 4.0;
         }
         if let Some(icon) = icon {
-            right -= 16.0;
-            icon.draw(gfx, right, rect.y + 5.0);
-            right -= 4.0;
+            right -= 32.0;
+            icon.draw(gfx, right, rect.y + 10.0);
+            right -= 8.0;
         }
         if let Some(value) = value {
             let base = (rect.y + ROW_H / 2.0 - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
             let width = gfx.measure(Role::BodyBold, value);
             gfx.text(Role::BodyBold, right - width, base, if active { theme.accent } else { theme.dim }, value);
-            right -= width + 4.0;
+            right -= width + 8.0;
         }
         if active && step == Step::Both {
-            gfx.icon(Icon::ArrowLeft, right - 8.0, rect.y + 5.0, theme.dim);
+            gfx.icon(Icon::ArrowLeft, right - 16.0, rect.y + 10.0, theme.dim);
         }
-        self.y += ROW_H + 2.0;
+        self.y += ROW_H + 4.0;
     }
 
     /// Dim text, broken into lines, from the current row down.
@@ -112,11 +112,11 @@ impl Drawer {
         let line_h = gfx.line_height(Role::Small);
         for line in gfx.wrap(Role::Small, text, self.w) {
             gfx.text_top(Role::Small, self.x, self.y, self.theme.dim, &line);
-            self.y += line_h + 2.0;
+            self.y += line_h + 4.0;
         }
     }
 
-    /// Leave `h` units of room from the current row down; returns its top.
+    /// Leave `h` pixels of room from the current row down; returns its top.
     pub fn space(&mut self, h: f32) -> f32 {
         let top = self.y;
         self.y += h;
@@ -127,17 +127,17 @@ impl Drawer {
     pub fn note(&mut self, gfx: &mut Gfx, text: &str, hint_lines: usize) {
         let lines = gfx.wrap(Role::Small, text, self.w);
         let line_h = gfx.line_height(Role::Small);
-        let hints_h = hint_lines as f32 * (16.0 + 2.0);
-        let mut y = self.bottom - hints_h - lines.len() as f32 * (line_h + 2.0);
+        let hints_h = hint_lines as f32 * (32.0 + 4.0);
+        let mut y = self.bottom - hints_h - lines.len() as f32 * (line_h + 4.0);
         for line in &lines {
             gfx.text_top(Role::Small, self.x, y, self.theme.dim, line);
-            y += line_h + 2.0;
+            y += line_h + 4.0;
         }
     }
 
     /// Button hints on the drawer's last line.
     pub fn hints(&mut self, gfx: &mut Gfx, items: &[(Button, &str)]) {
         let theme = self.theme;
-        hints(gfx, &theme, items, self.x, self.bottom - 8.0);
+        hints(gfx, &theme, items, self.x, self.bottom - 16.0);
     }
 }

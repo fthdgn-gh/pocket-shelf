@@ -206,6 +206,11 @@ the user.
   Label 9), plus an 8 px bold `Tiny` for numbers inside symbols. PocketJS
   baked 12 px as its smallest size; `fontdue` rasterizes any size. Layouts
   ported in phases 3 and 4 use these sizes, not the `text-*` classes.
+- **Screen pixels as the layout unit** (the user, 2026-10-30): the layouts
+  came over in PocketJS's 480×272 units, drawn at 2×. Every length was
+  doubled (the sizes above are now Display 36 px to Tiny 16 px) and
+  `Gfx`'s scale removed; the desktop renders matched the previous ones byte
+  for byte before roundings moved to whole pixels.
 
 ## Follow-ups
 

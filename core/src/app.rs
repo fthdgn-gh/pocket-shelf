@@ -30,7 +30,7 @@ pub mod buttons {
 
 /// Frames the full scan bar stays before the shelf replaces the page.
 const SCAN_DONE_FRAMES: u32 = 8;
-const SCAN_BAR_W: f32 = 240.0;
+const SCAN_BAR_W: f32 = 480.0;
 
 /// The scan page's state: steps done of the total, the phase, and frames
 /// since the titles arrived.
@@ -284,27 +284,27 @@ impl App {
         let theme = self.theme;
         let Some(scan) = &self.scan else { return };
         let (done, total, phase, finished) = (scan.done, scan.total, scan.phase, scan.finished);
-        // A column of: mark 48, a 2 unit gap, heading, body, bar 6, small
-        // line, 10 apart, centered.
+        // A column of: mark 96, a 4 pixel gap, heading, body, bar 12, small
+        // line, 20 apart, centered.
         let lines = [gfx.line_height(Role::Heading), gfx.line_height(Role::Body), gfx.line_height(Role::Small)];
-        let height = 48.0 + 2.0 + lines.iter().sum::<f32>() + 6.0 + 10.0 * 5.0;
+        let height = 96.0 + 4.0 + lines.iter().sum::<f32>() + 12.0 + 20.0 * 5.0;
         let mut y = ((H - height) / 2.0).round();
-        self.draw_mark(gfx, (W - 110.0) / 2.0, y);
-        y += 48.0 + 10.0 + 2.0 + 10.0;
+        self.draw_mark(gfx, (W - 220.0) / 2.0, y);
+        y += 96.0 + 20.0 + 4.0 + 20.0;
         gfx.text_top_centered(Role::Heading, W / 2.0, y, theme.text, "Pocket Shelf");
-        y += lines[0] + 10.0;
+        y += lines[0] + 20.0;
         let t = crate::i18n::messages(self.language);
         gfx.text_top_centered(Role::Body, W / 2.0, y, theme.dim, t.scan_title);
-        y += lines[1] + 10.0;
-        let bar = Rect::new((W - SCAN_BAR_W) / 2.0, y, SCAN_BAR_W, 6.0);
-        gfx.round_rect(bar, 3.0, 0.0, theme.line);
+        y += lines[1] + 20.0;
+        let bar = Rect::new((W - SCAN_BAR_W) / 2.0, y, SCAN_BAR_W, 12.0);
+        gfx.round_rect(bar, 6.0, 0.0, theme.line);
         if total > 0 {
             let filled = (SCAN_BAR_W * done.min(total) as f32 / total as f32).round();
             if filled > 0.0 {
-                gfx.round_rect(Rect::new(bar.x, y, filled, 6.0), 3.0, 0.0, theme.accent);
+                gfx.round_rect(Rect::new(bar.x, y, filled, 12.0), 6.0, 0.0, theme.accent);
             }
         }
-        y += 6.0 + 10.0;
+        y += 12.0 + 20.0;
         if let (Some(phase), None) = (phase, finished) {
             let (done, total) = (done.to_string(), total.to_string());
             let step = crate::i18n::fill(t.scan_step, &[("phase", crate::i18n::scan_phase(t, phase)), ("done", &done), ("total", &total)]);
@@ -323,9 +323,9 @@ impl App {
             ]
         });
         let white = Color::rgb(0xffffff);
-        gfx.image_full(amber, Rect::new(x + 52.0, y + 4.0, 26.0, 26.0), white.alpha(0.8));
-        gfx.image_full(emerald, Rect::new(x + 84.0, y + 4.0, 26.0, 26.0), white.alpha(0.8));
-        gfx.image_full(violet, Rect::new(x + 4.0, y + 4.0, 40.0, 40.0), white);
-        gfx.round_rect(Rect::new(x, y, 48.0, 48.0), 3.0, 2.0, self.theme.text);
+        gfx.image_full(amber, Rect::new(x + 104.0, y + 8.0, 52.0, 52.0), white.alpha(0.8));
+        gfx.image_full(emerald, Rect::new(x + 168.0, y + 8.0, 52.0, 52.0), white.alpha(0.8));
+        gfx.image_full(violet, Rect::new(x + 8.0, y + 8.0, 80.0, 80.0), white);
+        gfx.round_rect(Rect::new(x, y, 96.0, 96.0), 6.0, 4.0, self.theme.text);
     }
 }

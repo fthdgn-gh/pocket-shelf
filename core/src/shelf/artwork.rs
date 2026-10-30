@@ -272,7 +272,7 @@ impl Shelf {
         let scope = panel.scopes.get(flow.scope).map_or("", |s| s.1.as_str());
         match flow.step {
             fetch::Step::Setup => {
-                let scope = gfx.fit(Role::BodyBold, scope, 150.0);
+                let scope = gfx.fit(Role::BodyBold, scope, 300.0);
                 drawer.row(gfx, t.scrape_scope, Some(&scope), None, flow.row == 0, Step::Both);
                 drawer.row(gfx, t.scrape_source, Some(source_name(t, self.settings.scraper)), None, flow.row == SOURCE_ROW, Step::Both);
                 drawer.row(gfx, t.scrape_mode, Some(if flow.replace { t.everything } else { t.only_missing }), None, flow.row == MODE_ROW, Step::Both);
@@ -292,7 +292,7 @@ impl Shelf {
             }
             fetch::Step::Key => {
                 drawer.row(gfx, t.enter_key, None, None, true, Step::Right);
-                drawer.space(4.0);
+                drawer.space(8.0);
                 drawer.text(gfx, t.key_help);
                 drawer.text(gfx, "ux0:data/PocketShelf/steamgriddb.txt");
                 if !flow.status.is_empty() {
@@ -304,10 +304,10 @@ impl Shelf {
                 // The title being fetched for; once the run ends, the titles
                 // it covered.
                 if flow.current.is_empty() {
-                    let scope = gfx.fit(Role::BodyBold, scope, 170.0);
+                    let scope = gfx.fit(Role::BodyBold, scope, 340.0);
                     drawer.row(gfx, t.scrape_scope, Some(&scope), None, true, Step::None);
                 } else {
-                    let title = gfx.fit(Role::BodyBold, &flow.current, 190.0);
+                    let title = gfx.fit(Role::BodyBold, &flow.current, 380.0);
                     drawer.row(gfx, t.title, Some(&title), None, true, Step::None);
                 }
                 drawer.row(gfx, t.progress, Some(&format!("{} / {}", flow.done, flow.total)), None, false, Step::None);

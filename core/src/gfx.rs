@@ -1,8 +1,5 @@
-//! Draw commands and the textures they use.
-//!
-//! Callers work in logical units (480×272, as the current UI's layout
-//! numbers are written); `Gfx` multiplies by `scale` (2 on the Vita) when it
-//! records a command, so commands are in screen pixels.
+//! Draw commands and the textures they use. Every position and size is in
+//! screen pixels (the Vita's 960×544).
 
 use std::collections::HashMap;
 
@@ -73,11 +70,8 @@ impl Rect {
         Rect::new(mix(self.x, to.x), mix(self.y, to.y), mix(self.w, to.w), mix(self.h, to.h))
     }
 
-    pub fn scale(self, by: f32) -> Self {
-        Rect::new(self.x * by, self.y * by, self.w * by, self.h * by)
-    }
 
-    /// Snapped to whole units, so 1:1 texture draws stay sharp.
+    /// Snapped to whole pixels, so 1:1 texture draws stay sharp.
     pub fn round(self) -> Self {
         Rect::new(self.x.round(), self.y.round(), self.w.round(), self.h.round())
     }
@@ -243,8 +237,6 @@ pub struct FrameWork {
 pub struct Gfx {
     pub textures: Textures,
     pub cmds: Vec<Cmd>,
-    /// Screen pixels per logical unit.
-    pub scale: f32,
     /// The text size setting's factor on each role's size (`Gfx::style`).
     pub text_scale: f32,
     pub work: FrameWork,
@@ -261,11 +253,17 @@ fn intersect(a: Rect, b: Rect) -> Option<Rect> {
     (x1 > x0 && y1 > y0).then(|| Rect::new(x0, y0, x1 - x0, y1 - y0))
 }
 
+impl Default for Gfx {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Gfx {
-    pub fn new(scale: f32) -> Self {
+    pub fn new() -> Self {
         let mut textures = Textures::default();
         let fonts = FontState::new(&mut textures);
-        Gfx { textures, cmds: Vec::with_capacity(1024), scale, text_scale: 1.0, work: FrameWork::default(), fonts, shapes: HashMap::new(), clip_px: None }
+        Gfx { textures, cmds: Vec::with_capacity(1024), text_scale: 1.0, work: FrameWork::default(), fonts, shapes: HashMap::new(), clip_px: None }
     }
 
     /// Start a frame: drop the previous frame's commands, keep the textures.
@@ -322,12 +320,12 @@ impl Gfx {
 
     /// A filled rectangle.
     pub fn fill(&mut self, rect: Rect, color: Color) {
-        self.raw_fill(rect.scale(self.scale), color);
+        self.raw_fill(rect, color);
     }
 
     /// The `src` part (texels) of a texture into `dst`.
     pub fn image(&mut self, tex: TexId, src: Rect, dst: Rect, tint: Color) {
-        self.raw_image(tex, src, dst.scale(self.scale), tint);
+        self.raw_image(tex, src, dst, tint);
     }
 
     /// The whole texture into `dst`.
@@ -347,13 +345,12 @@ impl Gfx {
         self.image(tex, src, dst, tint);
     }
 
-    /// Draw only inside `rect` (logical units) until the next call; `None`
+    /// Draw only inside `rect` until the next call; `None`
     /// draws everywhere. Each rectangle is cut on the CPU, with its texture
     /// coordinates: the commands need no clipping from a backend (vita2d's
     /// goes through the stencil buffer, two full-screen draws per change,
     /// and the clipped top bar flickered on hardware).
     pub fn clip(&mut self, rect: Option<Rect>) {
-        let scale = self.scale;
-        self.clip_px = rect.map(|r| r.scale(scale).round());
+        self.clip_px = rect.map(|r| r.round());
     }
 }

@@ -165,7 +165,7 @@ impl Shelf {
         match online.step {
             Flow::Key => {
                 drawer.row(gfx, t.enter_key, None, None, true, Step::Right);
-                drawer.space(4.0);
+                drawer.space(8.0);
                 drawer.text(gfx, t.key_help);
                 drawer.text(gfx, "ux0:data/PocketShelf/steamgriddb.txt");
                 if !online.status.is_empty() {
@@ -178,11 +178,11 @@ impl Shelf {
                 let first = online.row.saturating_sub(ONLINE_ROWS / 2).min(count.saturating_sub(ONLINE_ROWS));
                 for i in first..(first + ONLINE_ROWS).min(count) {
                     if i == 0 {
-                        let term = gfx.fit(Role::BodyBold, &online.term, 170.0);
+                        let term = gfx.fit(Role::BodyBold, &online.term, 340.0);
                         drawer.row(gfx, t.search, Some(&term), None, online.row == 0, Step::Right);
                     } else {
                         let game = &online.games[i - 1];
-                        let label = gfx.fit(Role::BodyBold, &game.name, if game.year.is_some() { 200.0 } else { 240.0 });
+                        let label = gfx.fit(Role::BodyBold, &game.name, if game.year.is_some() { 400.0 } else { 480.0 });
                         let year = game.year.map(|y| y.to_string());
                         drawer.row(gfx, &label, year.as_deref(), None, online.row == i, Step::None);
                     }
@@ -199,7 +199,7 @@ impl Shelf {
                 }
                 // The candidate at the size it is judged at: an icon as a
                 // tile, a backdrop in the screen's shape.
-                let top = drawer.space(128.0);
+                let top = drawer.space(256.0);
                 let kind = KINDS[online.row.min(1)];
                 let slot = online.row.min(1);
                 if online.shown[slot] {
@@ -211,13 +211,13 @@ impl Shelf {
                         AssetKind::Backdrop => self.backdrop.as_ref().filter(|b| matches!(&b.key, PictureKey::Backdrop { file, .. } if Some(file) == used.as_ref())).map(|b| b.tex),
                     });
                     if let Some(tex) = tex.filter(|&t| gfx.textures.ready(t)) {
-                        let (w, h) = if kind == AssetKind::Icon { (96.0, 96.0) } else { (212.0, 120.0) };
-                        let rect = Rect::new(drawer.x + (drawer.w - w) / 2.0, top + (128.0 - h) / 2.0, w, h);
+                        let (w, h) = if kind == AssetKind::Icon { (192.0, 192.0) } else { (424.0, 240.0) };
+                        let rect = Rect::new(drawer.x + (drawer.w - w) / 2.0, top + (256.0 - h) / 2.0, w, h);
                         gfx.image_full(tex, rect, Color::rgb(0xffffff));
                     }
                 }
                 let note = if online.status.is_empty() {
-                    gfx.fit(Role::BodyBold, online.chosen.as_ref().map_or("", |c| c.name.as_str()), 250.0)
+                    gfx.fit(Role::BodyBold, online.chosen.as_ref().map_or("", |c| c.name.as_str()), 500.0)
                 } else {
                     online.status.clone()
                 };

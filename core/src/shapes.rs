@@ -85,33 +85,31 @@ impl Gfx {
     }
 
     /// A rectangle with rounded corners, filled (`thickness` 0) or as a
-    /// ring. Logical units; snapped to whole screen pixels.
+    /// ring; snapped to whole pixels.
     pub fn round_rect(&mut self, rect: Rect, radius: f32, thickness: f32, color: Color) {
-        let s = self.scale;
-        let px = rect.scale(s).round();
+        let px = rect.round();
         if px.w <= 0.0 || px.h <= 0.0 {
             return;
         }
-        let r = (radius * s).round().min((px.w / 2.0).floor()).min((px.h / 2.0).floor()).max(1.0);
-        let t = (thickness * s).round();
+        let r = radius.round().min((px.w / 2.0).floor()).min((px.h / 2.0).floor()).max(1.0);
+        let t = thickness.round();
         let tex = self.corner_texture(r as u32, t as u32, 1);
         self.nine(px, r, tex, t == 0.0, color);
     }
 
     /// A soft shadow under `rect`: dark at its edge, fading out over `blur`
-    /// units around it (the current UI's `shadow-lg`).
+    /// pixels around it (the current UI's `shadow-lg`).
     pub fn shadow(&mut self, rect: Rect, radius: f32, blur: f32, color: Color) {
-        let s = self.scale;
-        let px = rect.grow(blur).scale(s).round();
-        let soft = (2.0 * blur * s).round().max(2.0);
-        let r = ((radius + blur) * s).round().min((px.w / 2.0).floor()).min((px.h / 2.0).floor());
+        let px = rect.grow(blur).round();
+        let soft = (2.0 * blur).round().max(2.0);
+        let r = (radius + blur).round().min((px.w / 2.0).floor()).min((px.h / 2.0).floor());
         let tex = self.corner_texture(r as u32, 0, soft as u32);
         self.nine(px, r, tex, true, color);
     }
 
-    /// A face-button symbol `size` units square, top-left at `(x, y)`.
+    /// A face-button symbol `size` pixels square, top-left at `(x, y)`.
     pub fn symbol(&mut self, symbol: Symbol, x: f32, y: f32, size: f32, color: Color) {
-        let px = (size * self.scale).round() as u32;
+        let px = size.round() as u32;
         let key = (2u64 << 56) | ((px as u64) << 8) | symbol as u64;
         let tex = self.cached(key, || {
             let c = px as f32 / 2.0;
@@ -159,17 +157,15 @@ impl Gfx {
             );
             (px, pixels)
         });
-        let s = self.scale;
-        let dst = Rect::new((x * s).round(), (y * s).round(), px as f32, px as f32);
+        let dst = Rect::new(x.round(), y.round(), px as f32, px as f32);
         self.raw_image(tex, Rect::new(0.0, 0.0, px as f32, px as f32), dst, color);
     }
 
-    /// An icon drawn from its outline in Pocket Shelf 0.1's SVG units:
-    /// `w`×`h` units with its top left at `(x, y)`, tinted.
+    /// An icon drawn from its outline in Pocket Shelf 0.1's SVG units, at
+    /// `ICON_PX` pixels per unit, with its top left at `(x, y)`, tinted.
     pub fn icon(&mut self, icon: Icon, x: f32, y: f32, color: Color) {
         let (w, h) = icon.size();
-        let s = self.scale;
-        let (pw, ph) = ((w * s).round() as u32, (h * s).round() as u32);
+        let (pw, ph) = ((w * ICON_PX).round() as u32, (h * ICON_PX).round() as u32);
         let key = (3u64 << 56) | ((pw as u64) << 32) | icon.key();
         let tex = match self.shapes.get(&key) {
             Some(&id) => id,
@@ -187,21 +183,21 @@ impl Gfx {
                 id
             }
         };
-        let dst = Rect::new((x * s).round(), (y * s).round(), pw as f32, ph as f32);
+        let dst = Rect::new(x.round(), y.round(), pw as f32, ph as f32);
         self.raw_image(tex, Rect::new(0.0, 0.0, pw as f32, ph as f32), dst, color);
     }
 
     /// A face button as Pocket Shelf 0.1's prompts draw it: the symbol in its
-    /// color on a dark disc, 16 units square.
+    /// color on a dark disc, 32 pixels square.
     pub fn button(&mut self, symbol: Symbol, x: f32, y: f32) {
-        self.round_rect(Rect::new(x + 0.5, y + 0.5, 15.0, 15.0), 7.5, 0.0, Color::rgb(0x3d4350));
+        self.round_rect(Rect::new(x + 1.0, y + 1.0, 30.0, 30.0), 15.0, 0.0, Color::rgb(0x3d4350));
         let color = match symbol {
             Symbol::Circle => 0xfb7185,
             Symbol::Cross => 0x93c5fd,
             Symbol::Triangle => 0x5eead4,
             Symbol::Square => 0xf0abfc,
         };
-        self.symbol(symbol, x + 3.0, y + 3.0, 10.0, Color::rgb(color));
+        self.symbol(symbol, x + 6.0, y + 6.0, 20.0, Color::rgb(color));
     }
 
     /// A vertical gradient texture (8×256, bilinear), stretched by the caller.
@@ -244,11 +240,16 @@ pub fn round_corners(rgba: &mut [u8], w: u32, h: u32, radius: f32) {
     }
 }
 
+/// Pixels per SVG unit of an icon: the SVGs were drawn for a 480×272
+/// layout, and the Vita's screen is 960×544.
+pub const ICON_PX: f32 = 2.0;
+
 /// Icons outlined from Pocket Shelf 0.1's SVGs, in their
-/// units, drawn in one tint each.
+/// units, drawn in one tint each at `ICON_PX`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Icon {
-    /// The L shoulder button: a body with its outer top corner swept, 24×16.
+    /// The L shoulder button: a body with its outer top corner swept, 24×16
+    /// SVG units (48×32 pixels).
     ShoulderL,
     ShoulderR,
     /// The Wi-Fi rings lit for a level (0 to 3), or (`lit` false) the rest:

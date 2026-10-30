@@ -68,7 +68,7 @@ fn main() {
     }
 
     let mut app = App::new();
-    let mut gfx = Gfx::new(2.0);
+    let mut gfx = Gfx::new();
     let mut backend = backend::Backend::default();
     let mut last_start = now_us();
     let mut frame = 0u64;

@@ -22,7 +22,7 @@ use crate::text::Role;
 const EDITOR_ROWS: usize = 7;
 const FIND_ART_ROW: usize = 5;
 /// Room for a value beside its label.
-const VALUE_W: f32 = 160.0;
+const VALUE_W: f32 = 320.0;
 /// Picker rows shown at once.
 const PICKER_ROWS: usize = 5;
 /// Frames the picker's highlight rests before its picture is loaded.
@@ -549,9 +549,9 @@ impl Shelf {
             let tex = tex.or_else(|| self.art.texture(&key));
             if let Some(tex) = tex.filter(|&t| gfx.textures.ready(t)) {
                 let (frame, picture) = if backdrop {
-                    (Rect::new(8.0, 84.0, 180.0, 104.0), Rect::new(10.0, 86.0, 176.0, 100.0))
+                    (Rect::new(16.0, 168.0, 360.0, 208.0), Rect::new(20.0, 172.0, 352.0, 200.0))
                 } else {
-                    (Rect::new(32.0, 70.0, 132.0, 132.0), Rect::new(34.0, 72.0, 128.0, 128.0))
+                    (Rect::new(64.0, 140.0, 264.0, 264.0), Rect::new(68.0, 144.0, 256.0, 256.0))
                 };
                 gfx.fill(frame, theme.tile);
                 gfx.image_full(tex, picture, crate::gfx::Color::rgb(0xffffff));
@@ -559,7 +559,7 @@ impl Shelf {
         }
         let first = row.saturating_sub(PICKER_ROWS / 2).min(total.saturating_sub(PICKER_ROWS));
         for i in first..(first + PICKER_ROWS).min(total) {
-            let label = gfx.fit(Role::BodyBold, &entry(i), 240.0);
+            let label = gfx.fit(Role::BodyBold, &entry(i), 480.0);
             drawer.row(gfx, &label, None, None, i == row, Step::None);
         }
         let confirm = Button::confirm(self.settings.confirm);
@@ -787,13 +787,13 @@ impl Shelf {
         let first_line = [(confirm, t.rename), (Button::Face(Symbol::Triangle), t.create), (Button::Face(Symbol::Square), t.remove)];
         let second_line = [(Button::Start, toggle), (Button::ShoulderLR, t.reorder), (cancel, t.back)];
         let bottom = drawer.bottom;
-        chrome::hints(gfx, &theme, &second_line, drawer.x, bottom - 8.0);
-        chrome::hints(gfx, &theme, &first_line, drawer.x, bottom - 28.0);
-        drawer.bottom = bottom - 40.0;
+        chrome::hints(gfx, &theme, &second_line, drawer.x, bottom - 16.0);
+        chrome::hints(gfx, &theme, &first_line, drawer.x, bottom - 56.0);
+        drawer.bottom = bottom - 80.0;
         if let Some(id) = armed {
             let name = categories.iter().find(|c| c.id == id).map(|c| crate::i18n::category_label(t, c)).unwrap_or_default();
             let text = fill(t.delete_again, &[("name", &name)]);
-            chrome::text_with_button(gfx, &theme, &text, Button::Face(Symbol::Square), drawer.x, drawer.bottom - 8.0);
+            chrome::text_with_button(gfx, &theme, &text, Button::Face(Symbol::Square), drawer.x, drawer.bottom - 16.0);
         } else if !note.is_empty() {
             drawer.note(gfx, &note, 0);
         }

@@ -14,8 +14,11 @@ reads and writes that app's saved data unchanged.
 
 ## Drawing
 
-Screens are laid out in 480×272 logical units, the numbers Pocket Shelf 0.1's
-layout used; `Gfx` records commands at 2× (960×544).
+**Screens are laid out in screen pixels**, 960×544 (`W`, `H`). Pocket Shelf
+0.1 and the port's first builds wrote their layouts in 480×272 units, the
+PSP's screen that PocketJS targeted, and drew them at 2×; every length was
+doubled on 2026-10-30 and the renders compared byte for byte. Icons keep
+their SVG units and draw at 2 pixels per unit (`ICON_PX`).
 The core emits two primitives: a filled rectangle and a tinted part of a
 texture. **A clip is applied on the CPU**: each rectangle and its texture
 coordinates are cut to it, so a backend draws no stencil (vita2d's clip
@@ -24,8 +27,8 @@ flickered on hardware). Rounded rectangles, rings, soft shadows and the
 button symbols are coverage masks computed once on the CPU and drawn tinted;
 an icon's corners are rounded in its RGBA data when it arrives. Text is
 Figtree through `fontdue`, one 1024×1024 glyph atlas, the roles of
-Pocket Shelf 0.1 at **about two steps smaller** (Body 11, Small 9; any size
-rasterizes, PocketJS stopped at 12) and an 8 px `Tiny`.
+Pocket Shelf 0.1 at **about two steps smaller** (Body 22 px, Small 18; any
+size rasterizes, PocketJS stopped at 24) and a 16 px `Tiny`.
 
 Textures: the app frees a texture it no longer draws (`Textures::free`); the
 Vita backend keeps released allocations for reuse up to 16 MB and drops a

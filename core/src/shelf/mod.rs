@@ -58,7 +58,7 @@ const DYNAMIC_STEP_FRAMES: u32 = 2;
 const STATUS_EVERY: u32 = 60;
 /// The tint wash over the top of the screen (`TINT_AMBIENT`): its height and
 /// its alpha at the top; it blends to the next title's tint in 300 ms.
-const AMBIENT_H: f32 = 190.0;
+const AMBIENT_H: f32 = 380.0;
 const AMBIENT_ALPHA: u8 = 0x55;
 
 /// A backdrop on screen.
@@ -1169,40 +1169,40 @@ impl Shelf {
         ];
 
         // The card's height from its content: the heading, the field, the
-        // key rows and the hints, 4 apart, 10 above and 8 below.
+        // key rows and the hints, 8 apart, 20 above and 16 below.
         let label_h = gfx.line_height(Role::Label);
-        let hints_h = chrome::hints_height(gfx, &hints, 456.0);
-        let height = 10.0 + label_h + 4.0 + 26.0 + 4.0 + 2.0 + 4.0 + 5.0 * 24.0 + 4.0 * 4.0 + 4.0 + 2.0 + 4.0 + hints_h + 8.0;
+        let hints_h = chrome::hints_height(gfx, &hints, 912.0);
+        let height = 20.0 + label_h + 8.0 + 52.0 + 8.0 + 4.0 + 8.0 + 5.0 * 48.0 + 8.0 * 4.0 + 8.0 + 4.0 + 8.0 + hints_h + 16.0;
         let slide = self.drawer.at(self.now);
         gfx.fill(Rect::new(0.0, 0.0, crate::W, crate::H), theme.scrim.alpha(slide.min(1.0)));
-        let card = Rect::new(8.0, crate::H - 8.0 - height + (1.0 - slide) * 80.0, crate::W - 16.0, height);
-        gfx.shadow(card, 12.0, 8.0, crate::gfx::BLACK.with_a(80));
-        gfx.round_rect(card, 12.0, 0.0, theme.panel);
-        let left = (crate::W - 416.0) / 2.0;
-        let mut y = card.y + 10.0;
-        gfx.text_top(Role::Label, left + 2.0, y, theme.dim, &crate::i18n::upper(heading, self.settings.language));
-        y += label_h + 4.0;
+        let card = Rect::new(16.0, crate::H - 16.0 - height + (1.0 - slide) * 160.0, crate::W - 32.0, height);
+        gfx.shadow(card, 24.0, 16.0, crate::gfx::BLACK.with_a(80));
+        gfx.round_rect(card, 24.0, 0.0, theme.panel);
+        let left = (crate::W - 832.0) / 2.0;
+        let mut y = card.y + 20.0;
+        gfx.text_top(Role::Label, left + 4.0, y, theme.dim, &crate::i18n::upper(heading, self.settings.language));
+        y += label_h + 8.0;
         // The field: text longer than it shows its end, where the caret is;
         // a note at its right end takes its width from the text.
-        let field = Rect::new(left, y, 416.0, 26.0);
-        gfx.round_rect(field, 6.0, 0.0, theme.tile);
-        let note_w = if note.is_empty() { 0.0 } else { gfx.measure(Role::Small, &note) + 12.0 };
-        let shown = gfx.fit_tail(Role::BodyBold, &format!("{text}_"), 396.0 - note_w);
-        let mid = |gfx: &mut Gfx, role: Role| (field.y + 13.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
+        let field = Rect::new(left, y, 832.0, 52.0);
+        gfx.round_rect(field, 12.0, 0.0, theme.tile);
+        let note_w = if note.is_empty() { 0.0 } else { gfx.measure(Role::Small, &note) + 24.0 };
+        let shown = gfx.fit_tail(Role::BodyBold, &format!("{text}_"), 792.0 - note_w);
+        let mid = |gfx: &mut Gfx, role: Role| (field.y + 26.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
         let base = mid(gfx, Role::BodyBold);
-        gfx.text(Role::BodyBold, field.x + 10.0, base, theme.text, &shown);
+        gfx.text(Role::BodyBold, field.x + 20.0, base, theme.text, &shown);
         if !note.is_empty() {
             let base = mid(gfx, Role::Small);
-            gfx.text_right(Role::Small, field.right() - 10.0, base, theme.dim, &note);
+            gfx.text_right(Role::Small, field.right() - 20.0, base, theme.dim, &note);
         }
-        y += 26.0 + 4.0 + 2.0 + 4.0;
+        y += 52.0 + 8.0 + 4.0 + 8.0;
         for (r, keys) in rows.iter().enumerate() {
-            let width: f32 = keys.iter().map(|k| if k.wide() { 80.0 } else { 38.0 }).sum::<f32>() + 4.0 * (keys.len() - 1) as f32;
+            let width: f32 = keys.iter().map(|k| if k.wide() { 160.0 } else { 76.0 }).sum::<f32>() + 8.0 * (keys.len() - 1) as f32;
             let mut x = ((crate::W - width) / 2.0).round();
             for (c, key) in keys.iter().enumerate() {
-                let w = if key.wide() { 80.0 } else { 38.0 };
+                let w = if key.wide() { 160.0 } else { 76.0 };
                 let active = r == row && c == col;
-                gfx.round_rect(Rect::new(x, y, w, 24.0), 6.0, 0.0, if active { theme.accent } else { theme.tile });
+                gfx.round_rect(Rect::new(x, y, w, 48.0), 12.0, 0.0, if active { theme.accent } else { theme.tile });
                 let label: String = match key.action {
                     Action::Char => (if shift { key.upper } else { key.lower }).to_string(),
                     Action::Symbols => next_page.to_string(),
@@ -1212,14 +1212,14 @@ impl Shelf {
                     Action::Done => t.done.to_string(),
                 };
                 let role = if active { Role::SmallBold } else { Role::Small };
-                let base = (y + 12.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
+                let base = (y + 24.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
                 gfx.text_centered(role, x + w / 2.0, base, if active { theme.panel } else { theme.text }, &label);
-                x += w + 4.0;
+                x += w + 8.0;
             }
-            y += 24.0 + 4.0;
+            y += 48.0 + 8.0;
         }
-        y += 2.0 + 4.0;
-        chrome::hints_centered(gfx, &theme, &hints, crate::W / 2.0, y, 456.0);
+        y += 4.0 + 8.0;
+        chrome::hints_centered(gfx, &theme, &hints, crate::W / 2.0, y, 912.0);
     }
 
     /// A menu row's label, value or symbol, and arrows.
@@ -1649,7 +1649,7 @@ mod tests {
     #[test]
     fn a_backdrop_seen_before_shows_again_without_decoding() {
         let (mut shelf, mut host) = setup(true, PluginState::On);
-        let mut gfx = Gfx::new(2.0);
+        let mut gfx = Gfx::new();
         // Last Played (VitaShell) first; R to Games (PCSA00069), L back.
         rest(&mut shelf, &mut host, &mut gfx);
         assert_eq!(host.backdrops.len(), 1);
@@ -1665,7 +1665,7 @@ mod tests {
     #[test]
     fn the_next_titles_backdrop_is_decoded_ahead() {
         let (mut shelf, mut host) = setup(true, PluginState::On);
-        let mut gfx = Gfx::new(2.0);
+        let mut gfx = Gfx::new();
         let infos: Vec<TitleInfo> = ["PCSA00001", "PCSA00002", "PCSA00003"]
             .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None })
             .into();

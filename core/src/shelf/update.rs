@@ -370,13 +370,13 @@ impl Shelf {
         drawer.note(gfx, &note, lines);
         if matches!(flow.step, UpdateStep::Downloading | UpdateStep::Unpacking) {
             // The bar above the note's line, as Rescan's.
-            let y = drawer.bottom - gfx.line_height(crate::text::Role::Small) - 2.0 - 18.0 - 12.0;
-            let bar = Rect::new(drawer.x, y, 240.0, 6.0);
-            gfx.round_rect(bar, 3.0, 0.0, theme.line);
+            let y = drawer.bottom - gfx.line_height(crate::text::Role::Small) - 4.0 - 36.0 - 24.0;
+            let bar = Rect::new(drawer.x, y, 480.0, 12.0);
+            gfx.round_rect(bar, 6.0, 0.0, theme.line);
             if total > 0 {
-                let filled = (240.0 * done.min(total) as f32 / total as f32).round();
+                let filled = (480.0 * done.min(total) as f32 / total as f32).round();
                 if filled > 0.0 {
-                    gfx.round_rect(Rect::new(bar.x, y, filled, 6.0), 3.0, 0.0, theme.accent);
+                    gfx.round_rect(Rect::new(bar.x, y, filled, 12.0), 6.0, 0.0, theme.accent);
                 }
             }
         }
