@@ -161,21 +161,20 @@ impl Gfx {
         self.raw_image(tex, Rect::new(0.0, 0.0, px as f32, px as f32), dst, color);
     }
 
-    /// An icon drawn from its outline in Pocket Shelf 0.1's SVG units, at
-    /// `ICON_PX` pixels per unit, with its top left at `(x, y)`, tinted.
+    /// An icon drawn from its outline, with its top left at `(x, y)`,
+    /// tinted.
     pub fn icon(&mut self, icon: Icon, x: f32, y: f32, color: Color) {
         let (w, h) = icon.size();
-        let (pw, ph) = ((w * ICON_PX).round() as u32, (h * ICON_PX).round() as u32);
+        let (pw, ph) = (w.round() as u32, h.round() as u32);
         let key = (3u64 << 56) | ((pw as u64) << 32) | icon.key();
         let tex = match self.shapes.get(&key) {
             Some(&id) => id,
             None => {
-                let unit = pw as f32 / w;
                 let mut pixels = Vec::with_capacity((pw * ph) as usize);
                 for py in 0..ph {
                     for px in 0..pw {
-                        let d = icon.distance((px as f32 + 0.5) / unit, (py as f32 + 0.5) / unit);
-                        pixels.push(coverage(d * unit, 1.0));
+                        let d = icon.distance(px as f32 + 0.5, py as f32 + 0.5);
+                        pixels.push(coverage(d, 1.0));
                     }
                 }
                 let id = self.add_texture(pw, ph, Format::A8, pixels, false);
@@ -240,24 +239,19 @@ pub fn round_corners(rgba: &mut [u8], w: u32, h: u32, radius: f32) {
     }
 }
 
-/// Pixels per SVG unit of an icon: the SVGs were drawn for a 480×272
-/// layout, and the Vita's screen is 960×544.
-pub const ICON_PX: f32 = 2.0;
-
-/// Icons outlined from Pocket Shelf 0.1's SVGs, in their
-/// units, drawn in one tint each at `ICON_PX`.
+/// Icons outlined from Pocket Shelf 0.1's SVGs at twice their size (the
+/// SVGs were drawn for a 480×272 layout), in pixels, drawn in one tint each.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Icon {
-    /// The L shoulder button: a body with its outer top corner swept, 24×16
-    /// SVG units (48×32 pixels).
+    /// The L shoulder button: a body with its outer top corner swept, 48×32.
     ShoulderL,
     ShoulderR,
     /// The Wi-Fi rings lit for a level (0 to 3), or (`lit` false) the rest:
-    /// a dot and three quarter rings, 12×12 (the Vita's own symbol).
+    /// a dot and three quarter rings, 24×24 (the Vita's own symbol).
     Wifi { level: u8, lit: bool },
-    /// The Bluetooth rune, 12×12.
+    /// The Bluetooth rune, 24×24.
     Bluetooth,
-    /// A small triangle pointing right, 8×16: a drawer row that opens
+    /// A small triangle pointing right, 16×32: a drawer row that opens
     /// something or steps a value.
     ArrowRight,
     ArrowLeft,
@@ -289,9 +283,9 @@ fn round_box(x: f32, y: f32, (x0, y0, x1, y1): (f32, f32, f32, f32), radii: [f32
 impl Icon {
     fn size(self) -> (f32, f32) {
         match self {
-            Icon::ShoulderL | Icon::ShoulderR => (24.0, 16.0),
-            Icon::Wifi { .. } | Icon::Bluetooth => (12.0, 12.0),
-            Icon::ArrowRight | Icon::ArrowLeft => (8.0, 16.0),
+            Icon::ShoulderL | Icon::ShoulderR => (48.0, 32.0),
+            Icon::Wifi { .. } | Icon::Bluetooth => (24.0, 24.0),
+            Icon::ArrowRight | Icon::ArrowLeft => (16.0, 32.0),
         }
     }
 
@@ -306,45 +300,45 @@ impl Icon {
         }
     }
 
-    /// Signed distance in icon units (negative inside).
+    /// Signed distance in pixels (negative inside).
     fn distance(self, x: f32, y: f32) -> f32 {
         match self {
-            // `btn-l.svg`: radius 3 corners, the outer top corner a curve
-            // from (11, 2) down to (0, 11), here a radius of 9.
-            Icon::ShoulderL => round_box(x, y, (0.0, 2.0, 24.0, 14.0), [9.0, 3.0, 3.0, 3.0]),
-            Icon::ShoulderR => round_box(x, y, (0.0, 2.0, 24.0, 14.0), [3.0, 9.0, 3.0, 3.0]),
+            // `btn-l.svg` at 2×: radius 6 corners, the outer top corner a
+            // curve from (22, 4) down to (0, 22), here a radius of 18.
+            Icon::ShoulderL => round_box(x, y, (0.0, 4.0, 48.0, 28.0), [18.0, 6.0, 6.0, 6.0]),
+            Icon::ShoulderR => round_box(x, y, (0.0, 4.0, 48.0, 28.0), [6.0, 18.0, 6.0, 6.0]),
             Icon::Wifi { level, lit } => {
-                // Centered on (2, 10): the dot, then rings 1.4 wide.
-                let r = length(x - 2.0, y - 10.0);
+                // Centered on (4, 20): the dot, then rings 2.8 wide.
+                let r = length(x - 4.0, y - 20.0);
                 let mut d = f32::MAX;
                 if lit {
-                    d = r - 1.7;
+                    d = r - 3.4;
                 }
-                for (ring, mid) in [4.1f32, 6.6, 9.1].into_iter().enumerate() {
+                for (ring, mid) in [8.2f32, 13.2, 18.2].into_iter().enumerate() {
                     if ((ring as u8) < level) == lit {
-                        let band = (r - mid).abs() - 0.7;
-                        d = d.min(band.max(2.0 - x).max(y - 10.0));
+                        let band = (r - mid).abs() - 1.4;
+                        d = d.min(band.max(4.0 - x).max(y - 20.0));
                     }
                 }
                 d
             }
-            // `arrow-right.svg`: (1.5, 4), (6.5, 8), (1.5, 12).
+            // `arrow-right.svg` at 2×: (3, 8), (13, 16), (3, 24).
             Icon::ArrowRight | Icon::ArrowLeft => {
-                let x = if self == Icon::ArrowLeft { 8.0 - x } else { x };
-                let (dx, dy) = (x - 1.5, (y - 8.0).abs());
+                let x = if self == Icon::ArrowLeft { 16.0 - x } else { x };
+                let (dx, dy) = (x - 3.0, (y - 16.0).abs());
                 // Inside: right of the back edge and under the slanted one.
-                let slant = (dy * 5.0 + (x - 6.5) * 4.0) / (41f32).sqrt();
+                let slant = (dy * 5.0 + (x - 13.0) * 4.0) / (41f32).sqrt();
                 (-dx).max(slant)
             }
             Icon::Bluetooth => {
                 let lines = [
-                    ((6.0, 1.0), (6.0, 11.0)),
-                    ((6.0, 1.0), (8.7, 3.6)),
-                    ((8.7, 3.6), (3.3, 8.4)),
-                    ((6.0, 11.0), (8.7, 8.4)),
-                    ((8.7, 8.4), (3.3, 3.6)),
+                    ((12.0, 2.0), (12.0, 22.0)),
+                    ((12.0, 2.0), (17.4, 7.2)),
+                    ((17.4, 7.2), (6.6, 16.8)),
+                    ((12.0, 22.0), (17.4, 16.8)),
+                    ((17.4, 16.8), (6.6, 7.2)),
                 ];
-                lines.iter().map(|&(a, b)| segment(x, y, a, b)).fold(f32::MAX, f32::min) - 0.6
+                lines.iter().map(|&(a, b)| segment(x, y, a, b)).fold(f32::MAX, f32::min) - 1.2
             }
         }
     }

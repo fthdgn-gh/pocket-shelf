@@ -17,8 +17,9 @@ reads and writes that app's saved data unchanged.
 **Screens are laid out in screen pixels**, 960×544 (`W`, `H`). Pocket Shelf
 0.1 and the port's first builds wrote their layouts in 480×272 units, the
 PSP's screen that PocketJS targeted, and drew them at 2×; every length was
-doubled on 2026-10-30 and the renders compared byte for byte. Icons keep
-their SVG units and draw at 2 pixels per unit (`ICON_PX`).
+doubled on 2026-10-30 and the renders compared byte for byte. The icons
+outlined from 0.1's SVGs (`shapes::Icon`) are in pixels too, at twice the
+SVGs' coordinates.
 The core emits two primitives: a filled rectangle and a tinted part of a
 texture. **A clip is applied on the CPU**: each rectangle and its texture
 coordinates are cut to it, so a backend draws no stencil (vita2d's clip
