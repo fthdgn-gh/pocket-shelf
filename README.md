@@ -68,8 +68,13 @@ the colored tiles with initials stand in for game icons.
 
 ## Install
 
-1. Download `pocket-shelf.vpk` from the newest tagged release, or build it
-   yourself (see [Building](#building)).
+1. Get Pocket Shelf from one of these:
+   - **VitaDB:** [Pocket Shelf on VitaDB](https://www.rinnegatamante.eu/vitadb/#/info/1704).
+     The VitaDB Downloader app on the Vita downloads and installs it; go on to
+     step 3. VitaDB lists a new release after its maintainer adds it, so it
+     can be a version behind GitHub.
+   - **GitHub:** download `pocket-shelf.vpk` from the newest tagged release,
+     or build it yourself (see [Building](#building)).
 
    [![Newest release](https://img.shields.io/github/v/release/fthdgn-gh/pocket-shelf?include_prereleases&sort=semver&label=newest%20release)](https://github.com/fthdgn-gh/pocket-shelf/releases)
 
@@ -85,7 +90,7 @@ the colored tiles with initials stand in for game icons.
    `gh attestation verify pocket-shelf.vpk -R fthdgn-gh/pocket-shelf` checks
    that the file was built by this repository's workflow, and from which
    commit.
-2. Copy it to the Vita and install it with VitaShell.
+2. Copy the VPK from GitHub to the Vita and install it with VitaShell.
 3. Open Pocket Shelf from the home screen. On the first start it scans the
    installed titles and shows its progress. Later starts read the saved list.
 
