@@ -87,8 +87,8 @@ the colored tiles with initials stand in for game icons.
    [![Newest release](https://img.shields.io/github/v/release/fthdgn-gh/pocket-shelf?include_prereleases&sort=semver&label=newest%20release)](https://github.com/fthdgn-gh/pocket-shelf/releases)
 
    There is no stable release yet. The current one is the beta
-   [`shelf-v0.2.0-beta.3`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.2.0-beta.3)
-   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.2.0-beta.3/pocket-shelf.vpk)).
+   [`shelf-v0.3.0-beta.1`](https://github.com/fthdgn-gh/pocket-shelf/releases/tag/shelf-v0.3.0-beta.1)
+   ([download the VPK](https://github.com/fthdgn-gh/pocket-shelf/releases/download/shelf-v0.3.0-beta.1/pocket-shelf.vpk)).
    GitHub marks betas as pre-releases, so its "Latest" label does not point to
    them. Releases come in three channels:
    - **Stable:** tested on hardware.
