@@ -59,9 +59,9 @@ the colored tiles with initials stand in for game icons.
 - **Six themes:** Midnight, Aurora, Sakura, Ember, Daylight, and Dynamic, which
   takes its colors from the selected title.
 - **Five text sizes**, from Smaller to Larger (SELECT ▸ Appearance ▸ Text size).
-- **Type with the Vita's own keyboard** (its languages, accents and word
-  suggestions) or with Pocket Shelf's (SELECT ▸ Keyboard). With the Vita's,
-  a search runs when you press its Search button.
+- **Type with Pocket Shelf's keyboard**, laid out like the Vita's, or with
+  the Vita's own (its languages and word suggestions; SELECT ▸ Keyboard).
+  With the Vita's, a search runs when you press its Search button.
 - **Sort each tab** (SELECT ▸ Sort): by name, by when it was last played,
   by how often Pocket Shelf started it, or by when it was installed. The
   system records the last launch and the install date; it keeps no play

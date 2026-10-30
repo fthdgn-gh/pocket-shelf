@@ -205,8 +205,8 @@ the selection along the view's axis, a step per tile pitch, or the open
 panel's highlight a row per 56 px, stopping at the ends. Desktop shot
 scripts put a finger down with `touch(x, y)` (shots 250–257).
 
-**Keyboards** (SELECT ▸ Keyboard, `keyboard.json`): the system's
-(`sceImeDialog`, `platform/ime.rs`) or Pocket Shelf's own. Opening one is
+**Keyboards** (SELECT ▸ Keyboard, `keyboard.json`): Pocket Shelf's own
+(the default) or the system's (`sceImeDialog`, `platform/ime.rs`). Opening one is
 asked for in an input handler and done at the next frame, which has the
 host (`Host::keyboard_open`); a host without a system keyboard (the
 desktop) answers false and the shelf opens its own. While the system's is

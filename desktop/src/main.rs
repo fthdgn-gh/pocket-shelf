@@ -332,7 +332,7 @@ const SHOTS: &[Shot] = &[
     // The system keyboard (the stand-in answers "st" after 20 frames):
     // square opens it, its text searches the library.
     Shot { name: "260-system-keyboard-search", script: &[(0, 4), (SQUARE, TAP), (0, 40)], setup: system_keyboard },
-    // The Keyboard row, switched to Pocket Shelf's.
+    // The Keyboard row, switched from Pocket Shelf's to the system's.
     shot("261-keyboard-setting", &[(0, 4), (SELECT, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
     // Pocket Shelf's keyboard, after the Vita's: "st", the cursor moved
     // back two (L) and "a" typed there; Shift pressed twice locks capitals;

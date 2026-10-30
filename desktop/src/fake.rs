@@ -464,8 +464,10 @@ impl FakeHost {
         self
     }
 
-    /// A system keyboard that answers `text` 20 frames after it opens.
+    /// A system keyboard, chosen in `keyboard.json`, that answers `text` 20
+    /// frames after it opens.
     pub fn with_system_keyboard(mut self, text: &str) -> Self {
+        self.files.insert("keyboard.json".into(), br#"{"keyboard":"system"}"#.to_vec());
         self.system_keyboard = Some((text.to_string(), 0));
         self
     }

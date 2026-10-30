@@ -225,7 +225,8 @@ the user.
 - **Two keyboards** (the user, 2026-10-30): the Vita's own (`sceImeDialog`)
   or Pocket Shelf's, chosen in SELECT ▸ Keyboard. Pocket Shelf's was
   rebuilt after the system's layout and buttons, as the user confirmed
-  (□ delete, △ space, L and R the cursor, START done, held ○ accents).
+  (□ delete, △ space, L and R the cursor, START done, held ○ accents), and
+  is the default (the user, 2026-10-30).
 
 ## Follow-ups
 
