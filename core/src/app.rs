@@ -49,6 +49,8 @@ pub struct App {
     /// The scan page's theme and language, from the saved settings.
     theme: Theme,
     language: crate::library::settings::Language,
+    /// The scan page's text size, from `text-size.json`.
+    text_size: crate::library::settings::TextSize,
     background: Option<TexId>,
     /// The mark's three tile gradients, made on first use.
     mark: Option<[TexId; 3]>,
@@ -83,6 +85,7 @@ impl App {
             scan: None,
             theme: theme_by_id(Settings::defaults(UpdateChannel::Off).theme),
             language: crate::library::settings::Language::En,
+            text_size: crate::library::settings::TextSize::Normal,
             background: None,
             mark: None,
             events: Vec::new(),
@@ -179,6 +182,10 @@ impl App {
             if let Some(bytes) = host.read(crate::library::settings::STATUS_BAR_FILE) {
                 settings.layout = crate::library::settings::StatusLayout::parse(&bytes);
             }
+            if let Some(bytes) = host.read(crate::library::settings::TEXT_SIZE_FILE) {
+                settings.text_size = crate::library::settings::TextSize::parse(&bytes);
+            }
+            self.text_size = settings.text_size;
             self.theme = theme_by_id(settings.theme);
             self.language = settings.language;
             let library = Library::load(host);
@@ -249,6 +256,7 @@ impl App {
 
     pub fn draw(&mut self, gfx: &mut Gfx) {
         gfx.begin();
+        gfx.text_scale = self.shelf.as_ref().map_or(self.text_size, |s| s.settings.text_size).scale();
         if self.scan.is_some() || !self.titled {
             let theme = self.theme;
             let background = *self.background.get_or_insert_with(|| gfx.gradient(theme.bg_top, theme.bg_bottom));

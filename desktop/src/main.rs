@@ -65,6 +65,24 @@ fn updated() -> fake::FakeHost {
     host
 }
 
+fn larger() -> fake::FakeHost {
+    fake::FakeHost::new().with_text_size("larger")
+}
+
+fn smaller() -> fake::FakeHost {
+    fake::FakeHost::new().with_text_size("smaller")
+}
+
+fn larger_turkish() -> fake::FakeHost {
+    fake::FakeHost::new().with_language("tr").with_text_size("larger")
+}
+
+fn larger_first_start() -> fake::FakeHost {
+    let mut host = fake::FakeHost::new().with_text_size("larger");
+    host.first_start = true;
+    host
+}
+
 fn saved() -> fake::FakeHost {
     fake::FakeHost::new().with_saved_data()
 }
@@ -222,6 +240,31 @@ const SHOTS: &[Shot] = &[
     // offers the plugin; confirm adds it and launches.
     shot("92-adrenaline-drawer", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, SETTLE)]),
     shot("93-adrenaline-launch", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, SETTLE), (CIRCLE, TAP), (0, SETTLE)]),
+    // Text size: SELECT > Appearance > Text size (fourth row); the rest
+    // start from a saved size.
+    Shot { name: "200-text-size-menu", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: plain },
+    Shot { name: "201-larger-home", script: &[(0, SETTLE)], setup: larger },
+    Shot { name: "202-larger-home-detailed", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "203-larger-carousel-detailed", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "204-larger-grid", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "205-larger-list-detailed", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "206-larger-cascade-detailed", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "207-larger-menu", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "208-larger-status-menu", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "209-larger-keyboard", script: &[(0, 4), (SQUARE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "210-larger-editor", script: &[(0, 4), (TRIANGLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "211-larger-backdrop-picker", script: &[(0, 4), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "212-larger-categories", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "213-larger-rescan", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "214-larger-diagnostics", script: &[(0, SETTLE), (SELECT, TAP), (0, TAP), (UP, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "215-larger-update", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "216-larger-clean-up", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
+    Shot { name: "217-larger-turkish-menu", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: larger_turkish },
+    Shot { name: "218-larger-turkish-home", script: &[(0, SETTLE)], setup: larger_turkish },
+    Shot { name: "219-larger-first-start", script: &[(0, 20)], setup: larger_first_start },
+    Shot { name: "220-smaller-home-detailed", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: smaller },
+    Shot { name: "221-smaller-list-detailed", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: smaller },
+    Shot { name: "222-smaller-menu", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: smaller },
 ];
 
 fn main() {

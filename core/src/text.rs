@@ -173,6 +173,17 @@ impl FontState {
 }
 
 impl Gfx {
+    /// A role's weight, size and tracking at the text size setting. The
+    /// numbers inside symbols and the initials keep their size: their boxes
+    /// do not grow.
+    pub fn style(&self, role: Role) -> (Weight, f32, f32) {
+        let (weight, size, tracking) = role.style();
+        match role {
+            Role::Tiny | Role::Initials(_) => (weight, size, tracking),
+            _ => (weight, size * self.text_scale, tracking),
+        }
+    }
+
     fn px(&self, size: f32) -> u16 {
         (size * self.scale).round() as u16
     }
@@ -180,7 +191,7 @@ impl Gfx {
     /// Pen advance over `text` in pixels; draws it when `at` is given
     /// (pixel pen x, pixel baseline).
     fn run(&mut self, role: Role, text: &str, at: Option<(f32, f32, Color)>) -> f32 {
-        let (weight, size, tracking) = role.style();
+        let (weight, size, tracking) = self.style(role);
         let px = self.px(size);
         let tracking = tracking * self.scale;
         let atlas = self.fonts.atlas;
@@ -228,7 +239,7 @@ impl Gfx {
     /// its size from the glyphs rasterized at its size: text on a tile that
     /// is scaling, without new glyphs at every step.
     pub fn text_scaled_centered(&mut self, role: Role, cx: f32, cy: f32, k: f32, color: Color, text: &str) {
-        let (weight, size, _) = role.style();
+        let (weight, size, _) = self.style(role);
         let px = self.px(size);
         let s = self.scale;
         let width = self.run(role, text, None) * k;
@@ -272,13 +283,13 @@ impl Gfx {
 
     /// Ascent of a role's line, logical units.
     pub fn ascent(&self, role: Role) -> f32 {
-        let (weight, size, _) = role.style();
+        let (weight, size, _) = self.style(role);
         self.fonts.line(weight, self.px(size)).0 / self.scale
     }
 
     /// Height of a role's line (ascent + descent), logical units.
     pub fn line_height(&self, role: Role) -> f32 {
-        let (weight, size, _) = role.style();
+        let (weight, size, _) = self.style(role);
         let (ascent, descent) = self.fonts.line(weight, self.px(size));
         (ascent - descent) / self.scale
     }

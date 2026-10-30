@@ -77,7 +77,7 @@ titles over 40), with the same cases tested.
 **The Vita host writes `ux0:data/PocketShelf/` only for named files**:
 those with a round-trip test (`settings.json`, `categories.json`,
 `recent.json`, `titles.cache.json`, `titles/<id>.json`), `status-bar.json`,
-`steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
+`text-size.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
 `vita/host.rs`), pictures in `art/` and `backdrops/`, and downloads to
 `libretro/` and `update/`; it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
 order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
@@ -177,6 +177,15 @@ connected, and each of Wi-Fi, Bluetooth, battery and clock can be turned
 off in Appearance ▸ Status bar (the Clock row's last value is Off), right of
 R or left of L (`StatusLayout`, saved in `status-bar.json`: 0.1 rewrote `settings.json`
 with only the keys it knew). The tab names have the rest of the bar.
+
+**Text size** (Appearance ▸ Text size, saved in `text-size.json` for the
+same reason): five steps, Smaller ×0.85, Small ×0.92, Normal, Large ×1.12
+and Larger ×1.25 on each role's size (`TextSize::scale`, applied by
+`Gfx::style` through `Gfx::text_scale`). `Tiny` (the numbers and names
+inside symbols and button chips) and the initials on tiles keep their size:
+their boxes do not grow. Rows and panels keep their positions at every
+size; the `larger` shots show each screen's text still fits at Larger
+(`make shots SHOTS="larger"`).
 
 **Languages**: `locales.rs` holds one `Messages` struct and a constant
 per language (edited by hand; a missing text does not compile); `i18n.rs` has `fill`,

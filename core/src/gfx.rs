@@ -245,6 +245,8 @@ pub struct Gfx {
     pub cmds: Vec<Cmd>,
     /// Screen pixels per logical unit.
     pub scale: f32,
+    /// The text size setting's factor on each role's size (`Gfx::style`).
+    pub text_scale: f32,
     pub work: FrameWork,
     pub(crate) fonts: FontState,
     pub(crate) shapes: HashMap<u64, TexId>,
@@ -263,7 +265,7 @@ impl Gfx {
     pub fn new(scale: f32) -> Self {
         let mut textures = Textures::default();
         let fonts = FontState::new(&mut textures);
-        Gfx { textures, cmds: Vec::with_capacity(1024), scale, work: FrameWork::default(), fonts, shapes: HashMap::new(), clip_px: None }
+        Gfx { textures, cmds: Vec::with_capacity(1024), scale, text_scale: 1.0, work: FrameWork::default(), fonts, shapes: HashMap::new(), clip_px: None }
     }
 
     /// Start a frame: drop the previous frame's commands, keep the textures.

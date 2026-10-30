@@ -19,6 +19,7 @@ pub enum Item {
     Theme,
     View,
     Details,
+    TextSize,
     Backdrop,
     IconBox,
     StatusBar,
@@ -48,7 +49,7 @@ pub fn items(page: Page) -> &'static [Item] {
     use Item::*;
     match page {
         Page::Main => &[Open(Page::Appearance), Open(Page::Library), Open(Page::Updates), Confirm, Language, Diagnostics],
-        Page::Appearance => &[Theme, View, Details, Backdrop, IconBox, Open(Page::Status)],
+        Page::Appearance => &[Theme, View, Details, TextSize, Backdrop, IconBox, Open(Page::Status)],
         Page::Status => &[StatusBar, StatusPosition, ShowWifi, ShowBluetooth, ShowBattery, BatteryPercent, Clock],
         Page::Library => &[Categories, FetchArt, CleanArt, Rescan],
         Page::Updates => &[UpdateChannel, CheckUpdates],

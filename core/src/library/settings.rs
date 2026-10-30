@@ -102,6 +102,43 @@ impl StatusLayout {
     }
 }
 
+keyed!(
+    /// The size of the text, in five steps around the roles' own sizes.
+    TextSize { Smaller = "smaller", Small = "small", Normal = "normal", Large = "large", Larger = "larger" }
+);
+
+/// The text size, a setting of its own since 0.2 for the reason
+/// `status-bar.json` is: `{"size": "normal"}`.
+pub const TEXT_SIZE_FILE: &str = "text-size.json";
+
+impl TextSize {
+    /// The factor on each role's size (`Gfx::text_scale`).
+    pub fn scale(self) -> f32 {
+        match self {
+            TextSize::Smaller => 0.85,
+            TextSize::Small => 0.92,
+            TextSize::Normal => 1.0,
+            TextSize::Large => 1.12,
+            TextSize::Larger => 1.25,
+        }
+    }
+
+    /// The saved size; Normal when the file is missing or unusable.
+    pub fn parse(bytes: &[u8]) -> TextSize {
+        serde_json::from_slice::<Value>(bytes)
+            .ok()
+            .and_then(|raw| raw.get("size").and_then(Value::as_str).and_then(TextSize::from_key))
+            .unwrap_or(TextSize::Normal)
+    }
+
+    /// Two-space JSON and a newline, as the app's other files.
+    pub fn render(self) -> String {
+        let mut map = Map::new();
+        map.insert("size".into(), self.key().into());
+        serde_json::to_string_pretty(&Value::Object(map)).expect("json") + "\n"
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Settings {
     pub language: Language,
@@ -123,6 +160,8 @@ pub struct Settings {
     pub title: Option<String>,
     /// The status items' layout, saved in its own file (not rendered here).
     pub layout: StatusLayout,
+    /// Saved in its own file, `text-size.json` (not rendered here).
+    pub text_size: TextSize,
 }
 
 impl Settings {
@@ -145,6 +184,7 @@ impl Settings {
             category: None,
             title: None,
             layout: StatusLayout::default(),
+            text_size: TextSize::Normal,
         }
     }
 
@@ -223,6 +263,16 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_text_size_round_trips_and_defaults() {
+        assert_eq!(TextSize::Large.render(), "{\n  \"size\": \"large\"\n}\n");
+        for &size in TextSize::ALL {
+            assert_eq!(TextSize::parse(size.render().as_bytes()), size);
+        }
+        assert_eq!(TextSize::parse(br#"{"size":"huge"}"#), TextSize::Normal);
+        assert_eq!(TextSize::parse(b"nope"), TextSize::Normal);
+    }
 
     #[test]
     fn the_status_layout_round_trips_and_defaults() {

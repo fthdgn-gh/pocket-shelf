@@ -216,5 +216,6 @@ the user.
   1920×620 backdrop takes about 0.5 s to decode; the neighbors' backdrops
   are decoded ahead once the selected one is answered. A scaled cache on the
   memory card would also cover a jump of more than one step; not done.
-- **A text size setting** (the user, 2026-10-27): the roles' sizes are one
-  table (`Role::style`), so a setting can scale it.
+- **A text size setting** (the user, 2026-10-27): *done 2026-10-30,
+  hardware run pending.* Five steps (the user, 2026-10-30), Smaller to
+  Larger, in `text-size.json`.

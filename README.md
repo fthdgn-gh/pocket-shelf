@@ -58,6 +58,7 @@ the colored tiles with initials stand in for game icons.
 - **Per-title changes:** name, category, icon, backdrop and favorite.
 - **Six themes:** Midnight, Aurora, Sakura, Ember, Daylight, and Dynamic, which
   takes its colors from the selected title.
+- **Five text sizes**, from Smaller to Larger (SELECT ▸ Appearance ▸ Text size).
 - **Status bar** with the clock, Wi-Fi, Bluetooth and battery, each of which
   can be hidden, on the left or the right of the top bar.
 - **Diagnostics** (SELECT menu): frame timing, startup timing, what the last
@@ -158,6 +159,7 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | --- | --- |
 | `settings.json` | Settings and the last selection |
 | `status-bar.json` | Which status items show, and on which side |
+| `text-size.json` | The text size |
 | `categories.json` | Your categories and their order |
 | `titles/<title id>.json` | Your changes to one title |
 | `titles.cache.json` | Every title's changes in one file, read at start |

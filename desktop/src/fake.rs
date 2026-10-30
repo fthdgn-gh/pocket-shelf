@@ -397,6 +397,12 @@ impl FakeHost {
         self
     }
 
+    /// A saved text size (`text-size.json`).
+    pub fn with_text_size(mut self, key: &str) -> Self {
+        self.files.insert("text-size.json".into(), format!("{{\"size\":\"{key}\"}}").into_bytes());
+        self
+    }
+
     /// Saved data as a user of Pocket Shelf 0.1 has it: settings with a
     /// selection, a category of their own, changed titles, "Last Played".
     pub fn with_saved_data(mut self) -> Self {

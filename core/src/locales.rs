@@ -70,6 +70,8 @@ pub struct Messages {
     pub language: &'static str,
     pub views: Views,
     pub detail_levels: DetailLevels,
+    pub text_size: &'static str,
+    pub text_sizes: TextSizes,
     pub themes: Themes,
     pub editor_title: &'static str,
     pub favorite: &'static str,
@@ -251,6 +253,15 @@ pub struct DetailLevels {
 }
 
 #[derive(Debug)]
+pub struct TextSizes {
+    pub smaller: &'static str,
+    pub small: &'static str,
+    pub normal: &'static str,
+    pub large: &'static str,
+    pub larger: &'static str,
+}
+
+#[derive(Debug)]
 pub struct Views {
     pub carousel: &'static str,
     pub grid: &'static str,
@@ -358,6 +369,12 @@ impl Messages {
             ("detailLevels.basic", self.detail_levels.basic),
             ("detailLevels.normal", self.detail_levels.normal),
             ("detailLevels.detailed", self.detail_levels.detailed),
+            ("textSize", self.text_size),
+            ("textSizes.smaller", self.text_sizes.smaller),
+            ("textSizes.small", self.text_sizes.small),
+            ("textSizes.normal", self.text_sizes.normal),
+            ("textSizes.large", self.text_sizes.large),
+            ("textSizes.larger", self.text_sizes.larger),
             ("themes.midnight", self.themes.midnight),
             ("themes.aurora", self.themes.aurora),
             ("themes.sakura", self.themes.sakura),
@@ -596,6 +613,14 @@ pub static EN: Messages = Messages {
         basic: "Basic",
         normal: "Normal",
         detailed: "Detailed",
+    },
+    text_size: "Text size",
+    text_sizes: TextSizes {
+        smaller: "Smaller",
+        small: "Small",
+        normal: "Normal",
+        large: "Large",
+        larger: "Larger",
     },
     themes: Themes {
         midnight: "Midnight",
@@ -842,6 +867,14 @@ pub static TR: Messages = Messages {
         normal: "Normal",
         detailed: "Ayrıntılı",
     },
+    text_size: "Yazı boyutu",
+    text_sizes: TextSizes {
+        smaller: "Daha küçük",
+        small: "Küçük",
+        normal: "Normal",
+        large: "Büyük",
+        larger: "Daha büyük",
+    },
     themes: Themes {
         midnight: "Gece Yarısı",
         aurora: "Aurora",
@@ -1086,6 +1119,14 @@ pub static DE: Messages = Messages {
         basic: "Einfach",
         normal: "Normal",
         detailed: "Ausführlich",
+    },
+    text_size: "Textgröße",
+    text_sizes: TextSizes {
+        smaller: "Kleiner",
+        small: "Klein",
+        normal: "Normal",
+        large: "Groß",
+        larger: "Größer",
     },
     themes: Themes {
         midnight: "Mitternacht",
@@ -1332,6 +1373,14 @@ pub static FR: Messages = Messages {
         normal: "Normal",
         detailed: "Détaillé",
     },
+    text_size: "Taille du texte",
+    text_sizes: TextSizes {
+        smaller: "Plus petite",
+        small: "Petite",
+        normal: "Normale",
+        large: "Grande",
+        larger: "Plus grande",
+    },
     themes: Themes {
         midnight: "Minuit",
         aurora: "Aurore",
@@ -1576,6 +1625,14 @@ pub static ES: Messages = Messages {
         basic: "Básico",
         normal: "Normal",
         detailed: "Detallado",
+    },
+    text_size: "Tamaño del texto",
+    text_sizes: TextSizes {
+        smaller: "Más pequeño",
+        small: "Pequeño",
+        normal: "Normal",
+        large: "Grande",
+        larger: "Más grande",
     },
     themes: Themes {
         midnight: "Medianoche",

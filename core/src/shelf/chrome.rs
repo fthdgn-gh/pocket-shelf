@@ -51,13 +51,15 @@ pub struct Header {
     names: Vec<Name>,
     /// The names' labels as last measured, to notice a change.
     measured: Vec<(String, String)>,
+    /// The text size they were measured at.
+    measured_scale: f32,
     scroll: Tween,
     placed: bool,
 }
 
 impl Default for Header {
     fn default() -> Self {
-        Header { names: Vec::new(), measured: Vec::new(), scroll: Tween::new(0.0, 220), placed: false }
+        Header { names: Vec::new(), measured: Vec::new(), measured_scale: 0.0, scroll: Tween::new(0.0, 220), placed: false }
     }
 }
 
@@ -75,7 +77,7 @@ impl Header {
 
     fn measure(&mut self, gfx: &mut Gfx, tabs: &[Category]) {
         let labels: Vec<(String, String)> = tabs.iter().map(|c| (c.id.clone(), c.label.clone())).collect();
-        if labels == self.measured {
+        if labels == self.measured && gfx.text_scale == self.measured_scale {
             return;
         }
         let mut x = 0.0;
@@ -90,6 +92,7 @@ impl Header {
             })
             .collect();
         self.measured = labels;
+        self.measured_scale = gfx.text_scale;
     }
 
     pub fn draw(&mut self, gfx: &mut Gfx, input: &HeaderInput) {

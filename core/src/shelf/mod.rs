@@ -701,6 +701,16 @@ impl Shelf {
                 s.detail = cycle_by(DetailLevel::ALL, s.detail, delta);
                 self.placed = None;
             }
+            Item::TextSize => {
+                // Stops at Smaller and Larger: a size does not wrap around.
+                use crate::library::settings::{TextSize, TEXT_SIZE_FILE};
+                let at = TextSize::ALL.iter().position(|&v| v == s.text_size).unwrap_or(0) as i32;
+                s.text_size = TextSize::ALL[(at + delta).clamp(0, TextSize::ALL.len() as i32 - 1) as usize];
+                // Saved in a file of its own, as the status bar's layout.
+                host.write(TEXT_SIZE_FILE, s.text_size.render().as_bytes());
+                self.placed = None;
+                return;
+            }
             Item::Backdrop => {
                 s.backdrop = !s.backdrop;
                 // On: the selected title's backdrop is asked for; off: gone.
@@ -1260,6 +1270,18 @@ impl Shelf {
                 };
                 (t.details, Some(name.into()), None, Both)
             }
+            Item::TextSize => {
+                use crate::library::settings::TextSize;
+                let z = &t.text_sizes;
+                let name = match s.text_size {
+                    TextSize::Smaller => z.smaller,
+                    TextSize::Small => z.small,
+                    TextSize::Normal => z.normal,
+                    TextSize::Large => z.large,
+                    TextSize::Larger => z.larger,
+                };
+                (t.text_size, Some(name.into()), None, Both)
+            }
             Item::Backdrop => (t.backdrop, on_off(s.backdrop), None, Both),
             Item::IconBox => (t.icon_box, on_off(s.icon_box), None, Both),
             Item::StatusBar => (t.show_status_bar, on_off(s.status_bar), None, Both),
@@ -1666,6 +1688,27 @@ mod tests {
         assert_eq!(host.backdrops.len(), asked, "no new request");
         assert_eq!(shelf.backdrop.as_ref().map(|b| b.key.clone()), Some(next));
         assert!(shelf.ahead.is_empty());
+    }
+
+    #[test]
+    fn the_text_size_steps_to_each_end_and_saves_its_own_file() {
+        use crate::library::settings::{TextSize, TEXT_SIZE_FILE};
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        // SELECT, Appearance, down to Text size.
+        for button in [SELECT, RIGHT, DOWN, DOWN, DOWN] {
+            press(&mut shelf, &mut host, button);
+        }
+        for _ in 0..4 {
+            press(&mut shelf, &mut host, RIGHT);
+        }
+        assert_eq!(shelf.settings.text_size, TextSize::Larger, "stops at Larger");
+        assert_eq!(TextSize::parse(&host.files.0[TEXT_SIZE_FILE]), TextSize::Larger);
+        for _ in 0..6 {
+            press(&mut shelf, &mut host, LEFT);
+        }
+        assert_eq!(shelf.settings.text_size, TextSize::Smaller, "stops at Smaller");
+        assert_eq!(TextSize::parse(&host.files.0[TEXT_SIZE_FILE]), TextSize::Smaller);
+        assert!(!host.files.0.get(SETTINGS_FILE).is_some_and(|f| String::from_utf8_lossy(f).contains("smaller")));
     }
 
     #[test]

@@ -17,11 +17,12 @@ pub const DATA: &str = "ux0:data/PocketShelf";
 /// Whether this build may write `path` in the data folder: only the files
 /// whose writers reproduce Pocket Shelf 0.1's output byte for byte
 /// (`core/src/library/round_trip.rs`; `steamgriddb.txt` is the key and a
-/// newline), and this build's own `status-bar.json` (0.1 did not read it). Downloads go to their files through `http.rs`.
+/// newline), and this build's own `status-bar.json` and `text-size.json`
+/// (0.1 did not read them). Downloads go to their files through `http.rs`.
 fn writable(path: &str) -> bool {
     matches!(
         path,
-        "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "steamgriddb.txt" | "update.json" | "update/version.txt"
+        "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "text-size.json" | "steamgriddb.txt" | "update.json" | "update/version.txt"
     )
         || path.strip_prefix("titles/").is_some_and(|_| removable(path))
 }
