@@ -12,7 +12,7 @@ downloads on worker threads. Up to 0.1 it was a TypeScript app on
 its saved data.
 
 - Title id `POCKTSHLF`
-- Version 0.2.0
+- Version 0.3.0
 
 <p align="center">
   <img src="./screenshots/home.png" width="720" alt="Pocket Shelf's Home view on the Games tab in the Dynamic theme: the selected title's icon large at the left in a white ring, the next titles smaller after it, the title's name, platform and category, and a Launch button, over the title's backdrop." />
@@ -317,8 +317,8 @@ Three GitHub Actions workflows build and publish the VPK:
 The tag's version must be the `version` in `vita/Cargo.toml`:
 
 ```sh
-git tag shelf-v0.2.0-beta.3   # beta: published as a pre-release
-git tag shelf-v0.2.0          # stable: published as the latest release
+git tag shelf-v0.3.0-beta.1   # beta: published as a pre-release
+git tag shelf-v0.3.0          # stable: published as the latest release
 git push origin <tag>
 ```
 

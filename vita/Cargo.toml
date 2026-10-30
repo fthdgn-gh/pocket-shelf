@@ -2,7 +2,7 @@
 name = "pocket-shelf"
 # The app's version: APP_VER, the LiveArea text, the release tag's check,
 # and the update check (vita/build.rs) read it.
-version = "0.2.0"
+version = "0.3.0"
 authors = ["fthdgn"]
 edition = "2021"
 publish = false
