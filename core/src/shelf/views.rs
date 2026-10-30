@@ -164,13 +164,16 @@ impl Shelf {
             return;
         }
         let k = rect.w / side;
-        if selected {
-            if shadow {
-                tile_shadow(gfx, rect, opacity);
-            }
-            selected_frame(gfx, rect, k, self.theme.text.alpha(opacity));
-        }
         let game = &self.library.games()[game_index];
+        if selected {
+            // Around the part the picture covers: a PSP icon's rectangle,
+            // not the square it is fitted into.
+            let shown = self.art.shown(game, rect, gfx);
+            if shadow {
+                tile_shadow(gfx, shown, opacity);
+            }
+            selected_frame(gfx, shown, k, self.theme.text.alpha(opacity));
+        }
         self.art.draw(gfx, game, rect, side, opacity, self.settings.icon_box, false);
     }
 
@@ -365,7 +368,9 @@ impl Shelf {
             let opacity = slot.opacity * intro;
             self.draw_tile(gfx, index, rect, side, opacity, offset == 0, false);
             if slot.shade > 0.0 && opacity > 0.0 {
-                gfx.fill(rect, shade_color.alpha(slot.shade * opacity));
+                // Over the picture only, not its clear bars.
+                let shown = self.list.get(index).map_or(rect, |&g| self.art.shown(&self.library.games()[g], rect, gfx));
+                gfx.fill(shown, shade_color.alpha(slot.shade * opacity));
             }
         }
         gfx.clip(None);

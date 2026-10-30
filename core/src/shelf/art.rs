@@ -40,6 +40,23 @@ struct Loaded {
     bytes: usize,
     /// The `Art::clock` tick it was last drawn or asked for.
     used: u64,
+    /// The part that shows (`Picture::content`) as fractions of the
+    /// picture: `[x, y, w, h]`.
+    shown: [f32; 4],
+}
+
+/// `Picture::content` as fractions of a `w`×`h` picture.
+pub fn shown_part(content: [u32; 4], w: u32, h: u32) -> [f32; 4] {
+    let (w, h) = (w.max(1) as f32, h.max(1) as f32);
+    [content[0] as f32 / w, content[1] as f32 / h, content[2] as f32 / w, content[3] as f32 / h]
+}
+
+/// The whole picture.
+pub const ALL_SHOWN: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+
+/// The part of `rect` that `shown` covers.
+fn part_of(rect: Rect, shown: [f32; 4]) -> Rect {
+    Rect::new(rect.x + shown[0] * rect.w, rect.y + shown[1] * rect.h, shown[2] * rect.w, shown[3] * rect.h)
 }
 
 /// Up to two initials of a title (one at the list's size).
@@ -171,8 +188,9 @@ impl Art {
             let boxed = box_colors(picture.accent).map(|(top, bottom)| gfx.gradient_sized(top, bottom, 32));
             let color = picture.accent.map(|a| a & 0xffffff);
             let bytes = rgba_bytes(picture.w, picture.h) + if boxed.is_some() { BOX_BYTES } else { 0 };
+            let shown = shown_part(picture.content, picture.w, picture.h);
             let tex = gfx.add_texture(picture.w, picture.h, Format::Rgba8, picture.rgba, true);
-            Loaded { tex, color, boxed, bytes, used }
+            Loaded { tex, color, boxed, bytes, used, shown }
         });
         self.keep(gfx, key.clone(), loaded);
         true
@@ -181,12 +199,12 @@ impl Art {
     /// Hand a picture already decoded (Find artwork's preview of the box
     /// art just used) to the cache under `key`, so the tile shows it without
     /// reading back the file being written.
-    pub fn insert(&mut self, gfx: &mut Gfx, key: PictureKey, tex: TexId, accent: Option<u32>) {
+    pub fn insert(&mut self, gfx: &mut Gfx, key: PictureKey, tex: TexId, accent: Option<u32>, shown: [f32; 4]) {
         let boxed = box_colors(accent).map(|(top, bottom)| gfx.gradient_sized(top, bottom, 32));
         self.requested.remove(&key);
         let texture = &gfx.textures.list[tex.0 as usize];
         let bytes = rgba_bytes(texture.w, texture.h) + if boxed.is_some() { BOX_BYTES } else { 0 };
-        let loaded = Loaded { tex, color: accent.map(|a| a & 0xffffff), boxed, bytes, used: self.clock };
+        let loaded = Loaded { tex, color: accent.map(|a| a & 0xffffff), boxed, bytes, used: self.clock, shown };
         self.keep(gfx, key, Some(loaded));
     }
 
@@ -199,6 +217,17 @@ impl Art {
     /// The texture of a loaded icon or box art, by its request.
     pub fn texture(&self, key: &PictureKey) -> Option<TexId> {
         self.loaded.get(key).and_then(|l| l.as_ref()).map(|l| l.tex)
+    }
+
+    /// The part of a tile at `rect` that its picture covers: the whole tile
+    /// for a square picture or the initials, a rectangle inside it for a
+    /// picture with clear bars (a PSP icon). The selection ring goes around
+    /// it.
+    pub fn shown(&self, game: &Game, rect: Rect, gfx: &Gfx) -> Rect {
+        match self.loaded.get(&source(game)).and_then(|l| l.as_ref()).filter(|l| gfx.textures.ready(l.tex)) {
+            Some(loaded) => part_of(rect, loaded.shown),
+            None => rect,
+        }
     }
 
     /// A title's color for the Dynamic theme: its picture's, once loaded.
@@ -216,8 +245,10 @@ impl Art {
         let loaded = self.loaded.get_mut(&source(game)).and_then(|l| l.as_mut()).filter(|l| gfx.textures.ready(l.tex));
         if let Some(loaded) = loaded {
             loaded.used = clock;
+            // The box fills the part that shows, not the clear bars of a
+            // picture fitted into a square.
             if let Some(boxed) = loaded.boxed.filter(|_| icon_box) {
-                gfx.image_full(boxed, rect, tint);
+                gfx.image_full(boxed, part_of(rect, loaded.shown), tint);
             }
             gfx.image_full(loaded.tex, rect, tint);
             return;
@@ -346,7 +377,7 @@ mod want_tests {
         assert_eq!(host.asked.len(), 2);
         // A picture handed over is used as it is.
         let tex = gfx.add_texture(1, 1, Format::Rgba8, vec![0; 4], true);
-        art.insert(&mut gfx, PictureKey::Art("PCSA00001-9.png".into()), tex, Some(0xff0000));
+        art.insert(&mut gfx, PictureKey::Art("PCSA00001-9.png".into()), tex, Some(0xff0000), ALL_SHOWN);
         art.want(&mut host, std::iter::once(&game));
         assert_eq!(host.asked.len(), 2);
         assert_eq!(art.texture(&PictureKey::Art("PCSA00001-9.png".into())), Some(tex));
@@ -367,7 +398,7 @@ mod want_tests {
             for game in &games[start..start + 3] {
                 let key = source(game);
                 if art.texture(&key).is_none() {
-                    art.answer(&mut gfx, &key, Some(Picture { w: 128, h: 128, rgba: vec![0; 128 * 128 * 4], accent: None }));
+                    art.answer(&mut gfx, &key, Some(Picture::new(128, 128, vec![0; 128 * 128 * 4], None)));
                 }
             }
             art.trim(&mut gfx);

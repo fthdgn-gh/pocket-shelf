@@ -186,7 +186,23 @@ fn icon(index: usize, title: &str) -> Picture {
     // The accent: the first gradient color, flagged for the
     // see-through ones.
     let accent = ICON_COLORS[index % ICON_COLORS.len()].0 | if index % 3 == 1 { ACCENT_HAS_ALPHA } else { 0 };
-    Picture { w: 128, h: 128, rgba: canvas.rgba(), accent: Some(accent) }
+    Picture::new(128, 128, canvas.rgba(), Some(accent))
+}
+
+/// A square sample icon squeezed to 144:80 (128×71) in the middle of the
+/// square, clear above and below, flagged see-through.
+fn psp_icon(square: Picture) -> Picture {
+    const SIDE: usize = 128;
+    let high = SIDE * 80 / 144;
+    let top = (SIDE - high) / 2;
+    let mut rgba = vec![0u8; SIDE * SIDE * 4];
+    for y in 0..high {
+        let from = y * SIDE / high;
+        let row = (top + y) * SIDE * 4;
+        rgba[row..row + SIDE * 4].copy_from_slice(&square.rgba[from * SIDE * 4..(from + 1) * SIDE * 4]);
+    }
+    let accent = square.accent.map(|a| a | ACCENT_HAS_ALPHA);
+    Picture::new(SIDE as u32, SIDE as u32, rgba, accent)
 }
 
 /// A 512×256 stand-in for a title's full-screen picture: sky, sun and three hills in its colors.
@@ -208,7 +224,7 @@ fn backdrop(index: usize) -> Picture {
             Some((rgb(0x04060f), (y - edge + 0.5).clamp(0.0, 1.0) * shade))
         });
     }
-    Picture { w: 512, h: 256, rgba: canvas.rgba(), accent: None }
+    Picture::new(512, 256, canvas.rgba(), None)
 }
 
 pub struct FakeHost {
@@ -498,7 +514,12 @@ impl Host for FakeHost {
         let picture = match &key {
             // The retro library's games have no box art.
             PictureKey::Icon(id) if id.starts_with("rq") => None,
-            PictureKey::Icon(id) => self.index(id).map(|i| icon(i, &self.titles[i].title)),
+            // A PSP game's icon is 144×80, fitted whole into the square with
+            // clear bars, as `pspemu::fit_png` does on the Vita.
+            PictureKey::Icon(id) => self.index(id).map(|i| {
+                let picture = icon(i, &self.titles[i].title);
+                if self.titles[i].platform == "psp" { psp_icon(picture) } else { picture }
+            }),
             // A box art file decodes as a sample icon, unless it stands for a
             // damaged file.
             PictureKey::Art(name) if name.starts_with("broken") => None,

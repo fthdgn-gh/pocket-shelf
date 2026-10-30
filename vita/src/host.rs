@@ -63,14 +63,14 @@ fn picture(key: &PictureKey) -> Option<Picture> {
     unsafe {
         match key {
             PictureKey::Icon(id) => {
-                installed::icon(id).map(|(w, h, rgba, accent)| Picture { w, h, rgba, accent: Some(accent as u32) })
+                installed::icon(id).map(|(w, h, rgba, accent)| Picture::new(w, h, rgba, Some(accent as u32)))
             }
             PictureKey::Art(name) => crate::platform::art::picture(name).map(|(w, h, rgba)| {
                 let accent = Some(crate::platform::accent::of(&rgba) as u32);
-                Picture { w, h, rgba, accent }
+                Picture::new(w, h, rgba, accent)
             }),
             PictureKey::Backdrop { id, file } => {
-                backdrop::picture(id, file).map(|(w, h, rgba)| Picture { w, h, rgba, accent: None })
+                backdrop::picture(id, file).map(|(w, h, rgba)| Picture::new(w, h, rgba, None))
             }
             // Pictures in memory come with their bytes (`decode_memory`).
             PictureKey::Memory { .. } => None,
@@ -92,12 +92,12 @@ enum FileOp {
 fn decode_memory(as_: DecodeAs, png: &[u8]) -> Option<Picture> {
     let with_accent = |w, h, rgba: Vec<u8>| {
         let accent = Some(crate::platform::accent::of(&rgba) as u32);
-        Picture { w, h, rgba, accent }
+        Picture::new(w, h, rgba, accent)
     };
     match as_ {
         DecodeAs::Art => crate::platform::art::decode_bytes(png).map(|(side, rgba)| with_accent(side, side, rgba)),
         DecodeAs::FittedArt => crate::platform::pspemu::fit_png(png).map(|(w, h, rgba)| with_accent(w, h, rgba)),
-        DecodeAs::Backdrop => backdrop::decode(png).map(|(w, h, rgba)| Picture { w, h, rgba, accent: None }),
+        DecodeAs::Backdrop => backdrop::decode(png).map(|(w, h, rgba)| Picture::new(w, h, rgba, None)),
     }
 }
 

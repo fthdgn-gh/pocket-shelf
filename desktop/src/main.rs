@@ -282,6 +282,11 @@ const SHOTS: &[Shot] = &[
     Shot { name: "231-sorted-recently-played", script: &[(0, SETTLE)], setup: sorted_recent },
     Shot { name: "232-sorted-newest-installed", script: &[(0, SETTLE)], setup: sorted_installed },
     Shot { name: "233-larger-german-sort", script: &[(0, 4), (SELECT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: larger_german },
+    // A PSP game's 144:80 icon: the ring, the shadow and the shade around
+    // the picture, not the square it is fitted into (PSP tab, second title).
+    shot("240-psp-carousel", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
+    shot("241-psp-grid", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
+    shot("242-psp-cascade", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
 ];
 
 fn main() {

@@ -126,7 +126,13 @@ thread decodes them only while no selected backdrop waits, so one step either
 way shows its picture without the decode. **Icons and box art are held to
 6 MB of textures** (`ART_BYTES_KEPT`, about 96 icons): past it the pictures
 drawn longest ago are freed, never those around the selection, and a title
-scrolled back to asks for its picture again. A backdrop decoded in 0.5–1.4 s on
+scrolled back to asks for its picture again. **The selection ring goes
+around the part of a picture that shows**: a picture fitted into a square
+with clear bars on two opposite sides (a PSP game's 144×80 icon, a
+RetroArch box art) carries its rectangle (`Picture::content`, worked out
+on the decoding thread), and the ring, the shadow, the icon box and the
+Cascade's shade use it; a round or shaped icon, clear on every side, keeps
+its square. A backdrop decoded in 0.5–1.4 s on
 hardware; its scaling did a 64-bit division per source pixel, a library
 call on the Vita's 32-bit CPU, and now reads each column's texel from a
 table; PNG checksums are skipped. The log splits each backdrop into read,

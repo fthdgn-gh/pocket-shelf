@@ -209,9 +209,11 @@ pub struct Shelf {
     /// Each preview's texture: icon, backdrop; the icon's accent.
     online_tex: [Option<TexId>; 2],
     online_accent: Option<u32>,
+    /// The candidate box art's part that shows (`Picture::content`).
+    online_shown: [f32; 4],
     /// Pictures to hand to the tile cache at the next draw (it has the
     /// textures): a box art just used, from its preview.
-    pending_art: Vec<(PictureKey, TexId, Option<u32>)>,
+    pending_art: Vec<(PictureKey, TexId, Option<u32>, [f32; 4])>,
     /// libretro's box art names per console (Find and Fetch artwork).
     listings: crate::online::flow::Listings,
     /// Textures to free at the next draw.
@@ -280,6 +282,7 @@ impl Shelf {
             online: None,
             online_tex: [None, None],
             online_accent: None,
+            online_shown: art::ALL_SHOWN,
             pending_art: Vec::new(),
             listings: Default::default(),
             pending_free: Vec::new(),
@@ -1081,8 +1084,8 @@ impl Shelf {
         for tex in self.pending_free.drain(..) {
             gfx.textures.free(tex);
         }
-        for (key, tex, accent) in std::mem::take(&mut self.pending_art) {
-            self.art.insert(gfx, key, tex, accent);
+        for (key, tex, accent, shown) in std::mem::take(&mut self.pending_art) {
+            self.art.insert(gfx, key, tex, accent, shown);
         }
         // Free the icons and box art used longest ago past the budget.
         self.art.trim(gfx);
@@ -1742,7 +1745,7 @@ mod tests {
         }
         if let Some(key) = host.backdrops.last().cloned().filter(|k| shelf.wanted.as_ref() == Some(k)) {
             if shelf.backdrop.as_ref().is_none_or(|b| b.key != key) {
-                shelf.picture(gfx, key, Some(Picture { w: 4, h: 2, rgba: vec![0; 32], accent: None }));
+                shelf.picture(gfx, key, Some(Picture::new(4, 2, vec![0; 32], None)));
             }
         }
         shelf.draw(gfx);
@@ -1783,7 +1786,7 @@ mod tests {
         let (index, button) = (1, RIGHT);
         let next = shelf.game(index).map(|g| PictureKey::Backdrop { id: g.id.to_string(), file: String::new() }).unwrap();
         assert_eq!(host.ahead, [next.clone()]);
-        shelf.picture(&mut gfx, next.clone(), Some(Picture { w: 4, h: 2, rgba: vec![0; 32], accent: None }));
+        shelf.picture(&mut gfx, next.clone(), Some(Picture::new(4, 2, vec![0; 32], None)));
         // Stepping to it shows it without a new request.
         press(&mut shelf, &mut host, button);
         rest(&mut shelf, &mut host, &mut gfx);

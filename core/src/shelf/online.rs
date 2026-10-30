@@ -59,7 +59,7 @@ impl Shelf {
                             // and a read before it lands would cache "no
                             // picture" (the tile showed initials).
                             if let Some(tex) = self.online_tex[0].take() {
-                                self.pending_art.push((PictureKey::Art(file.clone()), tex, self.online_accent));
+                                self.pending_art.push((PictureKey::Art(file.clone()), tex, self.online_accent, self.online_shown));
                             }
                             // The new file has to be in the art index first.
                             self.library.add_art(&file);
@@ -149,6 +149,7 @@ impl Shelf {
             self.online_tex[slot] = Some(gfx.add_texture(p.w, p.h, Format::Rgba8, p.rgba.clone(), true));
             if slot == 0 {
                 self.online_accent = p.accent;
+                self.online_shown = super::art::shown_part(p.content, p.w, p.h);
             }
         }
         true

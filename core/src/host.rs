@@ -45,6 +45,94 @@ pub struct Picture {
     /// An icon's strongest color, `ACCENT_HAS_ALPHA | 0xRRGGBB`
     /// (`theme::box_colors`); None for other pictures.
     pub accent: Option<u32>,
+    /// The part that shows, `[x, y, w, h]` in texels: for a picture fitted
+    /// into a square with clear bars on two opposite sides (a PSP icon,
+    /// 144×80; a RetroArch box art), the picture's own rectangle; else the
+    /// whole picture. The selection ring and the icon box are drawn around
+    /// this part.
+    pub content: [u32; 4],
+}
+
+/// Texels with less alpha than this count as see-through (an antialiased
+/// edge's faint texels do not widen the box).
+const SHOWN_ALPHA: u8 = 16;
+
+impl Picture {
+    /// A picture with its `content` worked out: call it on the thread that
+    /// decoded the picture, not in a frame (it reads every texel).
+    pub fn new(w: u32, h: u32, rgba: Vec<u8>, accent: Option<u32>) -> Picture {
+        let content = visible_box(&rgba, w, h);
+        Picture { w, h, rgba, accent, content }
+    }
+}
+
+/// `[x, y, w, h]` of the part of an RGBA picture that shows: the box
+/// around its texels with alpha of at least `SHOWN_ALPHA` when that box
+/// spans the picture's whole width or whole height (clear bars on two
+/// opposite sides, as a fitted picture has). A round or shaped icon has
+/// clear margins on every side and counts as whole, so its icon box stays
+/// square.
+pub fn visible_box(rgba: &[u8], w: u32, h: u32) -> [u32; 4] {
+    let whole = [0, 0, w, h];
+    let [x, y, bw, bh] = opaque_box(rgba, w, h);
+    // Within 2% of an edge counts as reaching it (a scaled edge's faint
+    // texels).
+    let spans = |part: u32, all: u32| part * 50 >= all * 49;
+    if spans(bw, w) && !spans(bh, h) {
+        [0, y, w, bh]
+    } else if spans(bh, h) && !spans(bw, w) {
+        [x, 0, bw, h]
+    } else {
+        whole
+    }
+}
+
+/// `[x, y, w, h]` around the texels with alpha of at least `SHOWN_ALPHA`;
+/// the whole picture when none has.
+fn opaque_box(rgba: &[u8], w: u32, h: u32) -> [u32; 4] {
+    let (w, h) = (w as usize, h as usize);
+    if w == 0 || h == 0 || rgba.len() < w * h * 4 {
+        return [0, 0, w as u32, h as u32];
+    }
+    let shown = |x: usize, y: usize| rgba[(y * w + x) * 4 + 3] >= SHOWN_ALPHA;
+    let row_shown = |y: usize| (0..w).any(|x| shown(x, y));
+    let Some(top) = (0..h).find(|&y| row_shown(y)) else { return [0, 0, w as u32, h as u32] };
+    let bottom = (0..h).rev().find(|&y| row_shown(y)).unwrap_or(top);
+    let column_shown = |x: usize| (top..=bottom).any(|y| shown(x, y));
+    let left = (0..w).find(|&x| column_shown(x)).unwrap_or(0);
+    let right = (0..w).rev().find(|&x| column_shown(x)).unwrap_or(w - 1);
+    [left as u32, top as u32, (right - left + 1) as u32, (bottom - top + 1) as u32]
+}
+
+#[cfg(test)]
+mod visible_tests {
+    use super::*;
+
+    #[test]
+    fn the_visible_box_skips_clear_bars_and_faint_edges() {
+        // 8×6: clear except a 4×2 block at (2, 2), with a faint texel at
+        // (0, 0).
+        let mut rgba = vec![0u8; 8 * 6 * 4];
+        for y in 2..4 {
+            for x in 2..6 {
+                rgba[(y * 8 + x) * 4 + 3] = 255;
+            }
+        }
+        rgba[3] = 10;
+        assert_eq!(opaque_box(&rgba, 8, 6), [2, 2, 4, 2]);
+        // Clear on every side: a shaped icon, shown whole.
+        assert_eq!(visible_box(&rgba, 8, 6), [0, 0, 8, 6]);
+        // Bars above and below only: the rows between show.
+        let mut wide = vec![0u8; 8 * 6 * 4];
+        for y in 1..4 {
+            for x in 0..8 {
+                wide[(y * 8 + x) * 4 + 3] = 255;
+            }
+        }
+        assert_eq!(visible_box(&wide, 8, 6), [0, 1, 8, 3]);
+        assert_eq!(visible_box(&[0; 16], 2, 2), [0, 0, 2, 2]);
+        assert_eq!(visible_box(&[255; 16], 2, 2), [0, 0, 2, 2]);
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
