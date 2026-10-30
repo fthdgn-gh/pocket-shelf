@@ -1,9 +1,9 @@
 //! Custom box art (cargo features `installed-apps` and `data-fs`).
 //!
 //! The user drops PNG files into `<data folder>/art`; the launcher lists them
-//! and asks for one by file name. The host decodes the
-//! image, crops it to a centered square, and averages it down to a power-of-two
-//! texture (at most 256 px), which is the only shape the core accepts.
+//! and asks for one by file name. The host decodes the image and fits it
+//! whole into a power-of-two square texture (at most 256 px) with clear
+//! bars, keeping its shape.
 
 use std::fs;
 use std::string::String;
@@ -31,8 +31,8 @@ fn valid_name(name: &str) -> bool {
         && name.to_ascii_lowercase().ends_with(".png")
 }
 
-/// Decode, crop to a centered square and box-filter down. Returns the texture
-/// side and its RGBA pixels.
+/// Decode and fit whole into a square, box-filtered down. Returns the
+/// texture side and its RGBA pixels.
 pub(crate) fn decode(path: &str) -> Option<(u32, Vec<u8>)> {
     if fs::metadata(path).ok()?.len() > FILE_MAX {
         return None;
@@ -68,49 +68,19 @@ pub(crate) fn decode_bytes(bytes: &[u8]) -> Option<(u32, Vec<u8>)> {
         png::ColorType::Indexed => return None,
     };
 
-    let side = width.min(height);
+    // The whole picture fitted into the largest power-of-two square (at
+    // most `OUT_MAX`) its long side fills, with clear bars: a box art keeps
+    // its shape, and the selection ring follows it (`Picture::content`).
+    let long = width.max(height);
     let mut out = OUT_MAX;
-    while out > side {
+    while out > long {
         out /= 2;
     }
-    let origin_x = (width - side) / 2;
-    let origin_y = (height - side) / 2;
-    let cells = (out * out) as usize;
-    let mut sums = vec![0u32; cells * 4];
-    let mut counts = vec![0u32; cells];
-    for y in origin_y..origin_y + side {
-        let start = y as usize * info.line_size;
-        let row = buffer.get(start..start + info.line_size)?;
-        let dest_y = ((y - origin_y) as u64 * out as u64 / side as u64) as usize;
-        for x in origin_x..origin_x + side {
-            let at = x as usize * channels;
-            let pixel = row.get(at..at + channels)?;
-            let (r, g, b, a) = match channels {
-                4 => (pixel[0], pixel[1], pixel[2], pixel[3]),
-                3 => (pixel[0], pixel[1], pixel[2], 255),
-                2 => (pixel[0], pixel[0], pixel[0], pixel[1]),
-                _ => (pixel[0], pixel[0], pixel[0], 255),
-            };
-            let dest_x = ((x - origin_x) as u64 * out as u64 / side as u64) as usize;
-            let cell = dest_y * out as usize + dest_x;
-            sums[cell * 4] += r as u32;
-            sums[cell * 4 + 1] += g as u32;
-            sums[cell * 4 + 2] += b as u32;
-            sums[cell * 4 + 3] += a as u32;
-            counts[cell] += 1;
-        }
-    }
-    let mut rgba = Vec::with_capacity(cells * 4);
-    for cell in 0..cells {
-        let count = counts[cell].max(1);
-        for channel in 0..4 {
-            rgba.push((sums[cell * 4 + channel] / count) as u8);
-        }
-    }
+    let rgba = crate::platform::pspemu::fit_square(&buffer, width, height, info.line_size, channels, out)?;
     Some((out, rgba))
 }
 
-/// The art file `name` cropped to a square and scaled down, RGBA; None when
+/// The art file `name` fitted into a square and scaled down, RGBA; None when
 /// the name is not a plain PNG file name or the file does not decode.
 /// Called on a worker thread.
 pub fn picture(name: &str) -> Option<(u32, u32, Vec<u8>)> {

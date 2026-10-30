@@ -152,7 +152,7 @@ saves its first picture), and copy files in with VitaShell (USB or FTP):
 
 | Folder | Holds | Shown as |
 | --- | --- | --- |
-| `art/` | Box art, in place of a title's icon | Cropped to a centered square |
+| `art/` | Box art, in place of a title's icon | Whole, in its own shape, inside the tile's square; the selection ring follows its edges |
 | `backdrops/` | The picture behind the selected title | Cropped to the screen's shape (960×544), centered |
 
 **Box art is matched by file name.** A file named after the title id
@@ -177,7 +177,8 @@ box art.
 Files Pocket Shelf reads:
 
 - PNG, at most 8 MB, at most 2,097,152 pixels (1920×1080 fits).
-- Box art at least 16×16; a square picture of 256×256 or more looks best.
+- Box art at least 16×16, in any shape; it is scaled to at most 256 pixels
+  on its long side.
 - Backdrops in the screen's shape look best: 960×544, or 1920×1088. A wider
   picture loses its sides and a taller one its top and bottom.
 - File names of at most 96 characters, not starting with a dot.

@@ -129,7 +129,8 @@ drawn longest ago are freed, never those around the selection, and a title
 scrolled back to asks for its picture again. **The selection ring goes
 around the part of a picture that shows**: a picture fitted into a square
 with clear bars on two opposite sides (a PSP game's 144×80 icon, a
-RetroArch box art) carries its rectangle (`Picture::content`, worked out
+RetroArch box art, any box art in `art/`, which is fitted whole rather than
+cropped, `art.rs`) carries its rectangle (`Picture::content`, worked out
 on the decoding thread), and the ring, the shadow, the icon box and the
 Cascade's shade use it; a round or shaped icon, clear on every side, keeps
 its square. A backdrop decoded in 0.5–1.4 s on

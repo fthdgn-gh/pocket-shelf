@@ -179,7 +179,7 @@ impl ScanPhase {
 /// How a picture in memory is decoded, as the files it would be saved to.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum DecodeAs {
-    /// Box art: cropped to a square (`art/`).
+    /// Box art: fitted whole into a square with clear bars (`art/`).
     Art,
     /// Box art fitted whole into a 128 px square (a libretro box art).
     FittedArt,

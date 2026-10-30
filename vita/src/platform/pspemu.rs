@@ -181,16 +181,17 @@ pub(crate) fn fit_png(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
         png::ColorType::Grayscale => 1,
         png::ColorType::Indexed => return None,
     };
-    Some((ICON_SIDE, ICON_SIDE, fit_square(&buffer, info.width, info.height, info.line_size, channels)?))
+    Some((ICON_SIDE, ICON_SIDE, fit_square(&buffer, info.width, info.height, info.line_size, channels, ICON_SIDE)?))
 }
 
-/// Scale a picture to fit `ICON_SIDE` square, centered, each texel the
-/// average of the source pixels it covers; the bars are clear.
-fn fit_square(pixels: &[u8], width: u32, height: u32, line_size: usize, channels: usize) -> Option<Vec<u8>> {
+/// Scale a picture to fit a `side` square, centered, each texel the
+/// average of the source pixels it covers; the bars are clear. Also used
+/// for the box art files (`art.rs`).
+pub(crate) fn fit_square(pixels: &[u8], width: u32, height: u32, line_size: usize, channels: usize, side: u32) -> Option<Vec<u8>> {
     if width == 0 || height == 0 {
         return None;
     }
-    let side = ICON_SIDE as u64;
+    let side = side as u64;
     let long = width.max(height) as u64;
     let (out_w, out_h) = ((width as u64 * side / long).max(1), (height as u64 * side / long).max(1));
     let (left, top) = ((side - out_w) / 2, (side - out_h) / 2);

@@ -95,6 +95,10 @@ fn larger_german() -> fake::FakeHost {
     fake::FakeHost::new().with_language("de").with_text_size("larger")
 }
 
+fn tall_art() -> fake::FakeHost {
+    fake::FakeHost::new().with_tall_art()
+}
+
 fn saved() -> fake::FakeHost {
     fake::FakeHost::new().with_saved_data()
 }
@@ -287,6 +291,9 @@ const SHOTS: &[Shot] = &[
     shot("240-psp-carousel", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
     shot("241-psp-grid", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
     shot("242-psp-cascade", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
+    // A portrait box art for Gravity Daze, fitted whole: the ring around it.
+    Shot { name: "243-tall-art-home", script: &[(0, SETTLE)], setup: tall_art },
+    Shot { name: "244-tall-art-carousel", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: tall_art },
 ];
 
 fn main() {

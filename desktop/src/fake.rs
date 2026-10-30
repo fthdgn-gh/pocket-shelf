@@ -205,6 +205,23 @@ fn psp_icon(square: Picture) -> Picture {
     Picture::new(SIDE as u32, SIDE as u32, rgba, accent)
 }
 
+/// A square sample icon squeezed to 2:3 (85×128) in the middle of the
+/// square, clear at its sides: a portrait box art.
+fn tall_art(square: Picture) -> Picture {
+    const SIDE: usize = 128;
+    let wide = SIDE * 2 / 3;
+    let left = (SIDE - wide) / 2;
+    let mut rgba = vec![0u8; SIDE * SIDE * 4];
+    for y in 0..SIDE {
+        for x in 0..wide {
+            let from = (y * SIDE + x * SIDE / wide) * 4;
+            let to = (y * SIDE + left + x) * 4;
+            rgba[to..to + 4].copy_from_slice(&square.rgba[from..from + 4]);
+        }
+    }
+    Picture::new(SIDE as u32, SIDE as u32, rgba, square.accent.map(|a| a | ACCENT_HAS_ALPHA))
+}
+
 /// A 512×256 stand-in for a title's full-screen picture: sky, sun and three hills in its colors.
 fn backdrop(index: usize) -> Picture {
     let (from, to) = ICON_COLORS[index % ICON_COLORS.len()];
@@ -229,6 +246,8 @@ fn backdrop(index: usize) -> Picture {
 
 pub struct FakeHost {
     titles: Vec<TitleInfo>,
+    /// Box art files that decode as portrait pictures.
+    tall_art: Vec<String>,
     files: HashMap<String, Vec<u8>>,
     pub status: Status,
     /// Answers waiting for the next poll, and those for the poll after.
@@ -359,6 +378,7 @@ impl FakeHost {
             .map(|path| (path.to_string(), Vec::new()))
             .collect();
         FakeHost {
+            tall_art: Vec::new(),
             titles: sample_titles(),
             files,
             // The preview's `21 47 1 72 0 80 1`.
@@ -437,6 +457,13 @@ impl FakeHost {
     pub fn with_sorted_games(mut self, order: &str) -> Self {
         self.files.insert("settings.json".into(), br#"{"view":"list","detail":"detailed"}"#.to_vec());
         self.files.insert("sort.json".into(), format!("{{\"games\":\"{order}\"}}").into_bytes());
+        self
+    }
+
+    /// Box art in `art/` named after Gravity Daze's id, in portrait.
+    pub fn with_tall_art(mut self) -> Self {
+        self.files.insert("art/PCSA00069.png".into(), b"PNG".to_vec());
+        self.tall_art.push("PCSA00069.png".into());
         self
     }
 
@@ -523,6 +550,9 @@ impl Host for FakeHost {
             // A box art file decodes as a sample icon, unless it stands for a
             // damaged file.
             PictureKey::Art(name) if name.starts_with("broken") => None,
+            // A portrait box art (2:3), fitted whole into the square as
+            // `art.rs` does on the Vita.
+            PictureKey::Art(name) if self.tall_art.contains(name) => Some(tall_art(icon(name.len() % 7 + 3, name))),
             PictureKey::Art(name) => Some(icon(name.len() % 7 + 3, name)),
             PictureKey::Backdrop { id, .. } => self.index(id).map(backdrop),
             // Pictures in memory come through `decode`.
