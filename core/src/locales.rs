@@ -72,6 +72,8 @@ pub struct Messages {
     pub detail_levels: DetailLevels,
     pub text_size: &'static str,
     pub text_sizes: TextSizes,
+    pub sort: &'static str,
+    pub sort_orders: SortNames,
     pub themes: Themes,
     pub editor_title: &'static str,
     pub favorite: &'static str,
@@ -253,6 +255,18 @@ pub struct DetailLevels {
 }
 
 #[derive(Debug)]
+pub struct SortNames {
+    pub name_asc: &'static str,
+    pub name_desc: &'static str,
+    pub recently_played: &'static str,
+    pub least_recently_played: &'static str,
+    pub most_played: &'static str,
+    pub least_played: &'static str,
+    pub newest_installed: &'static str,
+    pub oldest_installed: &'static str,
+}
+
+#[derive(Debug)]
 pub struct TextSizes {
     pub smaller: &'static str,
     pub small: &'static str,
@@ -375,6 +389,15 @@ impl Messages {
             ("textSizes.normal", self.text_sizes.normal),
             ("textSizes.large", self.text_sizes.large),
             ("textSizes.larger", self.text_sizes.larger),
+            ("sort", self.sort),
+            ("sortOrders.nameAsc", self.sort_orders.name_asc),
+            ("sortOrders.nameDesc", self.sort_orders.name_desc),
+            ("sortOrders.recentlyPlayed", self.sort_orders.recently_played),
+            ("sortOrders.leastRecentlyPlayed", self.sort_orders.least_recently_played),
+            ("sortOrders.mostPlayed", self.sort_orders.most_played),
+            ("sortOrders.leastPlayed", self.sort_orders.least_played),
+            ("sortOrders.newestInstalled", self.sort_orders.newest_installed),
+            ("sortOrders.oldestInstalled", self.sort_orders.oldest_installed),
             ("themes.midnight", self.themes.midnight),
             ("themes.aurora", self.themes.aurora),
             ("themes.sakura", self.themes.sakura),
@@ -621,6 +644,17 @@ pub static EN: Messages = Messages {
         normal: "Normal",
         large: "Large",
         larger: "Larger",
+    },
+    sort: "Sort",
+    sort_orders: SortNames {
+        name_asc: "Name (A–Z)",
+        name_desc: "Name (Z–A)",
+        recently_played: "Recently played",
+        least_recently_played: "Least recently played",
+        most_played: "Most played",
+        least_played: "Least played",
+        newest_installed: "Newest installed",
+        oldest_installed: "Oldest installed",
     },
     themes: Themes {
         midnight: "Midnight",
@@ -875,6 +909,17 @@ pub static TR: Messages = Messages {
         large: "Büyük",
         larger: "Daha büyük",
     },
+    sort: "Sırala",
+    sort_orders: SortNames {
+        name_asc: "Ad (A–Z)",
+        name_desc: "Ad (Z–A)",
+        recently_played: "Son oynanan",
+        least_recently_played: "En uzun süre oynanmayan",
+        most_played: "En çok oynanan",
+        least_played: "En az oynanan",
+        newest_installed: "En yeni yüklenen",
+        oldest_installed: "En eski yüklenen",
+    },
     themes: Themes {
         midnight: "Gece Yarısı",
         aurora: "Aurora",
@@ -1127,6 +1172,17 @@ pub static DE: Messages = Messages {
         normal: "Normal",
         large: "Groß",
         larger: "Größer",
+    },
+    sort: "Sortieren",
+    sort_orders: SortNames {
+        name_asc: "Name (A–Z)",
+        name_desc: "Name (Z–A)",
+        recently_played: "Zuletzt gespielt",
+        least_recently_played: "Länger nicht gespielt",
+        most_played: "Meistgespielt",
+        least_played: "Am wenigsten gespielt",
+        newest_installed: "Zuletzt installiert",
+        oldest_installed: "Zuerst installiert",
     },
     themes: Themes {
         midnight: "Mitternacht",
@@ -1381,6 +1437,17 @@ pub static FR: Messages = Messages {
         large: "Grande",
         larger: "Plus grande",
     },
+    sort: "Trier",
+    sort_orders: SortNames {
+        name_asc: "Nom (A–Z)",
+        name_desc: "Nom (Z–A)",
+        recently_played: "Joué récemment",
+        least_recently_played: "Pas joué depuis longtemps",
+        most_played: "Les plus joués",
+        least_played: "Les moins joués",
+        newest_installed: "Installé récemment",
+        oldest_installed: "Installé en premier",
+    },
     themes: Themes {
         midnight: "Minuit",
         aurora: "Aurore",
@@ -1633,6 +1700,17 @@ pub static ES: Messages = Messages {
         normal: "Normal",
         large: "Grande",
         larger: "Más grande",
+    },
+    sort: "Ordenar",
+    sort_orders: SortNames {
+        name_asc: "Nombre (A–Z)",
+        name_desc: "Nombre (Z–A)",
+        recently_played: "Jugado recientemente",
+        least_recently_played: "Sin jugar hace más tiempo",
+        most_played: "Más jugados",
+        least_played: "Menos jugados",
+        newest_installed: "Instalado recientemente",
+        oldest_installed: "Instalado primero",
     },
     themes: Themes {
         midnight: "Medianoche",

@@ -140,6 +140,64 @@ pub unsafe fn bubbles() -> Option<Vec<Bubble>> {
     Some(rows)
 }
 
+/// Each title's last launch and first install from `tbl_appinfo` (keys
+/// `KEY_LAUNCHED` and `KEY_INSTALLED`, times like `2026-10-30 16:05:07.842`
+/// in UTC). Read at each start: the last launch changes with every launch.
+/// None when the database cannot be opened or read.
+pub unsafe fn dates() -> Option<Vec<(String, shelf_core::library::played::SystemDates)>> {
+    use shelf_core::library::played::{parse_db_time, SystemDates, KEY_INSTALLED, KEY_LAUNCHED};
+    let _guard = DB_LOCK.lock().ok()?;
+    if !sqlite_ready() {
+        return None;
+    }
+    let mut db: *mut c_void = core::ptr::null_mut();
+    let code = sqlite3_open_v2(APP_DB.as_ptr(), &mut db, SQLITE_OPEN_READONLY, core::ptr::null());
+    if code != SQLITE_OK {
+        crate::platform::vita_log(format_args!("[appdb] open app.db: {code}"));
+        if !db.is_null() {
+            sqlite3_close(db);
+        }
+        return None;
+    }
+    let sql = format!("SELECT titleId, key, val FROM tbl_appinfo WHERE key IN ({KEY_LAUNCHED}, {KEY_INSTALLED})\0");
+    let mut statement: *mut c_void = core::ptr::null_mut();
+    let code = sqlite3_prepare_v2(db, sql.as_ptr() as *const c_char, -1, &mut statement, core::ptr::null_mut());
+    if code != SQLITE_OK {
+        crate::platform::vita_log(format_args!("[appdb] query app.db dates: {code}"));
+        sqlite3_close(db);
+        return None;
+    }
+    let text = |column: c_int| {
+        let pointer = sqlite3_column_text(statement, column);
+        if pointer.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr(pointer as *const c_char).to_string_lossy().into_owned()
+        }
+    };
+    let mut dates: Vec<(String, SystemDates)> = Vec::new();
+    while sqlite3_step(statement) == SQLITE_ROW {
+        let id = text(0).trim().to_string();
+        let Some(time) = parse_db_time(&text(2)) else { continue };
+        let key: u32 = text(1).trim().parse().unwrap_or(0);
+        let at = match dates.iter().position(|(other, _)| *other == id) {
+            Some(at) => at,
+            None => {
+                dates.push((id, SystemDates::default()));
+                dates.len() - 1
+            }
+        };
+        if key == KEY_LAUNCHED {
+            dates[at].1.launched = Some(time);
+        } else if key == KEY_INSTALLED {
+            dates[at].1.installed = Some(time);
+        }
+    }
+    sqlite3_finalize(statement);
+    sqlite3_close(db);
+    Some(dates)
+}
+
 /// Icon paths per title id, from the last read of the database. Filled by a
 /// scan, or by the first icon lookup on a start that read the list file.
 static ICON_PATHS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(None);

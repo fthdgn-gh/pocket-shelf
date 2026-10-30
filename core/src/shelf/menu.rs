@@ -16,6 +16,8 @@ pub enum Page {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Item {
     Open(Page),
+    /// The current tab's order.
+    Sort,
     Theme,
     View,
     Details,
@@ -48,7 +50,7 @@ pub const VISIBLE: usize = 7;
 pub fn items(page: Page) -> &'static [Item] {
     use Item::*;
     match page {
-        Page::Main => &[Open(Page::Appearance), Open(Page::Library), Open(Page::Updates), Confirm, Language, Diagnostics],
+        Page::Main => &[Sort, Open(Page::Appearance), Open(Page::Library), Open(Page::Updates), Confirm, Language, Diagnostics],
         Page::Appearance => &[Theme, View, Details, TextSize, Backdrop, IconBox, Open(Page::Status)],
         Page::Status => &[StatusBar, StatusPosition, ShowWifi, ShowBluetooth, ShowBattery, BatteryPercent, Clock],
         Page::Library => &[Categories, FetchArt, CleanArt, Rescan],

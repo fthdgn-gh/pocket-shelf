@@ -17,12 +17,12 @@ pub const DATA: &str = "ux0:data/PocketShelf";
 /// Whether this build may write `path` in the data folder: only the files
 /// whose writers reproduce Pocket Shelf 0.1's output byte for byte
 /// (`core/src/library/round_trip.rs`; `steamgriddb.txt` is the key and a
-/// newline), and this build's own `status-bar.json` and `text-size.json`
-/// (0.1 did not read them). Downloads go to their files through `http.rs`.
+/// newline), and this build's own `status-bar.json`, `text-size.json`,
+/// `plays.json` and `sort.json` (0.1 did not read them). Downloads go to their files through `http.rs`.
 fn writable(path: &str) -> bool {
     matches!(
         path,
-        "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "text-size.json" | "steamgriddb.txt" | "update.json" | "update/version.txt"
+        "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "text-size.json" | "plays.json" | "sort.json" | "steamgriddb.txt" | "update.json" | "update/version.txt"
     )
         || path.strip_prefix("titles/").is_some_and(|_| removable(path))
 }
@@ -394,6 +394,11 @@ impl Host for VitaHost {
             }
             let titles = shelf_core::library::catalog::load_catalog(&installed::infos());
             let _ = sender.send(Event::Titles(titles, ((now_us() - started) / 1000) as u32));
+            // The system's last-launch and install dates, for the sort orders.
+            let read = now_us();
+            let dates = crate::platform::appdb::dates().unwrap_or_default();
+            log_line(&format!("dates: {} titles from app.db in {} ms", dates.len(), (now_us() - read) / 1000));
+            let _ = sender.send(Event::Dates(dates));
         });
     }
 

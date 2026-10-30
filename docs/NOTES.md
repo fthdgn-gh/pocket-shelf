@@ -111,6 +111,16 @@ cannot be driven. Evidence comes from the log and from files under
   with the system's SQLite module. **The module needs
   `sceSqliteConfigMallocMethods` first**; without it `sqlite3_open_v2`
   returns 7 (SQLITE_NOMEM).
+- **`app.db`'s `tbl_appinfo`** holds numbered keys per title. Read from the
+  user's copy (2026-10-30, 223 titles): key **1281097414 is the last
+  launch** (79 titles: VitaShell at the time the file was copied with it,
+  Pocket Shelf 21 s after its install), **2722548093 the first install**
+  and 414472871 the last install or update (all 223), as
+  `2026-10-30 16:05:07.842` in **UTC** (15:57 for the user's 18:57).
+  **The system keeps no play time and no launch count.** A RetroArch game
+  counts as RetroArch's launch and a PSP game without a bubble as
+  Adrenaline's. Whether a launch from Pocket Shelf (`psgm:play`) updates
+  key 1281097414 is not yet confirmed on hardware.
 - **PlayStation Mobile** (`psm.rs`): folders in `ux0:/psm` (`NPNA`, `NPOA`,
   `NPPA`, `NPQA` plus five digits), named from `app.db`; a folder with no row
   has no bubble and is left out. **Icons are DDS** (`ur0:appmeta/<id>/icon0.dds`,

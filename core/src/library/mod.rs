@@ -8,7 +8,9 @@ pub mod catalog;
 pub mod categories;
 pub mod consoles;
 pub mod fxhash;
+pub mod order;
 pub mod overrides;
+pub mod played;
 pub mod recent;
 #[cfg(test)]
 mod round_trip;
@@ -24,7 +26,9 @@ use categories::{
 };
 use consoles::console_categories;
 use fxhash::FxHashMap;
+use order::{Facts, SortOrder, SortOrders, SORT_FILE};
 use overrides::{OverrideStore, TitleOverride, USE_ICON};
+use played::{Play, SystemDates, PLAYS_FILE};
 
 use crate::host::{Host, TitleInfo};
 
@@ -76,6 +80,12 @@ pub struct Library {
     pub config: CategoryConfig,
     /// Title ids, the one started last first.
     pub recent: Vec<String>,
+    /// Launches through Pocket Shelf, by title id (`plays.json`).
+    pub plays: FxHashMap<String, Play>,
+    /// The system's dates by title id, from the host at each start.
+    system: FxHashMap<String, SystemDates>,
+    /// Each tab's order (`sort.json`).
+    pub orders: SortOrders,
     /// The open search's term; empty when no search is open.
     pub search_term: String,
 
@@ -97,12 +107,17 @@ impl Library {
         let art = art_index(host);
         let config = host.read(CATEGORIES_FILE).map(|b| CategoryConfig::parse(&b)).unwrap_or_default();
         let recent = host.read(recent::RECENT_FILE).map(|b| recent::parse(&b)).unwrap_or_default();
+        let plays = host.read(PLAYS_FILE).map(|b| played::parse(&b)).unwrap_or_default().into_iter().collect();
+        let orders = host.read(SORT_FILE).map(|b| SortOrders::parse(&b)).unwrap_or_default();
         let mut library = Library {
             base: Vec::new(),
             overrides,
             art,
             config,
             recent,
+            plays,
+            system: FxHashMap::default(),
+            orders,
             search_term: String::new(),
             categories: Vec::new(),
             games: Vec::new(),
@@ -285,12 +300,42 @@ impl Library {
     /// The titles a category lists, as indexes into [`Library::games`]. A
     /// title that was uninstalled drops out of "Last Played".
     pub fn titles_of(&self, id: &str) -> Vec<usize> {
-        match id {
-            SEARCH_ID => search::search(&self.games, &self.search_term, |g| (&g.title, &g.id)),
-            RECENT_ID => self.recent.iter().filter_map(|rid| self.games.iter().position(|g| *g.id == **rid)).collect(),
+        let mut list = match id {
+            SEARCH_ID => return search::search(&self.games, &self.search_term, |g| (&g.title, &g.id)),
+            RECENT_ID => return self.recent.iter().filter_map(|rid| self.games.iter().position(|g| *g.id == **rid)).collect(),
             FAVORITES_ID => (0..self.games.len()).filter(|&i| self.games[i].favorite).collect(),
             _ => self.by_category.get(id).cloned().unwrap_or_default(),
+        };
+        order::sort(&mut list, self.orders.get(id), |i| {
+            let id: &str = &self.games[i].id;
+            Facts { play: self.plays.get(id).copied(), system: self.system.get(id).copied() }
+        });
+        list
+    }
+
+    /// Whether a tab can be sorted: Search keeps the best match first and
+    /// Last Played the latest start.
+    pub fn sortable(id: &str) -> bool {
+        id != SEARCH_ID && id != RECENT_ID
+    }
+
+    /// The order a tab is shown in.
+    pub fn order_of(&self, id: &str) -> SortOrder {
+        if id == RECENT_ID {
+            return SortOrder::RecentlyPlayed;
         }
+        self.orders.get(id)
+    }
+
+    /// The system's dates, from the host at a start.
+    pub fn set_system_dates(&mut self, dates: Vec<(String, SystemDates)>) {
+        self.system = dates.into_iter().collect();
+    }
+
+    /// The launch record with one more launch of `id` at `now`, to save.
+    pub fn plays_after(&self, id: &str, now: u64) -> Vec<(String, Play)> {
+        let plays: Vec<(String, Play)> = self.plays.iter().map(|(id, play)| (id.clone(), *play)).collect();
+        played::record(&plays, id, now)
     }
 
     fn count(&self, id: &str) -> usize {

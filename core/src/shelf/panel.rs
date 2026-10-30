@@ -82,7 +82,7 @@ impl Drawer {
         }
         let role = if active { Role::BodyBold } else { Role::Body };
         let baseline = (rect.y + ROW_H / 2.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
-        gfx.text(role, rect.x + 16.0, baseline, if active { theme.text } else { theme.dim }, label);
+        let label_end = gfx.text(role, rect.x + 16.0, baseline, if active { theme.text } else { theme.dim }, label);
         // Right to left: arrow, icon, value, left arrow.
         let mut right = rect.right() - 16.0;
         if active && step != Step::None {
@@ -97,8 +97,13 @@ impl Drawer {
         }
         if let Some(value) = value {
             let base = (rect.y + ROW_H / 2.0 - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
-            let width = gfx.measure(Role::BodyBold, value);
-            gfx.text(Role::BodyBold, right - width, base, if active { theme.accent } else { theme.dim }, value);
+            // A value longer than the room beside the label (a translation,
+            // a large text size) is cut, never drawn over the label.
+            let arrow = if active && step == Step::Both { 24.0 } else { 0.0 };
+            let room = right - label_end - 16.0 - arrow;
+            let value = gfx.fit(Role::BodyBold, value, room);
+            let width = gfx.measure(Role::BodyBold, &value);
+            gfx.text(Role::BodyBold, right - width, base, if active { theme.accent } else { theme.dim }, &value);
             right -= width + 8.0;
         }
         if active && step == Step::Both {

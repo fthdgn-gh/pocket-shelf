@@ -397,6 +397,33 @@ impl FakeHost {
         self
     }
 
+    /// The system's dates for the sample titles, as `app.db` gives them: an
+    /// install date for each title with a bubble (RetroArch games have
+    /// none), a last launch for every third one.
+    fn dates(&self) -> Vec<(String, shelf_core::library::played::SystemDates)> {
+        const DAY: u64 = 86_400_000;
+        // 2026-01-01, UTC.
+        const START: u64 = 1_767_225_600_000;
+        self.titles
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.platform != "retro")
+            .map(|(i, t)| {
+                let i = i as u64;
+                let installed = Some(START + (i * 37 % 200) * DAY);
+                let launched = (i % 3 == 0).then(|| START + 250 * DAY + (i * 53 % 50) * DAY);
+                (t.id.clone(), shelf_core::library::played::SystemDates { launched, installed })
+            })
+            .collect()
+    }
+
+    /// The list view and a sort order for the Games tab, saved.
+    pub fn with_sorted_games(mut self, order: &str) -> Self {
+        self.files.insert("settings.json".into(), br#"{"view":"list","detail":"detailed"}"#.to_vec());
+        self.files.insert("sort.json".into(), format!("{{\"games\":\"{order}\"}}").into_bytes());
+        self
+    }
+
     /// A saved text size (`text-size.json`).
     pub fn with_text_size(mut self, key: &str) -> Self {
         self.files.insert("text-size.json".into(), format!("{{\"size\":\"{key}\"}}").into_bytes());
@@ -463,6 +490,7 @@ impl Host for FakeHost {
             self.scanning = Some(self.frame);
         } else {
             self.later.push(Event::Titles(load_catalog(&self.titles), 120));
+            self.later.push(Event::Dates(self.dates()));
         }
     }
 
@@ -556,6 +584,7 @@ impl Host for FakeHost {
             if elapsed >= SCAN_FRAMES {
                 self.scanning = None;
                 self.later.push(Event::Titles(load_catalog(&self.titles), 2800));
+                self.later.push(Event::Dates(self.dates()));
             } else {
                 let done = (elapsed as u32 * total) / SCAN_FRAMES as u32;
                 let mut before = 0;

@@ -59,6 +59,10 @@ the colored tiles with initials stand in for game icons.
 - **Six themes:** Midnight, Aurora, Sakura, Ember, Daylight, and Dynamic, which
   takes its colors from the selected title.
 - **Five text sizes**, from Smaller to Larger (SELECT ▸ Appearance ▸ Text size).
+- **Sort each tab** (SELECT ▸ Sort): by name, by when it was last played,
+  by how often Pocket Shelf started it, or by when it was installed. The
+  system records the last launch and the install date; it keeps no play
+  count, so "Most played" counts the launches made from Pocket Shelf.
 - **Status bar** with the clock, Wi-Fi, Bluetooth and battery, each of which
   can be hidden, on the left or the right of the top bar.
 - **Diagnostics** (SELECT menu): frame timing, startup timing, what the last
@@ -160,6 +164,8 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `settings.json` | Settings and the last selection |
 | `status-bar.json` | Which status items show, and on which side |
 | `text-size.json` | The text size |
+| `sort.json` | Each tab's sort order |
+| `plays.json` | How often and when Pocket Shelf started each title |
 | `categories.json` | Your categories and their order |
 | `titles/<title id>.json` | Your changes to one title |
 | `titles.cache.json` | Every title's changes in one file, read at start |

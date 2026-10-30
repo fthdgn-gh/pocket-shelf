@@ -81,7 +81,7 @@ titles over 40), with the same cases tested.
 **The Vita host writes `ux0:data/PocketShelf/` only for named files**:
 those with a round-trip test (`settings.json`, `categories.json`,
 `recent.json`, `titles.cache.json`, `titles/<id>.json`), `status-bar.json`,
-`text-size.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
+`text-size.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
 `vita/host.rs`), pictures in `art/` and `backdrops/`, and downloads to
 `libretro/` and `update/`; it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
 order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
@@ -181,6 +181,16 @@ connected, and each of Wi-Fi, Bluetooth, battery and clock can be turned
 off in Appearance ▸ Status bar (the Clock row's last value is Off), right of
 R or left of L (`StatusLayout`, saved in `status-bar.json`: 0.1 rewrote `settings.json`
 with only the keys it knew). The tab names have the rest of the bar.
+
+**Sort orders** (`library/order.rs`, SELECT ▸ Sort, the first row): each
+tab's order in `sort.json`, name A–Z when absent, which is the scan's order
+and costs nothing. The played and installed orders sort the tab's indexes
+by a number per title: the later of the system's last launch and Pocket
+Shelf's own (`plays.json`, count and time, written with `recent.json`
+before a launch), the launch count, or the system's first install. The
+host reads both system dates from `app.db` on the scan thread after the
+title list (`Event::Dates`), since the last launch changes with every
+launch. Search and Last Played keep their own order.
 
 **Text size** (Appearance ▸ Text size, saved in `text-size.json` for the
 same reason): five steps, Smaller ×0.85, Small ×0.92, Normal, Large ×1.12

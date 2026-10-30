@@ -28,6 +28,7 @@ use crate::gfx::{Color, Format, Gfx, Rect, TexId};
 use crate::host::{Host, Picture, PictureKey, PluginState, Status};
 use crate::library::catalog::{Game, TINT_COLORS};
 use crate::library::categories::{cycle_category, Category, RECENT_ID, SEARCH_ID};
+use crate::library::played::{self, PLAYS_FILE};
 use crate::library::recent::{push_recent, RECENT_FILE, RECENT_MAX};
 use crate::library::settings::SETTINGS_FILE;
 #[cfg(test)]
@@ -316,6 +317,26 @@ impl Shelf {
         }
         self.list = self.library.titles_of(&self.tab);
         self.selected = self.selected.min(self.list.len().saturating_sub(1));
+        self.placed = None;
+    }
+
+    /// The system's dates: a tab sorted by them is sorted again, the
+    /// selected title kept.
+    pub fn set_dates(&mut self, dates: Vec<(String, crate::library::played::SystemDates)>) {
+        self.library.set_system_dates(dates);
+        self.resort();
+    }
+
+    /// The current tab's titles again after its order or its data changed,
+    /// the selected title kept selected.
+    fn resort(&mut self) {
+        let keep = self.selected_game().map(|g| g.id.clone());
+        self.list = self.library.titles_of(&self.tab);
+        if let Some(id) = keep {
+            if let Some(index) = self.list.iter().position(|&i| self.library.games()[i].id == id) {
+                self.selected = index;
+            }
+        }
         self.placed = None;
     }
 
@@ -689,6 +710,18 @@ impl Shelf {
                 }
                 return;
             }
+            Item::Sort => {
+                use crate::library::order::{SortOrder, SORT_FILE};
+                if !Library::sortable(&self.tab) {
+                    return;
+                }
+                let order = cycle_by(&SortOrder::ALL, self.library.orders.get(&self.tab), delta);
+                self.library.orders.set(&self.tab, order);
+                // Saved in a file of its own (`sort.json`).
+                host.write(SORT_FILE, self.library.orders.render().as_bytes());
+                self.resort();
+                return;
+            }
             Item::Theme => {
                 s.theme = step(&ThemeId::ALL, s.theme);
                 self.dynamic = None;
@@ -851,6 +884,9 @@ impl Shelf {
         let before = self.library.recent.clone();
         let list = push_recent(&before, &game.id, RECENT_MAX);
         host.write(RECENT_FILE, crate::library::recent::render(&list).as_bytes());
+        // The launch count and time (`plays.json`), for the played orders.
+        let plays = self.library.plays_after(&game.id, host.unix_ms());
+        host.write(PLAYS_FILE, played::render(&plays).as_bytes());
         self.persist(host);
         host.log(&format!("Launch requested: {}", game.id));
         let asked = host.time_us();
@@ -859,9 +895,12 @@ impl Shelf {
         if !accepted {
             host.log(&format!("Launch rejected: {}", game.id));
             host.write(RECENT_FILE, crate::library::recent::render(&before).as_bytes());
+            let kept: Vec<(String, crate::library::played::Play)> = self.library.plays.iter().map(|(id, p)| (id.clone(), *p)).collect();
+            host.write(PLAYS_FILE, played::render(&kept).as_bytes());
             return None;
         }
         self.library.recent = list;
+        self.library.plays = plays.into_iter().collect();
         // In "Last Played" the started title moves to the front; follow it.
         if self.tab == RECENT_ID {
             self.list = self.library.titles_of(&self.tab);
@@ -1238,6 +1277,27 @@ impl Shelf {
         };
         match item {
             Item::Open(p) => (page(p), None, None, Right),
+            Item::Sort => {
+                use crate::library::order::SortOrder;
+                let o = &t.sort_orders;
+                let name = |order: SortOrder| match order {
+                    SortOrder::NameAsc => o.name_asc,
+                    SortOrder::NameDesc => o.name_desc,
+                    SortOrder::RecentlyPlayed => o.recently_played,
+                    SortOrder::LeastRecentlyPlayed => o.least_recently_played,
+                    SortOrder::MostPlayed => o.most_played,
+                    SortOrder::LeastPlayed => o.least_played,
+                    SortOrder::NewestInstalled => o.newest_installed,
+                    SortOrder::OldestInstalled => o.oldest_installed,
+                };
+                // Search keeps the best match first: no value. Last Played
+                // shows its fixed order.
+                match self.tab.as_str() {
+                    crate::library::categories::SEARCH_ID => (t.sort, None, None, panel::Step::None),
+                    id if !Library::sortable(id) => (t.sort, Some(name(self.library.order_of(id)).into()), None, panel::Step::None),
+                    id => (t.sort, Some(name(self.library.order_of(id)).into()), None, Both),
+                }
+            }
             Item::Theme => {
                 let th = &t.themes;
                 let name = match s.theme {
@@ -1608,6 +1668,36 @@ mod tests {
         let settings = String::from_utf8(host.files.0[SETTINGS_FILE].clone()).unwrap();
         assert!(settings.ends_with(r#""category":"games","title":"PCSA00069"}"#), "{settings}");
         assert_eq!(shelf.launching.as_deref(), Some("Title PCSA00069"));
+        // The launch is counted for the played orders.
+        let plays = played::parse(&host.files.0[PLAYS_FILE]);
+        assert_eq!(plays, [("PCSA00069".to_string(), played::Play { count: 1, last: 0 })]);
+        assert_eq!(shelf.library.plays.get("PCSA00069").map(|p| p.count), Some(1));
+    }
+
+    #[test]
+    fn a_tab_sorted_by_launches_and_saved_keeps_the_selection() {
+        use crate::library::order::{SortOrder, SORT_FILE};
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let infos: Vec<TitleInfo> = ["PCSA00001", "PCSA00002", "PCSA00003"]
+            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None })
+            .into();
+        shelf.set_titles(load_catalog(&infos), false);
+        shelf.tab = "games".into();
+        shelf.refresh();
+        let ids = |shelf: &Shelf| shelf.list.iter().map(|&i| shelf.library.games()[i].id.to_string()).collect::<Vec<_>>();
+        assert_eq!(ids(&shelf), ["PCSA00001", "PCSA00002", "PCSA00003"]);
+        shelf.selected = 2;
+        shelf.library.plays.insert("PCSA00003".into(), played::Play { count: 4, last: 1 });
+        shelf.library.plays.insert("PCSA00002".into(), played::Play { count: 1, last: 2 });
+        // SELECT, Sort (the first row), right four times: Most played.
+        press(&mut shelf, &mut host, SELECT);
+        for _ in 0..4 {
+            press(&mut shelf, &mut host, RIGHT);
+        }
+        assert_eq!(shelf.library.orders.get("games"), SortOrder::MostPlayed);
+        assert_eq!(host.files.0[SORT_FILE], b"{\n  \"games\": \"played-most\"\n}\n");
+        assert_eq!(ids(&shelf), ["PCSA00003", "PCSA00002", "PCSA00001"]);
+        assert_eq!(shelf.selected, 0, "the selected title stays selected");
     }
 
     #[test]
@@ -1616,6 +1706,8 @@ mod tests {
         assert_eq!(press(&mut shelf, &mut host, CIRCLE), None);
         assert_eq!(host.files.0[RECENT_FILE], b"[\"VITASHELL\"]\n");
         assert_eq!(shelf.library.recent, ["VITASHELL"]);
+        assert_eq!(host.files.0[PLAYS_FILE], b"{}\n");
+        assert!(shelf.library.plays.is_empty());
     }
 
     #[test]
@@ -1694,8 +1786,8 @@ mod tests {
     fn the_text_size_steps_to_each_end_and_saves_its_own_file() {
         use crate::library::settings::{TextSize, TEXT_SIZE_FILE};
         let (mut shelf, mut host) = setup(true, PluginState::On);
-        // SELECT, Appearance, down to Text size.
-        for button in [SELECT, RIGHT, DOWN, DOWN, DOWN] {
+        // SELECT, down to Appearance, down to Text size.
+        for button in [SELECT, DOWN, RIGHT, DOWN, DOWN, DOWN] {
             press(&mut shelf, &mut host, button);
         }
         for _ in 0..4 {
@@ -1714,8 +1806,8 @@ mod tests {
     #[test]
     fn the_menu_steps_a_setting_and_saves_it() {
         let (mut shelf, mut host) = setup(true, PluginState::On);
-        // SELECT, Appearance, down to View, right: Carousel.
-        for button in [SELECT, RIGHT, DOWN, RIGHT] {
+        // SELECT, down to Appearance, down to View, right: Carousel.
+        for button in [SELECT, DOWN, RIGHT, DOWN, RIGHT] {
             press(&mut shelf, &mut host, button);
         }
         assert!(shelf.menu.open);
@@ -1825,7 +1917,7 @@ mod tests {
         let (mut shelf, mut host) = setup(true, PluginState::On);
         // Appearance > Status bar > Position: left; then the clock off (left
         // from System).
-        for button in [SELECT, RIGHT, UP, RIGHT, DOWN, RIGHT] {
+        for button in [SELECT, DOWN, RIGHT, UP, RIGHT, DOWN, RIGHT] {
             press(&mut shelf, &mut host, button);
         }
         for _ in 0..5 {

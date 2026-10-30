@@ -212,6 +212,12 @@ the user.
   `Gfx`'s scale removed; the desktop renders matched the previous ones byte
   for byte before roundings moved to whole pixels.
 
+- **Sort orders per tab** (the user, 2026-10-30): name A–Z and Z–A, last
+  played (the system's `app.db` and Pocket Shelf's launches), launch count
+  (Pocket Shelf's own: the system keeps none), install date (`app.db`).
+  Play time from TrackPlug or RetroArch's runtime logs waits until
+  RetroArch titles need it.
+
 ## Follow-ups
 
 - **Icon texture budget**: *done 2026-10-30, hardware run pending.* Icon

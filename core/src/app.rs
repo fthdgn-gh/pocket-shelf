@@ -159,6 +159,12 @@ impl App {
                         shelf.scan_failed();
                     }
                 }
+                Event::Dates(dates) => {
+                    if let Some(shelf) = &mut self.shelf {
+                        host.log(&format!("dates: {} titles", dates.len()));
+                        shelf.set_dates(dates);
+                    }
+                }
                 Event::Listing(folder, listing) => {
                     if let Some(shelf) = &mut self.shelf {
                         shelf.listing(host, folder, listing);

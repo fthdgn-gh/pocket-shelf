@@ -119,6 +119,10 @@ pub enum Event {
     /// A console's libretro names asked for with [`Host::listing`]; `None`
     /// when its file is missing or empty.
     Listing(String, Option<crate::online::libretro::Listing>),
+    /// The system's last-launch and install dates by title id, read from the
+    /// home screen's database after [`Event::Titles`] at each start (they
+    /// change with every launch, so a saved list does not keep them).
+    Dates(Vec<(String, crate::library::played::SystemDates)>),
 }
 
 /// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP
