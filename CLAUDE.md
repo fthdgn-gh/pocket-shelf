@@ -1,6 +1,6 @@
 # Repository Instructions
 
-Pocket Shelf is a PS Vita launcher written in Rust (`POCKTSHLF`, released as 0.2.0-beta.1). Read [`docs/NOTES.md`](docs/NOTES.md) first: what the hardware, the firmware, Adrenaline and RetroArch do, what has been verified where, and how to test. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) describes the crates and the drawing model; [`docs/PLAN.md`](docs/PLAN.md) records the port from PocketJS and lists the open follow-ups.
+Pocket Shelf is a PS Vita launcher written in Rust (`POCKTSHLF`; latest release 0.3.0-beta.1). Read [`docs/NOTES.md`](docs/NOTES.md) first: what the hardware, the firmware, Adrenaline and RetroArch do, what has been verified where, and how to test. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) describes the crates and the drawing model; [`docs/PLAN.md`](docs/PLAN.md) records the port from PocketJS and lists the open follow-ups.
 
 ## Working here
 
@@ -28,6 +28,7 @@ Pocket Shelf is a PS Vita launcher written in Rust (`POCKTSHLF`, released as 0.2
 ## Releases and updates
 
 - Release tags are `shelf-v<version>` and must match `version` in `vita/Cargo.toml`; installed copies' update check reads only that form (`shelf-v0.2.0-beta.1`, not `pocket-shelf-v…`). The release VPK keeps the name `pocket-shelf.vpk` and the title id `POCKTSHLF`; the updater app installs and starts `POCKTSHLF` only.
+- **Each release gets notes summarizing it for users**, written after the workflow publishes it (`gh release edit shelf-v<version> --notes-file …`; the workflow's own text is one placeholder line). Follow the form of 0.2.0-beta.3's and 0.3.0-beta.1's notes: one opening sentence; how to install or update and that saved data carries over; `## New` and `## Changed` (and `## Fixed` when there are fixes) with each item's menu path (SELECT ▸ …) and what it does for the user, not how it is built; new files in the data folder; `## Verify` with the attestation command. Cover everything since the previous release (`git log shelf-v<previous>..`), and say what is not yet confirmed on hardware.
 - **Test the update path before a release**: build with a lower version, `GITHUB_REF_NAME=shelf-v<lower version> make build`, install it on the Vita and let it update to the published release. Download, unpack, the updater's install and its restart all run on hardware only (Vita3K has no package installer). The updater logs its steps to `ux0:data/PocketShelf/updater.log`.
 - **A draft release is invisible to the update check**, so turning a release into a draft takes it down. To publish a tag again, delete the release and the tag first: the release workflow cannot create a release that already exists, even as a draft. A version number reused this way is not offered to consoles that installed the first build.
 - **Each build's VPK is attested** (`actions/attest-build-provenance` in `shelf-build.yml`): `gh attestation verify pocket-shelf.vpk -R fthdgn-gh/pocket-shelf` checks a download. A workflow that calls `shelf-build.yml` has to grant `id-token: write` and `attestations: write`.
