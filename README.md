@@ -144,6 +144,49 @@ else the playlist's default core, else an installed core for its console.
 Create a key in your SteamGridDB profile's preferences. You can type it in the
 app, or put it as one line in `ux0:/data/PocketShelf/steamgriddb.txt`.
 
+### Your own box art and backdrops
+
+Pocket Shelf reads PNG files from two folders in `ux0:/data/PocketShelf/`.
+Create them if they are not there yet (Find artwork creates them when it
+saves its first picture), and copy files in with VitaShell (USB or FTP):
+
+| Folder | Holds | Shown as |
+| --- | --- | --- |
+| `art/` | Box art, in place of a title's icon | Cropped to a centered square |
+| `backdrops/` | The picture behind the selected title | Cropped to the screen's shape (960×544), centered |
+
+**Box art is matched by file name.** A file named after the title id
+(`PCSA00069.png`) or the title (`Gravity Daze.png`) is used without any
+further step; letter case does not matter. With SELECT ▸ Appearance ▸
+Details set to Detailed, the shelf shows each title's id. Pocket Shelf reads
+the `art/` folder at start, so restart it after copying, or open the
+title's Box art picker, which reads the folder again.
+
+**A backdrop is chosen per title.** Select the title, press △, open
+**Backdrop** and pick the file. Box art works the same way under **Box
+art**, for a file whose name does not match.
+
+The pickers list the files named after the title: its name, the name it came
+with, or its id, alone or followed by a dash and anything
+(`gravity-daze-2.png`, `PCSA00069-night.png`). △ in a picker switches to
+every file in the folder. **Default** goes back to the box art matched by
+name (else the title's icon) or to the title's own backdrop; **None** shows
+no backdrop, and **Game icon** shows the title's icon in place of matched
+box art.
+
+Files Pocket Shelf reads:
+
+- PNG, at most 8 MB, at most 2,097,152 pixels (1920×1080 fits).
+- Box art at least 16×16; a square picture of 256×256 or more looks best.
+- Backdrops in the screen's shape look best: 960×544, or 1920×1088. A wider
+  picture loses its sides and a taller one its top and bottom.
+- File names of at most 96 characters, not starting with a dot.
+
+A file that does not decode is marked in the picker and not used.
+**SELECT ▸ Library ▸ Clean up artwork with Remove set to Unused deletes the
+files no title uses**: a backdrop you copied but have not chosen for a title
+counts as unused, and so does box art whose name matches no title.
+
 ## Controls
 
 | Button | Action |
@@ -170,7 +213,7 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `titles/<title id>.json` | Your changes to one title |
 | `titles.cache.json` | Every title's changes in one file, read at start |
 | `recent.json` | The last 15 titles started |
-| `art/`, `backdrops/` | Downloaded and chosen pictures |
+| `art/`, `backdrops/` | Box art and backdrops, downloaded or your own (see [Your own box art and backdrops](#your-own-box-art-and-backdrops)) |
 | `libretro/` | libretro's name lists, one per console, fetched once |
 | `steamgriddb.txt` | Your SteamGridDB API key |
 | `update.json`, `update/` | The last update check; a downloaded update |
