@@ -144,11 +144,13 @@ fn file_op(op: FileOp) {
 /// order, which the app can take back once scrolled past, and the newest
 /// backdrop alone. Backdrops have their own thread: behind one queue they
 /// waited for every icon asked for while scrolling, and the previous
-/// title's backdrop stayed up meanwhile.
+/// title's backdrop stayed up meanwhile. The neighbors' backdrops
+/// (`request_ahead`) wait behind the selected one.
 #[derive(Default)]
 struct Waiting {
     icons: VecDeque<PictureKey>,
     backdrop: Option<PictureKey>,
+    ahead: VecDeque<PictureKey>,
     /// Pictures in memory to decode, by key; taken with their request.
     bytes: std::collections::HashMap<PictureKey, Vec<u8>>,
     closed: bool,
@@ -162,14 +164,14 @@ struct Requests {
 
 impl Requests {
     /// The next request for a thread: an icon (`backdrops` false) or the
-    /// newest backdrop; `None` once the host is gone.
+    /// newest backdrop, else a neighbor's; `None` once the host is gone.
     fn next(&self, backdrops: bool) -> Option<(PictureKey, Option<Vec<u8>>)> {
         let mut waiting = self.waiting.lock().ok()?;
         loop {
             if waiting.closed {
                 return None;
             }
-            let next = if backdrops { waiting.backdrop.take() } else { waiting.icons.pop_front() };
+            let next = if backdrops { waiting.backdrop.take().or_else(|| waiting.ahead.pop_front()) } else { waiting.icons.pop_front() };
             if let Some(key) = next {
                 let bytes = waiting.bytes.remove(&key);
                 return Some((key, bytes));
@@ -405,9 +407,19 @@ impl Host for VitaHost {
         self.requests.wake.notify_all();
     }
 
+    fn request_ahead(&mut self, key: PictureKey) {
+        if let Ok(mut waiting) = self.requests.waiting.lock() {
+            if !waiting.ahead.contains(&key) {
+                waiting.ahead.push_back(key);
+            }
+        }
+        self.requests.wake.notify_all();
+    }
+
     fn cancel(&mut self, key: &PictureKey) {
         if let Ok(mut waiting) = self.requests.waiting.lock() {
             waiting.icons.retain(|k| k != key);
+            waiting.ahead.retain(|k| k != key);
             waiting.bytes.remove(key);
             if waiting.backdrop.as_ref() == Some(key) {
                 waiting.backdrop = None;

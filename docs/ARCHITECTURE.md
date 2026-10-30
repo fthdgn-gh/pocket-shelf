@@ -115,7 +115,14 @@ queued an icon for every title passed, and the backdrop of the title the
 user stopped on waited behind them while the previous one stayed up. The
 three most recent backdrops stay in memory after they leave the screen
 (`BACKDROPS_KEPT`), so going back to a
-title shows its picture at once. A backdrop decoded in 0.5–1.4 s on
+title shows its picture at once. Once the selected title's backdrop is
+answered, the shelf asks for the backdrops of the titles before and after it
+(`Host::request_ahead`, at most two, `BACKDROPS_AHEAD`); the Vita's backdrop
+thread decodes them only while no selected backdrop waits, so one step either
+way shows its picture without the decode. **Icons and box art are held to
+6 MB of textures** (`ART_BYTES_KEPT`, about 96 icons): past it the pictures
+drawn longest ago are freed, never those around the selection, and a title
+scrolled back to asks for its picture again. A backdrop decoded in 0.5–1.4 s on
 hardware; its scaling did a 64-bit division per source pixel, a library
 call on the Vita's 32-bit CPU, and now reads each column's texel from a
 table; PNG checksums are skipped. The log splits each backdrop into read,

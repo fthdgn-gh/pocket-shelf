@@ -201,6 +201,13 @@ pub trait Host {
     fn scan(&mut self, force: bool);
     /// Ask for a picture; answered with [`Event::Picture`].
     fn request(&mut self, key: PictureKey);
+    /// Ask for a backdrop the user may go to next (a neighbor of the
+    /// selection), decoded only while no [`request`](Host::request) waits;
+    /// answered with [`Event::Picture`]. A host with one queue asks for it
+    /// as any other picture.
+    fn request_ahead(&mut self, key: PictureKey) {
+        self.request(key);
+    }
     /// Take back a request not yet started (an icon scrolled past); it may
     /// still be answered if decoding began.
     fn cancel(&mut self, _key: &PictureKey) {}

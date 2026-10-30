@@ -44,6 +44,10 @@ const BACKDROP_DELAY: u32 = 15;
 /// back to a title shows its picture at once (Pocket Shelf 0.1 kept three
 /// idle ones). A backdrop is 512 KB.
 const BACKDROPS_KEPT: usize = 3;
+/// Backdrops decoded ahead: the titles before and after the selection,
+/// asked for once its own is answered, so one step either way shows its
+/// picture at once (a backdrop takes about 0.5 s to decode on hardware).
+const BACKDROPS_AHEAD: usize = 2;
 /// A backdrop fades in over this long once it is on the GPU.
 const BACKDROP_FADE_US: u64 = 350_000;
 /// Frames the selection rests before the Dynamic theme starts blending,
@@ -142,6 +146,12 @@ pub struct Shelf {
     /// Backdrops off screen, newest first; trimmed to `BACKDROPS_KEPT`
     /// when drawing.
     kept: Vec<Shown>,
+    /// The neighbors' backdrops, decoded ahead; newest first.
+    ahead: Vec<Shown>,
+    /// The neighbors' backdrops asked for and not answered yet.
+    ahead_asked: Vec<PictureKey>,
+    /// The selected backdrop is answered: ask for the neighbors' next.
+    ahead_due: bool,
     backdrop_wait: u32,
     /// The backdrop the selection asks for.
     wanted: Option<PictureKey>,
@@ -230,6 +240,9 @@ impl Shelf {
             backdrop: None,
             under: None,
             kept: Vec::new(),
+            ahead: Vec::new(),
+            ahead_asked: Vec::new(),
+            ahead_due: false,
             backdrop_wait: 0,
             wanted: None,
             wash: None,
@@ -333,10 +346,20 @@ impl Shelf {
             self.art.answer(gfx, &key, picture);
             return;
         }
-        // A backdrop the selection no longer asks for is dropped.
+        // A neighbor's backdrop decoded ahead: kept until the selection
+        // comes to it.
         if self.wanted.as_ref() != Some(&key) {
+            if let Some(at) = self.ahead_asked.iter().position(|k| *k == key) {
+                self.ahead_asked.remove(at);
+                if let Some(picture) = picture {
+                    let tex = gfx.add_texture(picture.w, picture.h, Format::Rgba8, picture.rgba, true);
+                    self.ahead.insert(0, Shown { key, tex, ready_at: None });
+                }
+            }
+            // Any other backdrop the selection no longer asks for is dropped.
             return;
         }
+        self.ahead_due = true;
         match picture {
             None => self.clear_backdrop(gfx),
             Some(_) if self.backdrop.as_ref().is_some_and(|b| b.key == key) => {}
@@ -537,6 +560,14 @@ impl Shelf {
             if self.backdrop_wait == 0 {
                 self.ask_backdrop(host);
             }
+        }
+        // While the selection moves, nothing is decoded ahead.
+        if after != before {
+            self.ahead_due = false;
+        }
+        if self.ahead_due && self.backdrop_wait == 0 {
+            self.ahead_due = false;
+            self.ask_ahead(host);
         }
         if std::mem::take(&mut self.pending_picker_confirm) {
             self.picker_confirm(host);
@@ -872,11 +903,13 @@ impl Shelf {
             // Cleared at the next draw, which has the textures.
             self.backdrop_wait = 0;
             self.clear_pending = true;
+            self.ahead_due = true;
             return;
         }
         let key = PictureKey::Backdrop { id: game.id.to_string(), file: game.backdrop.clone().unwrap_or_default() };
         self.wanted = Some(key.clone());
         if self.backdrop.as_ref().is_some_and(|b| b.key == key) {
+            self.ahead_due = true;
             return;
         }
         // Kept from earlier (or still underneath): shown again at once.
@@ -885,15 +918,64 @@ impl Shelf {
             if let Some(shown) = &mut self.backdrop {
                 shown.ready_at = None;
             }
+            self.ahead_due = true;
             return;
         }
         if let Some(at) = self.kept.iter().position(|b| b.key == key) {
             let mut shown = self.kept.remove(at);
             shown.ready_at = None;
             self.show_backdrop(shown);
+            self.ahead_due = true;
+            return;
+        }
+        if let Some(at) = self.ahead.iter().position(|b| b.key == key) {
+            let shown = self.ahead.remove(at);
+            self.show_backdrop(shown);
+            self.ahead_due = true;
+            return;
+        }
+        // Being decoded ahead already: its answer is taken as the selection's.
+        if let Some(at) = self.ahead_asked.iter().position(|k| *k == key) {
+            self.ahead_asked.remove(at);
             return;
         }
         host.request(key);
+    }
+
+    /// Ask for the backdrops of the titles before and after the selection,
+    /// once its own is answered. Neighbors' backdrops the selection moved
+    /// away from join the kept ones; their requests not started are taken
+    /// back.
+    fn ask_ahead(&mut self, host: &mut dyn Host) {
+        let mut near: Vec<PictureKey> = Vec::new();
+        if self.settings.backdrop {
+            for index in [self.selected + 1, self.selected.wrapping_sub(1)] {
+                let Some(game) = self.game(index) else { continue };
+                if game.backdrop.as_deref() == Some(NO_BACKDROP) {
+                    continue;
+                }
+                near.push(PictureKey::Backdrop { id: game.id.to_string(), file: game.backdrop.clone().unwrap_or_default() });
+            }
+        }
+        for key in std::mem::take(&mut self.ahead_asked) {
+            if near.contains(&key) {
+                self.ahead_asked.push(key);
+            } else {
+                host.cancel(&key);
+            }
+        }
+        let (stay, gone): (Vec<Shown>, Vec<Shown>) = std::mem::take(&mut self.ahead).into_iter().partition(|b| near.contains(&b.key));
+        self.ahead = stay;
+        for shown in gone {
+            self.kept.insert(0, shown);
+        }
+        for key in near {
+            let on_hand = [&self.backdrop, &self.under].into_iter().flatten().chain(&self.kept).chain(&self.ahead).any(|b| b.key == key);
+            if !on_hand && !self.ahead_asked.contains(&key) && self.ahead.len() + self.ahead_asked.len() < BACKDROPS_AHEAD {
+                self.ahead_asked.push(key.clone());
+                host.request_ahead(key);
+            }
+        }
     }
 
     /// The Dynamic theme moves toward the selected title's color: two fifths
@@ -950,6 +1032,8 @@ impl Shelf {
         for (key, tex, accent) in std::mem::take(&mut self.pending_art) {
             self.art.insert(gfx, key, tex, accent);
         }
+        // Free the icons and box art used longest ago past the budget.
+        self.art.trim(gfx);
         // Free the backdrops kept beyond the newest few; they are not drawn.
         while self.kept.len() > BACKDROPS_KEPT {
             if let Some(old) = self.kept.pop() {
@@ -1375,6 +1459,7 @@ mod tests {
         plugin: PluginState,
         launched: Vec<String>,
         backdrops: Vec<PictureKey>,
+        ahead: Vec<PictureKey>,
     }
 
     impl Host for TestHost {
@@ -1402,6 +1487,9 @@ mod tests {
                 self.backdrops.push(key);
             }
         }
+        fn request_ahead(&mut self, key: PictureKey) {
+            self.ahead.push(key);
+        }
         fn poll(&mut self, _: &mut Vec<Event>) {}
         fn log(&mut self, _: &str) {}
         fn launch(&mut self, id: &str) -> bool {
@@ -1418,7 +1506,7 @@ mod tests {
     }
 
     fn setup(accept: bool, plugin: PluginState) -> (Shelf, TestHost) {
-        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), backdrops: Vec::new() };
+        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), backdrops: Vec::new(), ahead: Vec::new() };
         host.files.0.insert(RECENT_FILE.into(), b"[\"VITASHELL\"]\n".to_vec());
         let library = Library::load(&mut host);
         let mut shelf = Shelf::new(Settings::defaults(UpdateChannel::Off), library, Status::default());
@@ -1550,6 +1638,34 @@ mod tests {
         rest(&mut shelf, &mut host, &mut gfx);
         assert_eq!(host.backdrops.len(), 2, "no new request");
         assert_eq!(shelf.backdrop.as_ref().map(|b| b.key.clone()), Some(PictureKey::Backdrop { id: "VITASHELL".into(), file: String::new() }));
+    }
+
+    #[test]
+    fn the_next_titles_backdrop_is_decoded_ahead() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let mut gfx = Gfx::new(2.0);
+        let infos: Vec<TitleInfo> = ["PCSA00001", "PCSA00002", "PCSA00003"]
+            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None })
+            .into();
+        shelf.set_titles(load_catalog(&infos), false);
+        press(&mut shelf, &mut host, R);
+        rest(&mut shelf, &mut host, &mut gfx);
+        let asked = host.backdrops.len();
+        // Once the selected backdrop is answered, the next title's is asked
+        // for ahead, and only once.
+        shelf.update(&mut host, 0, 0);
+        shelf.update(&mut host, 0, 0);
+        assert_eq!((shelf.list.len(), shelf.selected), (3, 0));
+        let (index, button) = (1, RIGHT);
+        let next = shelf.game(index).map(|g| PictureKey::Backdrop { id: g.id.to_string(), file: String::new() }).unwrap();
+        assert_eq!(host.ahead, [next.clone()]);
+        shelf.picture(&mut gfx, next.clone(), Some(Picture { w: 4, h: 2, rgba: vec![0; 32], accent: None }));
+        // Stepping to it shows it without a new request.
+        press(&mut shelf, &mut host, button);
+        rest(&mut shelf, &mut host, &mut gfx);
+        assert_eq!(host.backdrops.len(), asked, "no new request");
+        assert_eq!(shelf.backdrop.as_ref().map(|b| b.key.clone()), Some(next));
+        assert!(shelf.ahead.is_empty());
     }
 
     #[test]
