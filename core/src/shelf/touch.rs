@@ -127,8 +127,13 @@ impl Shelf {
             }
             return;
         }
-        // The shelf: only a drag that starts between the bar and the footer.
-        if from.1 < BAR_H || from.1 > crate::H - FOOTER_H {
+        // A drag along the tab names moves between tabs.
+        if from.1 < BAR_H {
+            self.drag_tabs(gesture.moved.0);
+            return;
+        }
+        // The titles: a drag that starts between the bar and the footer.
+        if from.1 > crate::H - FOOTER_H {
             return;
         }
         let (along, pitch, unit) = self.drag_axis(gesture.moved);
@@ -162,6 +167,26 @@ impl Shelf {
                 (moved.1, tile + gap, GRID_COLUMNS as i64)
             }
             ViewMode::List => (moved.1, LIST_ROW_H + LIST_GAP, 1),
+        }
+    }
+
+    /// A drag along the top bar: a tab further each time the finger moves
+    /// the distance between two names (leftward, the next tab). Stops at
+    /// the first and the last tab, where L and R wrap.
+    fn drag_tabs(&mut self, moved: f32) {
+        self.drag_left -= moved;
+        loop {
+            let delta = if self.drag_left > 0.0 { 1 } else if self.drag_left < 0.0 { -1 } else { return };
+            let Some(pitch) = self.header.pitch(&self.tab, delta).filter(|p| *p > 0.0) else {
+                // An end: the rest of the drag is dropped.
+                self.drag_left = 0.0;
+                return;
+            };
+            if self.drag_left.abs() < pitch {
+                return;
+            }
+            self.drag_left -= delta as f32 * pitch;
+            self.change_category(delta);
         }
     }
 

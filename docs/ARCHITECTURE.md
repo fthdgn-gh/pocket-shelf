@@ -201,8 +201,10 @@ and the scrim around a drawer. A tap is tested against the last frame's
 records, the topmost first, and mostly becomes the button press the
 screens already handle (`Hit::Button`, a row's confirm, the scrim's back),
 after moving the panel's highlight or the shelf's selection. A drag moves
-the selection along the view's axis, a step per tile pitch, or the open
-panel's highlight a row per 56 px, stopping at the ends. Desktop shot
+the selection along the view's axis, a step per tile pitch, the tab a step
+per distance between two names when it starts in the top bar
+(`Header::pitch`), or the open panel's highlight a row per 56 px, each
+stopping at the ends. Desktop shot
 scripts put a finger down with `touch(x, y)` (shots 250–257).
 
 **Keyboards** (SELECT ▸ Keyboard, `keyboard.json`): Pocket Shelf's own

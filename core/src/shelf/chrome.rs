@@ -165,6 +165,17 @@ impl Header {
     pub fn moving(&self, now: u64) -> bool {
         self.scroll.moving(now)
     }
+
+    /// How far apart the middles of the tab `current` and the next one
+    /// (`delta` 1) or the one before (-1) are, as last drawn; `None` past
+    /// either end.
+    pub fn pitch(&self, current: &str, delta: i32) -> Option<f32> {
+        let at = self.names.iter().position(|n| n.id == current)?;
+        let index: usize = (at as i32 + delta).try_into().ok()?;
+        let next = self.names.get(index)?;
+        let here = &self.names[at];
+        Some(((next.left + next.width / 2.0) - (here.left + here.width / 2.0)).abs())
+    }
 }
 
 /// The L or R button: the pill's shape with its letter.

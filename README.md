@@ -208,7 +208,8 @@ touch screen:
 - Tap a title to select it; tap the selected title to start it.
 - Drag along the row (Home, Carousel, Cascade) or up and down the Grid and
   the List to move through the titles; a flick keeps going and slows down.
-- Tap a tab name, or L or R, to change tabs.
+- Tap a tab name, or L or R, to change tabs, or drag along the tab names
+  to move through them (a flick goes on through several).
 - Tap a button hint at the bottom of the screen (△ Edit, □ Search,
   SELECT Menu, and the hints in each menu) to do what it says.
 - In a menu, tap a row to open or change it, or its ◀ ▶ arrows to step its

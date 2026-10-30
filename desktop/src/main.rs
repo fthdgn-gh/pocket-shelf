@@ -344,6 +344,8 @@ const SHOTS: &[Shot] = &[
     shot("265-keyboard-symbols", &[(0, 4), (SQUARE, TAP), (0, TAP), (UP, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
     shot("266-keyboard-accents-held", &[(0, 4), (SQUARE, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, 40), (0, SETTLE)]),
     shot("267-touch-keyboard-accent", &[(0, 4), (SQUARE, TAP), (0, SETTLE), (touch(270, 268), 40), (0, TAP), (touch(228, 332), TAP), (0, SETTLE)]),
+    // A flick along the tab names: several tabs on.
+    shot("258-touch-tab-drag", &[(0, 4), (touch(760, 26), 1), (touch(710, 26), 1), (touch(660, 26), 1), (touch(610, 26), 1), (touch(560, 26), 1), (touch(510, 26), 1), (touch(460, 26), 1), (touch(410, 26), 1), (0, SETTLE)]),
 ];
 
 fn main() {

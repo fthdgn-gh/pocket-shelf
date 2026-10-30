@@ -2057,6 +2057,31 @@ mod tests {
     }
 
     #[test]
+    fn a_drag_along_the_tab_names_changes_tab_and_stops_at_the_ends() {
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let mut gfx = Gfx::new();
+        let ids: Vec<String> = shelf.tabs.iter().map(|c| c.id.clone()).collect();
+        assert!(ids.len() >= 3, "{ids:?}");
+        shelf.tab = ids[0].clone();
+        shelf.refresh();
+        let drag = |shelf: &mut Shelf, host: &mut TestHost, gfx: &mut Gfx, dx: f32| {
+            gfx.begin();
+            shelf.draw(gfx);
+            let gesture = crate::touch::Gesture { moved: (dx, 0.0), from: Some((480.0, 20.0)), down: true, ..Default::default() };
+            shelf.update(host, 0, 0, &TouchFrame { gesture, hits: &[] });
+        };
+        // Leftward past the distance to the next name: the next tab.
+        gfx.begin();
+        shelf.draw(&mut gfx);
+        let pitch = shelf.header.pitch(&ids[0], 1).unwrap();
+        drag(&mut shelf, &mut host, &mut gfx, -(pitch + 1.0));
+        assert_eq!(shelf.tab, ids[1]);
+        // Far to the right: back to the first, not round to the last.
+        drag(&mut shelf, &mut host, &mut gfx, 5000.0);
+        assert_eq!(shelf.tab, ids[0]);
+    }
+
+    #[test]
     fn the_menu_steps_a_setting_and_saves_it() {
         let (mut shelf, mut host) = setup(true, PluginState::On);
         // SELECT, down to Appearance, down to View, right: Carousel.
