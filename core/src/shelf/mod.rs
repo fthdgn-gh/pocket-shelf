@@ -327,8 +327,8 @@ impl Shelf {
         self.resort();
     }
 
-    /// The current tab's titles again after its order or its data changed,
-    /// the selected title kept selected.
+    /// The current tab's titles again after the system's dates arrived, the
+    /// selected title kept selected.
     fn resort(&mut self) {
         let keep = self.selected_game().map(|g| g.id.clone());
         self.list = self.library.titles_of(&self.tab);
@@ -719,7 +719,10 @@ impl Shelf {
                 self.library.orders.set(&self.tab, order);
                 // Saved in a file of its own (`sort.json`).
                 host.write(SORT_FILE, self.library.orders.render().as_bytes());
-                self.resort();
+                // A new order starts at its first title.
+                self.list = self.library.titles_of(&self.tab);
+                self.select(0);
+                self.placed = None;
                 return;
             }
             Item::Theme => {
@@ -1675,7 +1678,7 @@ mod tests {
     }
 
     #[test]
-    fn a_tab_sorted_by_launches_and_saved_keeps_the_selection() {
+    fn a_tab_sorted_anew_starts_at_its_first_title() {
         use crate::library::order::{SortOrder, SORT_FILE};
         let (mut shelf, mut host) = setup(true, PluginState::On);
         let infos: Vec<TitleInfo> = ["PCSA00001", "PCSA00002", "PCSA00003"]
@@ -1697,7 +1700,14 @@ mod tests {
         assert_eq!(shelf.library.orders.get("games"), SortOrder::MostPlayed);
         assert_eq!(host.files.0[SORT_FILE], b"{\n  \"games\": \"played-most\"\n}\n");
         assert_eq!(ids(&shelf), ["PCSA00003", "PCSA00002", "PCSA00001"]);
-        assert_eq!(shelf.selected, 0, "the selected title stays selected");
+        // Back to Name (A–Z): the first title is selected, not the one
+        // that was.
+        shelf.selected = 1;
+        for _ in 0..4 {
+            press(&mut shelf, &mut host, LEFT);
+        }
+        assert_eq!(ids(&shelf), ["PCSA00001", "PCSA00002", "PCSA00003"]);
+        assert_eq!(shelf.selected, 0, "a new order starts at its first title");
     }
 
     #[test]
