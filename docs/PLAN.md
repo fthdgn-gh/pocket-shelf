@@ -222,6 +222,10 @@ the user.
   drawer, and the keyboard; a tap selects a tile and a second tap on it
   launches; the front panel only.
 
+- **Two keyboards** (the user, 2026-10-30): the Vita's own (`sceImeDialog`)
+  or Pocket Shelf's, chosen in SELECT ▸ Keyboard; Pocket Shelf's to be
+  reworked to work like the system's.
+
 ## Follow-ups
 
 - **Icon texture budget**: *done 2026-10-30, hardware run pending.* Icon

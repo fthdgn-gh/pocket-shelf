@@ -74,6 +74,8 @@ pub struct Messages {
     pub text_sizes: TextSizes,
     pub sort: &'static str,
     pub sort_orders: SortNames,
+    pub keyboard_kind: &'static str,
+    pub keyboard_system: &'static str,
     pub themes: Themes,
     pub editor_title: &'static str,
     pub favorite: &'static str,
@@ -390,6 +392,8 @@ impl Messages {
             ("textSizes.large", self.text_sizes.large),
             ("textSizes.larger", self.text_sizes.larger),
             ("sort", self.sort),
+            ("keyboardKind", self.keyboard_kind),
+            ("keyboardSystem", self.keyboard_system),
             ("sortOrders.nameAsc", self.sort_orders.name_asc),
             ("sortOrders.nameDesc", self.sort_orders.name_desc),
             ("sortOrders.recentlyPlayed", self.sort_orders.recently_played),
@@ -646,6 +650,8 @@ pub static EN: Messages = Messages {
         larger: "Larger",
     },
     sort: "Sort",
+    keyboard_kind: "Keyboard",
+    keyboard_system: "System",
     sort_orders: SortNames {
         name_asc: "Name (A–Z)",
         name_desc: "Name (Z–A)",
@@ -910,6 +916,8 @@ pub static TR: Messages = Messages {
         larger: "Daha büyük",
     },
     sort: "Sırala",
+    keyboard_kind: "Klavye",
+    keyboard_system: "Sistem",
     sort_orders: SortNames {
         name_asc: "Ad (A–Z)",
         name_desc: "Ad (Z–A)",
@@ -1174,6 +1182,8 @@ pub static DE: Messages = Messages {
         larger: "Größer",
     },
     sort: "Sortieren",
+    keyboard_kind: "Tastatur",
+    keyboard_system: "System",
     sort_orders: SortNames {
         name_asc: "Name (A–Z)",
         name_desc: "Name (Z–A)",
@@ -1438,6 +1448,8 @@ pub static FR: Messages = Messages {
         larger: "Plus grande",
     },
     sort: "Trier",
+    keyboard_kind: "Clavier",
+    keyboard_system: "Système",
     sort_orders: SortNames {
         name_asc: "Nom (A–Z)",
         name_desc: "Nom (Z–A)",
@@ -1702,6 +1714,8 @@ pub static ES: Messages = Messages {
         larger: "Más grande",
     },
     sort: "Ordenar",
+    keyboard_kind: "Teclado",
+    keyboard_system: "Sistema",
     sort_orders: SortNames {
         name_asc: "Nombre (A–Z)",
         name_desc: "Nombre (Z–A)",

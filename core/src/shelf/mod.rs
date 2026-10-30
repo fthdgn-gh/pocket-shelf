@@ -206,6 +206,11 @@ pub struct Shelf {
     /// A drag's distance not yet turned into a step of the selection or a
     /// panel's highlight.
     drag_left: f32,
+    /// Text to type with the system keyboard, opened at the next frame
+    /// (opening needs the host).
+    keyboard_wanted: Option<(keyboard::Target, String)>,
+    /// What the open system keyboard types for.
+    pub(super) system_keyboard: Option<keyboard::Target>,
     pub diagnostics_lines: Vec<(String, String)>,
     /// Diagnostics opened: the app resets its frame timing.
     pub reset_stats: bool,
@@ -284,6 +289,8 @@ impl Shelf {
             diagnostics: None,
             diagnostics_lines: Vec::new(),
             drag_left: 0.0,
+            keyboard_wanted: None,
+            system_keyboard: None,
             reset_stats: false,
             online: None,
             online_tex: [None, None],
@@ -442,9 +449,17 @@ impl Shelf {
             .find(|(bit, _)| pad & bit != 0)
             .map(|(_, d)| d);
         let mut step = self.held.update(direction);
-        // A tap stands for the buttons of what it lands on; a drag moves
-        // the selection or the open panel's highlight.
-        self.apply_touch(host, touch, &mut pressed, &mut step, confirm, cancel);
+        self.open_wanted_keyboard(host);
+        // The system keyboard takes the buttons and the screen while open.
+        if self.system_keyboard.is_some() {
+            pressed = 0;
+            step = None;
+            self.system_keyboard_frame(host);
+        } else {
+            // A tap stands for the buttons of what it lands on; a drag
+            // moves the selection or the open panel's highlight.
+            self.apply_touch(host, touch, &mut pressed, &mut step, confirm, cancel);
+        }
         let mut request = None;
 
         if let Some(keyboard) = &mut self.keyboard {
@@ -620,9 +635,57 @@ impl Shelf {
 
     /// Open the keyboard for `target`, starting from `text`.
     fn open_keyboard(&mut self, target: keyboard::Target, text: &str) {
+        if self.settings.keyboard == crate::library::settings::KeyboardKind::System {
+            self.keyboard_wanted = Some((target, text.to_string()));
+            return;
+        }
+        self.open_own_keyboard(target, text);
+    }
+
+    fn open_own_keyboard(&mut self, target: keyboard::Target, text: &str) {
         self.keyboard = Some(keyboard::Keyboard::new(target, text, self.settings.language));
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);
+    }
+
+    /// Open the system keyboard asked for; Pocket Shelf's own when the host
+    /// has none.
+    fn open_wanted_keyboard(&mut self, host: &mut dyn Host) {
+        let Some((target, text)) = self.keyboard_wanted.take() else { return };
+        let heading = self.keyboard_heading(&target);
+        let limit = keyboard::Keyboard::new(target.clone(), "", self.settings.language).limit();
+        let search = matches!(target, keyboard::Target::Library | keyboard::Target::Search);
+        if host.keyboard_open(heading, &text, limit, search) {
+            self.system_keyboard = Some(target);
+        } else {
+            self.open_own_keyboard(target, &text);
+        }
+    }
+
+    /// The system keyboard's answer, once it is closed: typed text goes
+    /// where Pocket Shelf's keyboard sends it.
+    fn system_keyboard_frame(&mut self, host: &mut dyn Host) {
+        let Some(target) = self.system_keyboard.clone() else { return };
+        let Some(answer) = host.keyboard_answer() else { return };
+        self.system_keyboard = None;
+        if let Some(text) = answer {
+            self.keyboard = Some(keyboard::Keyboard::new(target, &text, self.settings.language));
+            self.commit_keyboard(host);
+        }
+    }
+
+    /// What a keyboard types for, as its heading says it.
+    fn keyboard_heading(&self, target: &keyboard::Target) -> &'static str {
+        use keyboard::Target;
+        let k = &self.t().keyboard_for;
+        match target {
+            Target::Title => k.title,
+            Target::NewCategory => k.new_category,
+            Target::Category(_) => k.category,
+            Target::Library => k.library,
+            Target::Search => k.search,
+            Target::ApiKey => k.api_key,
+        }
     }
 
     /// The keyboard's Done: the text goes to what it was typed for.
@@ -735,6 +798,13 @@ impl Shelf {
                 self.list = self.library.titles_of(&self.tab);
                 self.select(0);
                 self.placed = None;
+                return;
+            }
+            Item::Keyboard => {
+                use crate::library::settings::{KeyboardKind, KEYBOARD_FILE};
+                s.keyboard = if s.keyboard == KeyboardKind::System { KeyboardKind::Own } else { KeyboardKind::System };
+                // Saved in a file of its own (`keyboard.json`).
+                host.write(KEYBOARD_FILE, s.keyboard.render().as_bytes());
                 return;
             }
             Item::Theme => {
@@ -1196,15 +1266,7 @@ impl Shelf {
             Page::Symbols => "Áçñ",
             Page::Accents => t.key_letters,
         };
-        let k = &t.keyboard_for;
-        let heading = match target {
-            Target::Title => k.title,
-            Target::NewCategory => k.new_category,
-            Target::Category(_) => k.category,
-            Target::Library => k.library,
-            Target::Search => k.search,
-            Target::ApiKey => k.api_key,
-        };
+        let heading = self.keyboard_heading(&target);
         let note = if target == Target::Library && !text.trim().is_empty() {
             let count = self.found_count(&text).to_string();
             crate::i18n::fill(t.found, &[("count", &count)])
@@ -1317,6 +1379,10 @@ impl Shelf {
                     id if !Library::sortable(id) => (t.sort, Some(name(self.library.order_of(id)).into()), None, panel::Step::None),
                     id => (t.sort, Some(name(self.library.order_of(id)).into()), None, Both),
                 }
+            }
+            Item::Keyboard => {
+                let own = s.keyboard == crate::library::settings::KeyboardKind::Own;
+                (t.keyboard_kind, Some(if own { "Pocket Shelf" } else { t.keyboard_system }.into()), None, Both)
             }
             Item::Theme => {
                 let th = &t.themes;

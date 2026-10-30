@@ -59,6 +59,9 @@ the colored tiles with initials stand in for game icons.
 - **Six themes:** Midnight, Aurora, Sakura, Ember, Daylight, and Dynamic, which
   takes its colors from the selected title.
 - **Five text sizes**, from Smaller to Larger (SELECT ▸ Appearance ▸ Text size).
+- **Type with the Vita's own keyboard** (its languages, accents and word
+  suggestions) or with Pocket Shelf's (SELECT ▸ Keyboard). With the Vita's,
+  a search runs when you press its Search button.
 - **Sort each tab** (SELECT ▸ Sort): by name, by when it was last played,
   by how often Pocket Shelf started it, or by when it was installed. The
   system records the last launch and the install date; it keeps no play
@@ -197,7 +200,7 @@ counts as unused, and so does box art whose name matches no title.
 | ○ or ✕ (your choice in the menu) | Launch / back |
 | △ | Edit the selected title |
 | □ | Search |
-| SELECT | Menu: sort, appearance, library, updates, confirm button, language, diagnostics |
+| SELECT | Menu: sort, appearance, library, updates, confirm button, keyboard, language, diagnostics |
 
 **Touch screen.** Everything the buttons do can also be done on the front
 touch screen:
@@ -223,6 +226,7 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `settings.json` | Settings and the last selection |
 | `status-bar.json` | Which status items show, and on which side |
 | `text-size.json` | The text size |
+| `keyboard.json` | Which keyboard you type with |
 | `sort.json` | Each tab's sort order |
 | `plays.json` | How often and when Pocket Shelf started each title |
 | `categories.json` | Your categories and their order |

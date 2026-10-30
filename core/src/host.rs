@@ -342,6 +342,18 @@ pub trait Host {
     fn save_picture(&mut self, _path: &str, _png: Vec<u8>, _fit: bool) -> bool {
         false
     }
+    /// Open the system's keyboard titled `title` over `text`, at most `max`
+    /// characters, its enter button labelled Search when `search`; answered
+    /// by `keyboard_answer`. False when this host has none (the desktop) or
+    /// it could not open: the shelf then uses its own.
+    fn keyboard_open(&mut self, _title: &str, _text: &str, _max: usize, _search: bool) -> bool {
+        false
+    }
+    /// The system keyboard's answer: `None` while it is open, then the
+    /// text typed, or `Some(None)` when it was cancelled.
+    fn keyboard_answer(&mut self) -> Option<Option<String>> {
+        Some(None)
+    }
     /// Read `libretro/<console>.txt` and parse it with
     /// [`Listing::parse`](crate::online::libretro::Listing::parse) off the
     /// frame; answered with [`Event::Listing`] under `folder`.

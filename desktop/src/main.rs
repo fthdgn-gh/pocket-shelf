@@ -117,6 +117,10 @@ fn tall_art() -> fake::FakeHost {
     fake::FakeHost::new().with_tall_art()
 }
 
+fn system_keyboard() -> fake::FakeHost {
+    fake::FakeHost::new().with_system_keyboard("st")
+}
+
 fn saved() -> fake::FakeHost {
     fake::FakeHost::new().with_saved_data()
 }
@@ -165,7 +169,7 @@ const SHOTS: &[Shot] = &[
     shot("101-menu-appearance", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     shot("102-menu-status", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     shot("103-menu-view-changed", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
-    shot("104-menu-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("104-menu-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     shot("105-menu-confirm-cross", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     // Search: square opens the keyboard; typing "st" (row 2 col 1, row 1
     // col 4) shows the count; Done shows the results tab; back closes it.
@@ -174,7 +178,7 @@ const SHOTS: &[Shot] = &[
     shot("112-search-results", &[(0, 4), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (0, SETTLE)]),
     shot("113-search-closed", &[(0, 4), (RIGHT, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (CROSS, TAP), (0, TAP), (0, SETTLE)]),
     shot("114-search-nothing", &[(0, 4), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (0, SETTLE)]),
-    shot("115-keyboard-accents-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (0, SETTLE)]),
+    shot("115-keyboard-accents-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (0, SETTLE)]),
     // The title editor (TRIANGLE): favorite, category, box art and backdrop
     // pickers with previews, the title keyboard; the category manager.
     shot("120-editor", &[(0, 4), (TRIANGLE, TAP), (0, TAP), (0, SETTLE)]),
@@ -293,7 +297,7 @@ const SHOTS: &[Shot] = &[
     Shot { name: "214-larger-diagnostics", script: &[(0, SETTLE), (SELECT, TAP), (0, TAP), (UP, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
     Shot { name: "215-larger-update", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
     Shot { name: "216-larger-clean-up", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: larger },
-    Shot { name: "217-larger-turkish-menu", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: larger_turkish },
+    Shot { name: "217-larger-turkish-menu", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: larger_turkish },
     Shot { name: "218-larger-turkish-home", script: &[(0, SETTLE)], setup: larger_turkish },
     Shot { name: "219-larger-first-start", script: &[(0, 20)], setup: larger_first_start },
     Shot { name: "220-smaller-home-detailed", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)], setup: smaller },
@@ -325,6 +329,11 @@ const SHOTS: &[Shot] = &[
     shot("255-touch-keyboard", &[(0, 4), (touch(180, 518), TAP), (0, SETTLE), (touch(102, 268), TAP), (0, TAP), (touch(186, 268), TAP), (0, SETTLE)]),
     shot("256-touch-editor-arrow", &[(0, 4), (touch(80, 518), TAP), (0, TAP), (touch(896, 96), TAP), (0, SETTLE)]),
     shot("257-touch-outside-closes", &[(0, 4), (touch(300, 518), TAP), (0, TAP), (touch(120, 300), TAP), (0, SETTLE)]),
+    // The system keyboard (the stand-in answers "st" after 20 frames):
+    // square opens it, its text searches the library.
+    Shot { name: "260-system-keyboard-search", script: &[(0, 4), (SQUARE, TAP), (0, 40)], setup: system_keyboard },
+    // The Keyboard row, switched to Pocket Shelf's.
+    shot("261-keyboard-setting", &[(0, 4), (SELECT, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)]),
 ];
 
 fn main() {

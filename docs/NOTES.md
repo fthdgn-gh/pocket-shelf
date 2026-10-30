@@ -315,6 +315,15 @@ updates**.
   on the desktop only; the slop (16 px), the tap time (0.6 s) and the
   flick's slowing are not yet tuned on hardware.
 
+## The system keyboard
+
+- **`sceImeDialog`** (SceCommonDialog stub): the parameters are set up as
+  the SDK's header function `sceImeDialogParamInit` does (zeroed, the SDK
+  version, and the magic number plus the common part's address), and they
+  and the UTF-16 buffers stay at one address until the dialog is finished.
+  The dialog is drawn by `vita2d_common_dialog_update` between
+  `vita2d_end_drawing` and the swap. **Not yet tried on hardware.**
+
 ## Drawing on the Vita
 
 - **vita2d's clip flickered the top bar** on hardware: each clip change drew

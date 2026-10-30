@@ -205,6 +205,18 @@ the selection along the view's axis, a step per tile pitch, or the open
 panel's highlight a row per 56 px, stopping at the ends. Desktop shot
 scripts put a finger down with `touch(x, y)` (shots 250–257).
 
+**Keyboards** (SELECT ▸ Keyboard, `keyboard.json`): the system's
+(`sceImeDialog`, `platform/ime.rs`) or Pocket Shelf's own. Opening one is
+asked for in an input handler and done at the next frame, which has the
+host (`Host::keyboard_open`); a host without a system keyboard (the
+desktop) answers false and the shelf opens its own. While the system's is
+open, the main loop draws it after the app's frame
+(`vita2d_common_dialog_update` before the swap) and the shelf takes no
+buttons and no touch; its text arrives on enter (`Host::keyboard_answer`)
+and goes through the same commit as Pocket Shelf's keyboard. A search
+therefore runs on enter, where Pocket Shelf's keyboard counts the matches
+while typing.
+
 **Sort orders** (`library/order.rs`, SELECT ▸ Sort, the first row): each
 tab's order in `sort.json`, name A–Z when absent, which is the scan's order
 and costs nothing. The played and installed orders sort the tab's indexes

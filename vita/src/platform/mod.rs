@@ -13,6 +13,7 @@ pub mod art;
 pub mod backdrop;
 pub mod dds;
 pub mod http;
+pub mod ime;
 pub mod installed;
 pub mod iso;
 pub mod net;

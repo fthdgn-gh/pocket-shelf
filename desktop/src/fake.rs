@@ -246,6 +246,9 @@ fn backdrop(index: usize) -> Picture {
 
 pub struct FakeHost {
     titles: Vec<TitleInfo>,
+    /// A stand-in for the system keyboard: the text it answers with, and
+    /// the frames left until it does (`None`: this host has none).
+    system_keyboard: Option<(String, u32)>,
     /// Box art files that decode as portrait pictures.
     tall_art: Vec<String>,
     files: HashMap<String, Vec<u8>>,
@@ -378,6 +381,7 @@ impl FakeHost {
             .map(|path| (path.to_string(), Vec::new()))
             .collect();
         FakeHost {
+            system_keyboard: None,
             tall_art: Vec::new(),
             titles: sample_titles(),
             files,
@@ -457,6 +461,12 @@ impl FakeHost {
     pub fn with_sorted_games(mut self, order: &str) -> Self {
         self.files.insert("settings.json".into(), br#"{"view":"list","detail":"detailed"}"#.to_vec());
         self.files.insert("sort.json".into(), format!("{{\"games\":\"{order}\"}}").into_bytes());
+        self
+    }
+
+    /// A system keyboard that answers `text` 20 frames after it opens.
+    pub fn with_system_keyboard(mut self, text: &str) -> Self {
+        self.system_keyboard = Some((text.to_string(), 0));
         self
     }
 
@@ -621,6 +631,25 @@ impl Host for FakeHost {
         use shelf_core::online::libretro::{listing_path, Listing};
         let listing = self.files.get(&listing_path(folder)).and_then(|b| Listing::parse(&String::from_utf8_lossy(b)));
         self.later.push(Event::Listing(folder.to_string(), listing));
+    }
+
+    fn keyboard_open(&mut self, _title: &str, _text: &str, _max: usize, _search: bool) -> bool {
+        match &mut self.system_keyboard {
+            Some((_, frames)) => {
+                *frames = 20;
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn keyboard_answer(&mut self) -> Option<Option<String>> {
+        let (text, frames) = self.system_keyboard.as_mut()?;
+        if *frames > 1 {
+            *frames -= 1;
+            return None;
+        }
+        Some(Some(text.clone()))
     }
 
     fn cancel(&mut self, key: &PictureKey) {

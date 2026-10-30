@@ -153,6 +153,10 @@ fn main() {
             vita2d_clear_screen();
             backend.run(&gfx.cmds);
             vita2d_end_drawing();
+            // The system keyboard, while open, over the frame.
+            if platform::ime::active() {
+                vita2d_common_dialog_update();
+            }
         }
         trace.submit = lap();
         let cpu_us = (now_us() - work_start) as u32;

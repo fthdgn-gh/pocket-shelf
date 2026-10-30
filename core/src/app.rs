@@ -196,6 +196,9 @@ impl App {
             if let Some(bytes) = host.read(crate::library::settings::STATUS_BAR_FILE) {
                 settings.layout = crate::library::settings::StatusLayout::parse(&bytes);
             }
+            if let Some(bytes) = host.read(crate::library::settings::KEYBOARD_FILE) {
+                settings.keyboard = crate::library::settings::KeyboardKind::parse(&bytes);
+            }
             if let Some(bytes) = host.read(crate::library::settings::TEXT_SIZE_FILE) {
                 settings.text_size = crate::library::settings::TextSize::parse(&bytes);
             }

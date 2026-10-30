@@ -139,6 +139,33 @@ impl TextSize {
     }
 }
 
+keyed!(
+    /// The keyboard text is typed with: the Vita's own, or Pocket Shelf's.
+    KeyboardKind { System = "system", Own = "pocket-shelf" }
+);
+
+/// The keyboard choice, a setting of its own since 0.2 for the reason
+/// `status-bar.json` is: `{"keyboard": "system"}`.
+pub const KEYBOARD_FILE: &str = "keyboard.json";
+
+impl KeyboardKind {
+    /// The saved choice; the system's keyboard when the file is missing or
+    /// unusable.
+    pub fn parse(bytes: &[u8]) -> KeyboardKind {
+        serde_json::from_slice::<Value>(bytes)
+            .ok()
+            .and_then(|raw| raw.get("keyboard").and_then(Value::as_str).and_then(KeyboardKind::from_key))
+            .unwrap_or(KeyboardKind::System)
+    }
+
+    /// Two-space JSON and a newline, as the app's other files.
+    pub fn render(self) -> String {
+        let mut map = Map::new();
+        map.insert("keyboard".into(), self.key().into());
+        serde_json::to_string_pretty(&Value::Object(map)).expect("json") + "\n"
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Settings {
     pub language: Language,
@@ -162,6 +189,8 @@ pub struct Settings {
     pub layout: StatusLayout,
     /// Saved in its own file, `text-size.json` (not rendered here).
     pub text_size: TextSize,
+    /// Saved in its own file, `keyboard.json` (not rendered here).
+    pub keyboard: KeyboardKind,
 }
 
 impl Settings {
@@ -185,6 +214,7 @@ impl Settings {
             title: None,
             layout: StatusLayout::default(),
             text_size: TextSize::Normal,
+            keyboard: KeyboardKind::System,
         }
     }
 
@@ -263,6 +293,14 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_keyboard_choice_round_trips_and_defaults_to_the_system() {
+        assert_eq!(KeyboardKind::Own.render(), "{\n  \"keyboard\": \"pocket-shelf\"\n}\n");
+        assert_eq!(KeyboardKind::parse(KeyboardKind::Own.render().as_bytes()), KeyboardKind::Own);
+        assert_eq!(KeyboardKind::parse(KeyboardKind::System.render().as_bytes()), KeyboardKind::System);
+        assert_eq!(KeyboardKind::parse(b"nope"), KeyboardKind::System);
+    }
 
     #[test]
     fn the_text_size_round_trips_and_defaults() {
