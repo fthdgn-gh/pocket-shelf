@@ -824,6 +824,13 @@ impl Shelf {
                 self.placed = None;
                 return;
             }
+            Item::Emulator => {
+                use crate::library::settings::EMULATORS_FILE;
+                s.emulators.default = cycle_by(crate::library::settings::Emulator::ALL, s.emulators.default, delta);
+                // Saved in a file of its own (`emulators.json`).
+                host.write(EMULATORS_FILE, s.emulators.render().as_bytes());
+                return;
+            }
             Item::Keyboard => {
                 use crate::library::settings::{KeyboardKind, KEYBOARD_FILE};
                 s.keyboard = if s.keyboard == KeyboardKind::System { KeyboardKind::Own } else { KeyboardKind::System };
@@ -970,6 +977,16 @@ impl Shelf {
         }
     }
 
+    /// The id a title's details show: for a game from a playlist or
+    /// Emu4Vita++'s favourites, the app it starts in (`Game::shown_id`
+    /// without the user's choice).
+    pub(super) fn shown_id<'a>(&self, game: &'a Game) -> &'a str {
+        match self.settings.emulators.pick(&game.id, game.opens) {
+            Some(app) if game.console.is_some() => app.name(),
+            _ => game.shown_id(),
+        }
+    }
+
     /// Start the selected title. A title
     /// with no bubble first needs Adrenaline's boot plugin on. "Last
     /// Played" and the settings are written before the request: the
@@ -999,7 +1016,11 @@ impl Shelf {
         self.persist(host);
         host.log(&format!("Launch requested: {}", game.id));
         let asked = host.time_us();
-        let accepted = host.launch(&game.id);
+        let with = self.settings.emulators.pick(&game.id, game.opens);
+        if let Some(app) = with {
+            host.log(&format!("launch: with {}", app.name()));
+        }
+        let accepted = host.launch(&game.id, with);
         host.log(&format!("launch: host took {} ms (whole step {} ms)", (host.time_us() - asked) / 1000, (host.time_us() - started) / 1000));
         if !accepted {
             host.log(&format!("Launch rejected: {}", game.id));
@@ -1537,6 +1558,7 @@ impl Shelf {
             }
             Item::BatteryPercent => (t.battery_percent, on_off(s.battery_percent), None, Both),
             Item::Categories => (t.categories_row, Some(t.manage.into()), None, Right),
+            Item::Emulator => (t.open_games_with, Some(s.emulators.default.name().into()), None, Both),
             Item::FetchArt => {
                 let source = match s.scraper {
                     ScrapeSource::Auto => t.source_auto,
@@ -1715,6 +1737,7 @@ mod tests {
         accept: bool,
         plugin: PluginState,
         launched: Vec<String>,
+        launched_with: Vec<Option<crate::host::Emulator>>,
         backdrops: Vec<PictureKey>,
         ahead: Vec<PictureKey>,
     }
@@ -1749,8 +1772,9 @@ mod tests {
         }
         fn poll(&mut self, _: &mut Vec<Event>) {}
         fn log(&mut self, _: &str) {}
-        fn launch(&mut self, id: &str) -> bool {
+        fn launch(&mut self, id: &str, with: Option<crate::host::Emulator>) -> bool {
             self.launched.push(id.into());
+            self.launched_with.push(with);
             self.accept
         }
         fn plugin_state(&mut self) -> PluginState {
@@ -1763,7 +1787,7 @@ mod tests {
     }
 
     fn setup(accept: bool, plugin: PluginState) -> (Shelf, TestHost) {
-        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), backdrops: Vec::new(), ahead: Vec::new() };
+        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), launched_with: Vec::new(), backdrops: Vec::new(), ahead: Vec::new() };
         host.files.0.insert(RECENT_FILE.into(), b"[\"VITASHELL\"]\n".to_vec());
         let library = Library::load(&mut host);
         let mut shelf = Shelf::new(Settings::defaults(UpdateChannel::Off), library, Status::default());
@@ -1773,6 +1797,7 @@ mod tests {
             platform: platform.into(),
             adrenaline,
             console: None,
+            ..Default::default()
         };
         let infos = [info("PCSA00069", "vita", false), info("VITASHELL", "vita", false), info("ULUS10041", "psp", true)];
         shelf.set_titles(load_catalog(&infos), true);
@@ -1854,7 +1879,7 @@ mod tests {
         use crate::library::order::{SortOrder, SORT_FILE};
         let (mut shelf, mut host) = setup(true, PluginState::On);
         let infos: Vec<TitleInfo> = ["PCSA00001", "PCSA00002", "PCSA00003"]
-            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None })
+            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None, ..Default::default() })
             .into();
         shelf.set_titles(load_catalog(&infos), false);
         shelf.tab = "games".into();
@@ -1941,7 +1966,7 @@ mod tests {
         let (mut shelf, mut host) = setup(true, PluginState::On);
         let mut gfx = Gfx::new();
         let infos: Vec<TitleInfo> = ["PCSA00001", "PCSA00002", "PCSA00003"]
-            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None })
+            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None, ..Default::default() })
             .into();
         shelf.set_titles(load_catalog(&infos), false);
         press(&mut shelf, &mut host, R);
@@ -2016,7 +2041,7 @@ mod tests {
         let (mut shelf, mut host) = setup(true, PluginState::On);
         let mut gfx = Gfx::new();
         let infos: Vec<TitleInfo> = ["PCSA00001", "PCSA00002", "PCSA00003"]
-            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None })
+            .map(|id| TitleInfo { id: id.into(), title: format!("Title {id}"), platform: "vita".into(), adrenaline: false, console: None, ..Default::default() })
             .into();
         shelf.set_titles(load_catalog(&infos), false);
         shelf.tab = "games".into();
@@ -2128,6 +2153,69 @@ mod tests {
     fn type_text(shelf: &mut Shelf, host: &mut TestHost, text: &str) {
         shelf.keyboard.as_mut().expect("keyboard open").set_text(text);
         press(shelf, host, START);
+    }
+
+    #[test]
+    fn games_start_in_the_chosen_app_and_emu4vita_favourites_are_listed() {
+        use crate::host::{Emulator, Emulators};
+        use crate::library::settings::{EmulatorChoice, EMULATORS_FILE};
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let both = Emulators { retroarch: true, emu4vita: true };
+        let emu = Emulators { retroarch: false, emu4vita: true };
+        let game = |id: &str, opens: Emulators, emu_favorite: bool| TitleInfo {
+            id: id.into(),
+            title: format!("Game {id}"),
+            platform: "retro".into(),
+            console: Some("Nintendo - Game Boy Advance".into()),
+            opens,
+            emu_favorite,
+            ..Default::default()
+        };
+        shelf.set_titles(load_catalog(&[game("ra0000001", both, false), game("ra0000002", emu, true)]), true);
+        let ids = |shelf: &Shelf, tab: &str| shelf.library.titles_of(tab).iter().map(|&i| shelf.library.games()[i].id.to_string()).collect::<Vec<_>>();
+        assert_eq!(ids(&shelf, crate::library::categories::FAVORITES_ID), ["ra0000002"]);
+        assert_eq!(shelf.library.game("ra0000002").unwrap().shown_id(), "Emu4Vita++");
+        shelf.tab = "retro-gba".into();
+        shelf.refresh();
+        // RetroArch by default.
+        assert_eq!(press(&mut shelf, &mut host, CIRCLE), Some(Request::Launch("ra0000001".into())));
+        assert_eq!(host.launched_with, [Some(Emulator::RetroArch)]);
+        // The editor's Open with, third row for a game both apps open.
+        shelf.launching = None;
+        press(&mut shelf, &mut host, TRIANGLE);
+        assert_eq!(shelf.editor_row_list()[2], editor::Row::OpenWith);
+        press(&mut shelf, &mut host, DOWN);
+        press(&mut shelf, &mut host, DOWN);
+        press(&mut shelf, &mut host, RIGHT); // RetroArch
+        press(&mut shelf, &mut host, RIGHT); // Emu4Vita++
+        let saved = EmulatorChoice::parse(&host.files.0[EMULATORS_FILE]);
+        assert_eq!(saved.titles.get("ra0000001"), Some(&Emulator::Emu4Vita));
+        press(&mut shelf, &mut host, CROSS);
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(host.launched_with.last(), Some(&Some(Emulator::Emu4Vita)));
+        // A game only Emu4Vita++ opens starts there, whatever the default;
+        // its editor has no Open with row.
+        shelf.launching = None;
+        press(&mut shelf, &mut host, RIGHT);
+        assert_eq!(shelf.selected_game().map(|g| g.id.to_string()).as_deref(), Some("ra0000002"));
+        press(&mut shelf, &mut host, TRIANGLE);
+        assert!(!shelf.editor_row_list().contains(&editor::Row::OpenWith));
+        press(&mut shelf, &mut host, CROSS);
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(host.launched_with.last(), Some(&Some(Emulator::Emu4Vita)));
+        // The menu's row changes the default and saves it.
+        shelf.menu.page = menu::Page::Library;
+        shelf.menu.row = menu::items(menu::Page::Library).iter().position(|i| *i == menu::Item::Emulator).unwrap();
+        shelf.menu_change(&mut host, 1);
+        assert_eq!(EmulatorChoice::parse(&host.files.0[EMULATORS_FILE]).default, Emulator::Emu4Vita);
+        // Reset takes the title's own choice away.
+        shelf.launching = None;
+        press(&mut shelf, &mut host, LEFT);
+        press(&mut shelf, &mut host, TRIANGLE);
+        let rows = shelf.editor_row_list();
+        shelf.editor.as_mut().unwrap().row = rows.iter().position(|r| *r == editor::Row::Reset).unwrap();
+        press(&mut shelf, &mut host, CIRCLE);
+        assert!(EmulatorChoice::parse(&host.files.0[EMULATORS_FILE]).titles.is_empty());
     }
 
     #[test]

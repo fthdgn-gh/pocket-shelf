@@ -32,6 +32,8 @@ pub enum Item {
     Clock,
     BatteryPercent,
     Categories,
+    /// The app that starts games both RetroArch and Emu4Vita++ open.
+    Emulator,
     FetchArt,
     CleanArt,
     Rescan,
@@ -55,7 +57,7 @@ pub fn items(page: Page) -> &'static [Item] {
         Page::Main => &[Sort, Open(Page::Appearance), Open(Page::Library), Open(Page::Updates), Confirm, Keyboard, Language, Diagnostics],
         Page::Appearance => &[Theme, View, Details, TextSize, Backdrop, IconBox, Open(Page::Status)],
         Page::Status => &[StatusBar, StatusPosition, ShowWifi, ShowBluetooth, ShowBattery, BatteryPercent, Clock],
-        Page::Library => &[Categories, FetchArt, CleanArt, Rescan],
+        Page::Library => &[Categories, FetchArt, CleanArt, Rescan, Emulator],
         Page::Updates => &[UpdateChannel, CheckUpdates],
     }
 }

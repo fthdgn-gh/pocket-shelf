@@ -1,6 +1,6 @@
 //! The Vita platform modules, moved from the PocketJS host (docs/PLAN.md):
 //! the title scan (`installed`, with `psm`, `pspemu`, `iso`, `appdb`,
-//! `retroarch`), launching, pictures (`backdrop`, `art`, `dds`, `accent`) and
+//! `retroarch`, `emu4vita`), launching, pictures (`backdrop`, `art`, `dds`, `accent`) and
 //! Adrenaline's plugin lists (`seplugins`, `adrenaline_config`), and HTTPS
 //! (`http`, on the network stack from `net`). They changed
 //! only where they handed textures to the JavaScript engine: they now return
@@ -19,6 +19,7 @@ pub mod iso;
 pub mod net;
 pub mod psm;
 pub mod pspemu;
+pub mod emu4vita;
 pub mod retroarch;
 pub mod seplugins;
 pub mod update;

@@ -349,7 +349,7 @@ mod want_tests {
         }
         fn poll(&mut self, _: &mut Vec<crate::host::Event>) {}
         fn log(&mut self, _: &str) {}
-        fn launch(&mut self, _: &str) -> bool {
+        fn launch(&mut self, _: &str, _: Option<crate::host::Emulator>) -> bool {
             true
         }
         fn plugin_state(&mut self) -> crate::host::PluginState {
@@ -362,7 +362,7 @@ mod want_tests {
 
     #[test]
     fn a_handed_picture_needs_no_read_and_failed_reads_are_retried() {
-        let infos = [TitleInfo { id: "PCSA00001".into(), title: "T".into(), platform: "vita".into(), adrenaline: false, console: None }];
+        let infos = [TitleInfo { id: "PCSA00001".into(), title: "T".into(), platform: "vita".into(), adrenaline: false, console: None, ..Default::default() }];
         let mut game = load_catalog(&infos).remove(0);
         game.art = Some("PCSA00001-9.png".into());
         let (mut art, mut host, mut gfx) = (Art::default(), Recorder::default(), Gfx::new());
@@ -388,7 +388,7 @@ mod want_tests {
     fn icons_past_the_budget_are_freed_oldest_first() {
         let count = ART_BYTES_KEPT / rgba_bytes(128, 128) + 40;
         let infos: Vec<TitleInfo> = (0..count)
-            .map(|n| TitleInfo { id: format!("PCSA{n:05}"), title: format!("T {n}"), platform: "vita".into(), adrenaline: false, console: None })
+            .map(|n| TitleInfo { id: format!("PCSA{n:05}"), title: format!("T {n}"), platform: "vita".into(), adrenaline: false, console: None, ..Default::default() })
             .collect();
         let games = load_catalog(&infos);
         let (mut art, mut host, mut gfx) = (Art::default(), Recorder::default(), Gfx::new());
@@ -421,7 +421,7 @@ mod want_tests {
     #[test]
     fn icons_scrolled_past_are_taken_back() {
         let infos: Vec<TitleInfo> = (0..20)
-            .map(|n| TitleInfo { id: format!("PCSA{n:05}"), title: format!("T {n}"), platform: "vita".into(), adrenaline: false, console: None })
+            .map(|n| TitleInfo { id: format!("PCSA{n:05}"), title: format!("T {n}"), platform: "vita".into(), adrenaline: false, console: None, ..Default::default() })
             .collect();
         let games = load_catalog(&infos);
         let (mut art, mut host) = (Art::default(), Recorder::default());

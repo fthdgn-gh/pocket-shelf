@@ -41,14 +41,22 @@ struct Title {
     retro: Option<Retro>,
 }
 
-/// How RetroArch starts a game.
+/// A game from a playlist or Emu4Vita++'s favourites, and how RetroArch
+/// and Emu4Vita++ start it.
 struct Retro {
     /// The console's database name, which the guest groups games by.
     console: String,
-    /// The core's file name in RetroArch's app folder.
+    /// The core's file name in RetroArch's app folder; empty when RetroArch
+    /// cannot start it.
     core: String,
-    /// The content path RetroArch opens.
+    /// The Emu4Vita++ core that opens it; empty when none does.
+    emu: String,
+    /// The content path.
     path: String,
+    /// In Emu4Vita++'s favourites (read at each start, not saved in the list).
+    favourite: bool,
+    /// The box art Emu4Vita++ downloaded for a favourite; empty when none.
+    art: String,
 }
 
 /// A platform name from the list file, as the `'static` the table uses.
@@ -63,8 +71,10 @@ static mut CACHE: Option<Vec<Title>> = None;
 /// request took a visible share of each frame.
 static mut INDEX: Option<HashMap<String, usize>> = None;
 
-/// Replace the list in memory and its index.
+/// Replace the list in memory and its index, with Emu4Vita++'s favourites
+/// (`with_favourites`). Called on the host's threads, never in a frame.
 unsafe fn set_cache(list: Option<Vec<Title>>) {
+    let list = list.map(with_favourites);
     INDEX = list
         .as_ref()
         .map(|titles| titles.iter().enumerate().map(|(index, item)| (item.title_id.clone(), index)).collect());
@@ -194,12 +204,13 @@ fn entry_count(root: &str) -> u32 {
 
 fn scan() -> Vec<Title> {
     SCAN_DONE.store(0, Ordering::Relaxed);
+    let emu = crate::platform::emu4vita::Install::find(crate::platform::emu4vita::Roots::vita());
     SCAN_TOTAL.store(
         entry_count(APP_ROOT)
             + entry_count(SYSTEM_ROOT)
             + 1
             + crate::platform::pspemu::item_count()
-            + crate::platform::retroarch::item_count(&crate::platform::retroarch::Roots::vita()),
+            + crate::platform::retroarch::item_count(&crate::platform::retroarch::Roots::vita(), emu.as_ref()),
         Ordering::Relaxed,
     );
     let mut titles = Vec::new();
@@ -231,9 +242,10 @@ fn scan() -> Vec<Title> {
             retro: None,
         });
     }
-    // RetroArch's playlists, read last: one step per playlist file.
+    // The playlists RetroArch and Emu4Vita++ read, last: one step per
+    // playlist file.
     scan_phase("retro");
-    let found = crate::platform::retroarch::scan(&crate::platform::retroarch::Roots::vita(), &mut scan_step);
+    let found = crate::platform::retroarch::scan(&crate::platform::retroarch::Roots::vita(), emu.as_ref(), &mut scan_step);
     unsafe {
         RETRO_REPORT = found.report;
     }
@@ -244,7 +256,14 @@ fn scan() -> Vec<Title> {
             platform: "retro",
             adrenaline: false,
             image: None,
-            retro: Some(Retro { console: game.console, core: game.core, path: game.path }),
+            retro: Some(Retro {
+                console: game.console,
+                core: game.core,
+                emu: game.emu,
+                path: game.path,
+                favourite: false,
+                art: String::new(),
+            }),
         });
     }
     titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
@@ -304,19 +323,101 @@ fn is_system(title_id: &str) -> bool {
 
 /// What the last scan found in RetroArch's playlists; empty before a scan.
 static mut RETRO_REPORT: String = String::new();
+/// What this start found of Emu4Vita++ and its favourites.
+static mut EMU_REPORT: String = String::new();
 
-/// What the last scan found in RetroArch's playlists (`retroarch::scan`).
+/// What the last scan found in the playlists (`retroarch::scan`), and this
+/// start's Emu4Vita++ favourites (`emu4vita::favourites`).
 pub unsafe fn retro_report() -> String {
-    RETRO_REPORT.clone()
+    [RETRO_REPORT.clone(), EMU_REPORT.clone()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(",")
+}
+
+/// `titles` with Emu4Vita++'s favourites: a listed game's file is marked,
+/// another file is added as a game of its own, in name order. Read at each
+/// start (a handful of small files), since the user adds favourites in
+/// Emu4Vita++ between starts; the saved list never holds them.
+fn with_favourites(mut titles: Vec<Title>) -> Vec<Title> {
+    use crate::platform::emu4vita;
+    let Some(emu) = emu4vita::Install::find(emu4vita::Roots::vita()) else {
+        unsafe {
+            EMU_REPORT = String::from("Emu4Vita=notInstalled");
+        }
+        return titles;
+    };
+    let (favourites, report) = emu4vita::favourites(&emu);
+    unsafe {
+        EMU_REPORT = report;
+    }
+    if favourites.is_empty() {
+        return titles;
+    }
+    let mut by_path: HashMap<String, usize> = titles
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| item.retro.as_ref().map(|retro| (emu4vita::path_key(&retro.path), index)))
+        .collect();
+    let mut ids: std::collections::HashSet<String> = titles.iter().map(|item| item.title_id.clone()).collect();
+    let retroarch = crate::platform::retroarch::Roots::vita();
+    let retroarch_installed = retroarch.installed();
+    for favourite in favourites {
+        let key = emu4vita::path_key(&favourite.path);
+        if let Some(retro) = by_path.get(&key).and_then(|&index| titles[index].retro.as_mut()) {
+            retro.favourite = true;
+            if retro.emu.is_empty() {
+                retro.emu = favourite.core;
+            }
+            if retro.art.is_empty() {
+                retro.art = favourite.art;
+            }
+            continue;
+        }
+        let id = crate::platform::retroarch::game_id(&favourite.path);
+        if !ids.insert(id.clone()) {
+            continue;
+        }
+        // RetroArch opens it too when it has the same core.
+        let core = Some(&favourite.path)
+            .filter(|path| retroarch_installed && !path.contains('&'))
+            .and_then(|_| crate::platform::retroarch::core_file(&retroarch, &format!("app0:/{}_libretro.self", favourite.core)))
+            .filter(|core| crate::platform::retroarch::launch_uri(core, &favourite.path).len() <= crate::platform::retroarch::URI_MAX)
+            .unwrap_or_default();
+        let item = Title {
+            title_id: id,
+            title: favourite.title,
+            platform: "retro",
+            adrenaline: false,
+            image: None,
+            retro: Some(Retro {
+                console: favourite.console,
+                core,
+                emu: favourite.core,
+                path: favourite.path,
+                favourite: true,
+                art: favourite.art,
+            }),
+        };
+        // In the scan's order: by lowercase name, then id.
+        let name = item.title.to_lowercase();
+        let at = titles.partition_point(|other| (other.title.to_lowercase(), &other.title_id) < (name.clone(), &item.title_id));
+        // Places after `at` moved one along.
+        for place in by_path.values_mut() {
+            if *place >= at {
+                *place += 1;
+            }
+        }
+        by_path.insert(key, at);
+        titles.insert(at, item);
+    }
+    titles
 }
 
 /// First line of the list file. A file that starts otherwise is scanned over.
 /// Version 2 added PSM titles, version 3 PSP and PS1 titles and the platform
 /// column, version 4 the launch column, version 5 the image column, version 6
-/// RetroArch games (the `retroarch` launch and the console and core columns);
-/// an older list is scanned over.
+/// RetroArch games (the `retroarch` launch and the console and core columns),
+/// version 7 the Emu4Vita++ core column; an older list is scanned over.
 #[cfg(feature = "data-fs")]
-const LIST_HEADER: &str = "pocket-shelf titles 6";
+const LIST_HEADER: &str = "pocket-shelf titles 7";
 
 /// Where the list is kept: the data folder, as Pocket Shelf 0.1 kept it.
 #[cfg(feature = "data-fs")]
@@ -325,11 +426,13 @@ fn list_path() -> String {
 }
 
 /// The saved list: the header, then one
-/// `<title id><TAB><platform><TAB><launch><TAB><path><TAB><console><TAB><core><TAB><title>`
-/// line per title in scan order. Launch is `uri`, `adrenaline` or `retroarch`.
-/// Path is a disc image's path under the memory stick, or a RetroArch game's
-/// content path, else empty. Console and core are a RetroArch game's, else
-/// empty. None when there is no usable file.
+/// `<title id><TAB><platform><TAB><launch><TAB><path><TAB><console><TAB><core><TAB><emu core><TAB><title>`
+/// line per title in scan order. Launch is `uri`, `adrenaline` or `retroarch`
+/// (a playlist game). Path is a disc image's path under the memory stick, or
+/// a playlist game's content path, else empty. Console, core (RetroArch's)
+/// and emu core (Emu4Vita++'s) are a playlist game's, else empty; such a
+/// game has at least one of the two cores. None when there is no usable
+/// file.
 #[cfg(feature = "data-fs")]
 fn load_list() -> Option<Vec<Title>> {
     parse_list(&fs::read_to_string(list_path()).ok()?)
@@ -344,10 +447,10 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
     }
     let mut titles = Vec::new();
     for line in lines {
-        let mut fields = line.splitn(7, '\t');
+        let mut fields = line.splitn(8, '\t');
         let (id, platform, launch) = (fields.next()?, platform_named(fields.next()?)?, fields.next()?);
         let path = Some(fields.next()?).filter(|path| !path.is_empty()).map(String::from);
-        let (console, core, title) = (fields.next()?, fields.next()?, fields.next()?);
+        let (console, core, emu, title) = (fields.next()?, fields.next()?, fields.next()?, fields.next()?);
         if !valid_title_id(id) || title.is_empty() {
             return None;
         }
@@ -356,10 +459,18 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
             "adrenaline" => (true, path, None),
             "retroarch" => {
                 let path = path?;
-                if console.is_empty() || core.is_empty() {
+                if console.is_empty() || (core.is_empty() && emu.is_empty()) {
                     return None;
                 }
-                (false, None, Some(Retro { console: String::from(console), core: String::from(core), path }))
+                let retro = Retro {
+                    console: String::from(console),
+                    core: String::from(core),
+                    emu: String::from(emu),
+                    path,
+                    favourite: false,
+                    art: String::new(),
+                };
+                (false, None, Some(retro))
             }
             _ => return None,
         };
@@ -386,12 +497,12 @@ fn save_list(titles: &[Title]) {
         text.push('\t');
         text.push_str(item.platform);
         text.push('\t');
-        let (launch, path, console, core) = match (&item.retro, item.adrenaline) {
-            (Some(retro), _) => ("retroarch", retro.path.as_str(), retro.console.as_str(), retro.core.as_str()),
-            (None, true) => ("adrenaline", item.image.as_deref().unwrap_or(""), "", ""),
-            (None, false) => ("uri", item.image.as_deref().unwrap_or(""), "", ""),
+        let (launch, path, console, core, emu) = match (&item.retro, item.adrenaline) {
+            (Some(retro), _) => ("retroarch", retro.path.as_str(), retro.console.as_str(), retro.core.as_str(), retro.emu.as_str()),
+            (None, true) => ("adrenaline", item.image.as_deref().unwrap_or(""), "", "", ""),
+            (None, false) => ("uri", item.image.as_deref().unwrap_or(""), "", "", ""),
         };
-        for field in [launch, path, console, core] {
+        for field in [launch, path, console, core, emu] {
             text.push_str(field);
             text.push('\t');
         }
@@ -614,6 +725,11 @@ pub unsafe fn infos() -> Vec<shelf_core::host::TitleInfo> {
             platform: String::from(item.platform),
             adrenaline: item.adrenaline,
             console: item.retro.as_ref().map(|retro| retro.console.clone()),
+            opens: item.retro.as_ref().map_or_else(Default::default, |retro| shelf_core::host::Emulators {
+                retroarch: !retro.core.is_empty(),
+                emu4vita: !retro.emu.is_empty(),
+            }),
+            emu_favorite: item.retro.as_ref().is_some_and(|retro| retro.favourite),
         })
         .collect()
 }
@@ -627,10 +743,10 @@ struct Launch {
     /// Adrenaline started for a title without a bubble: its boot request
     /// (`pspemu::request_boot`) is deleted when the system refuses the launch.
     adrenaline: bool,
-    /// RetroArch started with a game: a RetroArch still running is closed
-    /// first, since a running app is brought back as it was and does not read
-    /// the new request's parameters.
-    retroarch: bool,
+    /// RetroArch or Emu4Vita++ started with a game: that app, when still
+    /// running, is closed first, since a running app is brought back as it
+    /// was and does not read the new request's parameters.
+    close: Option<&'static core::ffi::CStr>,
 }
 
 static mut LAUNCHED: Option<Launch> = None;
@@ -639,7 +755,8 @@ static mut LAUNCHED: Option<Launch> = None;
 /// frame. Only ids found by the scan are accepted, so the URI is never built
 /// from guest-controlled text. Returns whether the id was accepted; the system
 /// gets the request in `finish_launch`.
-pub unsafe fn launch(title_id: &str) -> bool {
+pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>) -> bool {
+    use shelf_core::host::Emulator;
     if !valid_title_id(title_id) {
         return false;
     }
@@ -653,12 +770,25 @@ pub unsafe fn launch(title_id: &str) -> bool {
             return false;
         }
     }
-    let retro = listed.retro.as_ref();
-    let (uri, flags, repeat) = if let Some(retro) = retro {
-        if !crate::platform::retroarch::Roots::vita().installed() {
-            return false;
+    let mut close = None;
+    let (uri, flags, repeat) = if let Some(retro) = listed.retro.as_ref() {
+        match with {
+            Some(Emulator::RetroArch) if !retro.core.is_empty() => {
+                if !crate::platform::retroarch::Roots::vita().installed() {
+                    return false;
+                }
+                close = Some(c"RETROVITA");
+                (crate::platform::retroarch::launch_uri(&retro.core, &retro.path), LAUNCH_FLAGS, true)
+            }
+            Some(Emulator::Emu4Vita) if !retro.emu.is_empty() => {
+                if !crate::platform::emu4vita::Roots::vita().installed() {
+                    return false;
+                }
+                close = Some(c"EMU4VPLUS");
+                (crate::platform::emu4vita::launch_uri(&retro.emu, &retro.path), LAUNCH_FLAGS, true)
+            }
+            _ => return false,
         }
-        (crate::platform::retroarch::launch_uri(&retro.core, &retro.path), LAUNCH_FLAGS, true)
     } else if adrenaline {
         (format!("psgm:play?titleid={}", crate::platform::pspemu::ADRENALINE_ID), LAUNCH_FLAGS, true)
     } else if is_system(title_id) {
@@ -672,7 +802,7 @@ pub unsafe fn launch(title_id: &str) -> bool {
     let Ok(uri) = CString::new(uri) else {
         return false;
     };
-    LAUNCHED = Some(Launch { uri, flags, repeat, adrenaline, retroarch: retro.is_some() });
+    LAUNCHED = Some(Launch { uri, flags, repeat, adrenaline, close });
     true
 }
 
@@ -683,7 +813,7 @@ pub(crate) unsafe fn launch_unlisted(title_id: &str) -> bool {
     let Ok(uri) = CString::new(format!("psgm:play?titleid={title_id}")) else {
         return false;
     };
-    LAUNCHED = Some(Launch { uri, flags: LAUNCH_FLAGS, repeat: true, adrenaline: false, retroarch: false });
+    LAUNCHED = Some(Launch { uri, flags: LAUNCH_FLAGS, repeat: true, adrenaline: false, close: None });
     true
 }
 
@@ -702,8 +832,8 @@ pub unsafe fn finish_launch() {
     let Some(launch) = LAUNCHED.take() else {
         return;
     };
-    if launch.retroarch {
-        close_retroarch();
+    if let Some(name) = launch.close {
+        close_app(name);
     }
     let code = vitasdk_sys::sceAppMgrLaunchAppByUri(launch.flags, launch.uri.as_ptr());
     if code < 0 {
@@ -724,16 +854,16 @@ pub unsafe fn finish_launch() {
     vitasdk_sys::sceKernelExitProcess(0);
 }
 
-/// Close RetroArch when it is running, and wait up to a second for it to be
-/// gone. Called right before a request that starts it with a game.
-unsafe fn close_retroarch() {
-    let name = c"RETROVITA";
+/// Close an app (RetroArch, Emu4Vita++) when it is running, and wait up to
+/// a second for it to be gone. Called right before a request that starts it
+/// with a game.
+unsafe fn close_app(name: &core::ffi::CStr) {
     let mut pid: vitasdk_sys::SceUID = 0;
     if vitasdk_sys::sceAppMgrGetIdByName(&mut pid, name.as_ptr()) < 0 {
         return;
     }
     let code = vitasdk_sys::sceAppMgrDestroyAppByName(name.as_ptr());
-    crate::platform::vita_log(format_args!("[installed] RetroArch was running; close: {:#x}", code as u32));
+    crate::platform::vita_log(format_args!("[installed] {name:?} was running; close: {:#x}", code as u32));
     for _ in 0..100 {
         if vitasdk_sys::sceAppMgrGetIdByName(&mut pid, name.as_ptr()) < 0 {
             return;
@@ -750,6 +880,18 @@ fn retro_thumbnails(item: &Title, kinds: &[&str]) -> Vec<String> {
     static DIR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     let dir = DIR.get_or_init(|| crate::platform::retroarch::thumbnail_dir(&crate::platform::retroarch::Roots::vita()));
     let mut paths = crate::platform::retroarch::thumbnail_paths(dir, &retro.console, &item.title, kinds);
+    if kinds.contains(&"Named_Boxarts") && !retro.art.is_empty() {
+        // Emu4Vita++'s download of a favourite's box art, after RetroArch's.
+        paths.push(retro.art.clone());
+    }
+    if kinds.contains(&"Named_Snaps") {
+        // A picture beside the file, which Emu4Vita++ shows as its preview:
+        // `<folder>/.previews/<file name without extension>.png`.
+        if let Some((folder, file)) = retro.path.rsplit_once('/') {
+            let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem);
+            paths.push(format!("{folder}/.previews/{stem}.png"));
+        }
+    }
     paths.retain(|path| path.rsplit_once('/').is_some_and(|(folder, _)| folder_exists(folder)));
     paths
 }

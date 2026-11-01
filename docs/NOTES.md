@@ -9,7 +9,7 @@ PocketJS is in [`PLAN.md`](PLAN.md).
 ## What this is
 
 Pocket Shelf (Vita title id `POCKTSHLF`) is a PS Vita launcher for installed
-titles and RetroArch games, written in Rust (`core/`, `vita/`). Up to 0.1 it
+titles and RetroArch and Emu4Vita++ games, written in Rust (`core/`, `vita/`). Up to 0.1 it
 was a TypeScript app on PocketJS in a fork of that framework; 0.2.0 replaced
 it, kept its saved data, and the framework was removed from the repository.
 
@@ -95,9 +95,10 @@ cannot be driven. Evidence comes from the log and from files under
   once with `0xFFFFF`, from RetroFlow. Friends, Videos, Content Manager,
   Parental Controls and PS4 Link have no known URI and open their LiveArea.
   Confirmed on hardware.
-- **The title list is kept in `titles.tsv`** (header version 6: id,
-  platform, launch `uri`/`adrenaline`/`retroarch`, path, console, core,
-  title). A scan reads one `param.sfo` per title (about ten seconds for a
+- **The title list is kept in `titles.tsv`** (header version 7: id,
+  platform, launch `uri`/`adrenaline`/`retroarch`, path, console, RetroArch
+  core, Emu4Vita++ core, title; version 7 added the Emu4Vita++ column, so
+  the first start after the update scans again). A scan reads one `param.sfo` per title (about ten seconds for a
   hundred titles on hardware), so it runs on the first start and on
   "Rescan titles" only, on a worker thread; later starts read the list. A
   title installed or removed afterwards is not noticed until a rescan.
@@ -146,9 +147,37 @@ cannot be driven. Evidence comes from the log and from files under
   left out. `finish_launch` closes a running RetroArch first, since a running
   app comes back as it was. The user's 5,811 entries: 102 left out for `&`.
   NES launches confirmed on hardware.
+- **Emu4Vita++** (`emu4vita.rs`, noword/Emu4VitaPlus, title id
+  `EMU4VPLUS`): one app with every core as `app0:eboot_<core>.self`. **Its
+  core picker reads a launch URI** since June 2026 (release 0.81):
+  `psgm:play?titleid=EMU4VPLUS&core=<core>&rom=<path>` (`arch/source/main.cpp`)
+  runs the core with `--rom <path>`; each value ends at `&` and is then
+  percent-decoded with `+` as a space, so the path goes with `%`, `&` and
+  `+` escaped, and a path with `&` works. The core-only VPKs
+  (`StandAlones.7z`) read no URI. **It writes no playlists**: it reads
+  RetroArch's on `ux0:` (the folder `retroarch.cfg` names), its own
+  `ux0:/data/EMU4VITAPLUS/playlists` and RetroArch's on `uma0:` for names
+  only (`ra_lpl.cpp`). The scan reads the same three folders, RetroArch's
+  first so a file keeps the id it had, and gives each entry an Emu4Vita++
+  core: the RetroArch core of the same name, else its preferred core for the
+  console (`DATABASES`, copied from its core picker, `arch/source/app.cpp`).
+  A file listed twice under two spellings (`ux0:roms`, `ux0:/Roms`) is one
+  game (`path_key`). **Favourites** are per core in
+  `ux0:/data/EMU4VITAPLUS/<short name>/favourite.ini` (SimpleIni: `path`
+  folder, `name` file, `rom_name`); they are read at every start, after the
+  list (`with_favourites`), not saved in `titles.tsv`, and never written.
+  `finish_launch` closes a running Emu4Vita++ first. **Not yet confirmed on
+  hardware**: the launch URI, the favourites and the box art Emu4Vita++
+  downloads (`cache/thumbnails/<console>/<rom_name>.png`).
+- **Which app opens a game** both can open: SELECT ▸ Library ▸ Open games
+  with, and the editor's Open with per game, saved in `emulators.json`
+  (`EmulatorChoice`; RetroArch when absent). A game only one app opens uses
+  that app whatever the choice.
 - **Pictures for RetroArch games** are RetroArch's own thumbnails
   (`Named_Boxarts`, else `Named_Titles`, fitted into 128 px; backdrop
-  `Named_Snaps`), with `&*/:`"<>?\|` in the label as `_`.
+  `Named_Snaps`), with `&*/:`"<>?\|` in the label as `_`; then, for an
+  Emu4Vita++ favourite, the box art Emu4Vita++ downloaded, and for the
+  backdrop `<folder>/.previews/<file stem>.png`, Emu4Vita++'s preview.
 
 ## Launching
 

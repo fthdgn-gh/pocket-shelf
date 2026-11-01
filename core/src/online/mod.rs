@@ -115,7 +115,7 @@ mod tests {
     use crate::library::catalog::load_catalog;
 
     fn game(platform: &str, console: Option<&str>) -> Game {
-        load_catalog(&[TitleInfo { id: "ra0000001".into(), title: "T".into(), platform: platform.into(), adrenaline: false, console: console.map(String::from) }])
+        load_catalog(&[TitleInfo { id: "ra0000001".into(), title: "T".into(), platform: platform.into(), adrenaline: false, console: console.map(String::from), ..Default::default() }])
             .remove(0)
     }
 

@@ -62,6 +62,8 @@ fn sample_titles() -> Vec<TitleInfo> {
             // PSP and PS1 games started through Adrenaline.
             adrenaline: matches!(id, "ULUS10041" | "SCUS94163"),
             console: (!console.is_empty()).then(|| console.into()),
+            opens: shelf_core::host::Emulators { retroarch: platform == "retro", emu4vita: false },
+            emu_favorite: false,
         })
         .collect();
     for index in 0..120 {
@@ -71,6 +73,7 @@ fn sample_titles() -> Vec<TitleInfo> {
             platform: "vita".into(),
             adrenaline: false,
             console: None,
+            ..Default::default()
         });
     }
     titles
@@ -420,6 +423,30 @@ impl FakeHost {
                 platform: "retro".into(),
                 adrenaline: false,
                 console: Some(consoles[n % consoles.len()].into()),
+                opens: shelf_core::host::Emulators { retroarch: true, emu4vita: false },
+                emu_favorite: false,
+            });
+        }
+        self
+    }
+
+    /// Emu4Vita++ installed: two Game Boy Advance games, one both apps open
+    /// and one only Emu4Vita++ opens, in its favourites.
+    pub fn with_emu4vita(mut self) -> Self {
+        use shelf_core::host::Emulators;
+        let gba = "Nintendo - Game Boy Advance";
+        for (id, title, opens, emu_favorite) in [
+            ("ra0gba001", "Wing Raider Advance (USA)", Emulators { retroarch: true, emu4vita: true }, false),
+            ("ra0gba002", "Pocket Garden (Europe)", Emulators { retroarch: false, emu4vita: true }, true),
+        ] {
+            self.titles.push(TitleInfo {
+                id: id.into(),
+                title: title.into(),
+                platform: "retro".into(),
+                console: Some(gba.into()),
+                opens,
+                emu_favorite,
+                ..Default::default()
             });
         }
         self
@@ -682,10 +709,13 @@ impl Host for FakeHost {
         self.log.push(line.into());
     }
 
-    fn launch(&mut self, id: &str) -> bool {
+    fn launch(&mut self, id: &str, with: Option<shelf_core::host::Emulator>) -> bool {
         let known = self.index(id).is_some();
         if known {
             self.launched.push(id.into());
+            if let Some(app) = with {
+                self.log.push(format!("launch with {}", app.name()));
+            }
         }
         known
     }

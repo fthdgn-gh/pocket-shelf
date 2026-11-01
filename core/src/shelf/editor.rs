@@ -17,10 +17,33 @@ use crate::library::settings::ScrapeSource;
 use crate::shapes::Symbol;
 use crate::text::Role;
 
-/// Editor rows: favorite, category, title, box art, backdrop, find artwork,
-/// reset.
-pub(super) const EDITOR_ROWS: usize = 7;
-const FIND_ART_ROW: usize = 5;
+/// The editor's rows, in order (`editor_rows`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Row {
+    Favorite,
+    Category,
+    /// The app that starts the game; only for a game both RetroArch and
+    /// Emu4Vita++ open.
+    OpenWith,
+    Title,
+    BoxArt,
+    Backdrop,
+    FindArt,
+    Reset,
+}
+
+/// The rows for a title: Open with only when both apps can start it.
+pub(super) fn editor_rows(game: &crate::library::catalog::Game) -> Vec<Row> {
+    use Row::*;
+    let mut rows = vec![Favorite, Category, OpenWith, Title, BoxArt, Backdrop, FindArt, Reset];
+    if !game.opens.both() {
+        rows.retain(|row| *row != OpenWith);
+    }
+    rows
+}
+
+/// Editor rows shown at once; with Open with the list scrolls.
+const EDITOR_VISIBLE: usize = 7;
 /// Room for a value beside its label.
 const VALUE_W: f32 = 320.0;
 /// Picker rows shown at once.
@@ -148,19 +171,29 @@ impl Shelf {
         self.editor.as_ref().and_then(|e| self.library.game(&e.id)).cloned()
     }
 
+    /// The edited title's rows; none when no title is edited.
+    pub(super) fn editor_row_list(&self) -> Vec<Row> {
+        self.editor_game().map(|game| editor_rows(&game)).unwrap_or_default()
+    }
+
     pub(super) fn editor_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool) {
         use super::navigation::{Direction, Step as Nav};
+        let rows = self.editor_row_list();
         let Some(editor) = &mut self.editor else { return };
-        let row = editor.row;
+        let count = rows.len().max(1);
+        editor.row = editor.row.min(count - 1);
+        let at = editor.row;
+        let row = rows.get(at).copied().unwrap_or(Row::Reset);
         match step {
-            Some(Nav::Press(Direction::Up)) | Some(Nav::Repeat(Direction::Up, _)) => editor.row = (row + EDITOR_ROWS - 1) % EDITOR_ROWS,
-            Some(Nav::Press(Direction::Down)) | Some(Nav::Repeat(Direction::Down, _)) => editor.row = (row + 1) % EDITOR_ROWS,
+            Some(Nav::Press(Direction::Up)) | Some(Nav::Repeat(Direction::Up, _)) => editor.row = (at + count - 1) % count,
+            Some(Nav::Press(Direction::Down)) | Some(Nav::Repeat(Direction::Down, _)) => editor.row = (at + 1) % count,
             Some(Nav::Press(Direction::Left)) | Some(Nav::Press(Direction::Right)) => {
                 let delta = if matches!(step, Some(Nav::Press(Direction::Left))) { -1 } else { 1 };
                 match row {
-                    0 => self.toggle_favorite(host),
-                    1 => self.change_game_category(host, delta),
-                    FIND_ART_ROW => self.change_scraper(host, delta),
+                    Row::Favorite => self.toggle_favorite(host),
+                    Row::Category => self.change_game_category(host, delta),
+                    Row::OpenWith => self.change_open_with(host, delta),
+                    Row::FindArt => self.change_scraper(host, delta),
                     _ => {}
                 }
             }
@@ -168,21 +201,37 @@ impl Shelf {
         }
         if confirm {
             match row {
-                0 => self.toggle_favorite(host),
-                1 => self.change_game_category(host, 1),
-                2 => {
+                Row::Favorite => self.toggle_favorite(host),
+                Row::Category => self.change_game_category(host, 1),
+                Row::OpenWith => self.change_open_with(host, 1),
+                Row::Title => {
                     let title = self.editor_game().map(|g| g.title.to_string()).unwrap_or_default();
                     self.open_keyboard(keyboard::Target::Title, &title);
                 }
-                3 => self.open_picker(host, false),
-                4 => self.open_picker(host, true),
-                FIND_ART_ROW => self.start_online(host),
-                _ => self.reset_game(host),
+                Row::BoxArt => self.open_picker(host, false),
+                Row::Backdrop => self.open_picker(host, true),
+                Row::FindArt => self.start_online(host),
+                Row::Reset => self.reset_game(host),
             }
         } else if cancel {
             self.editor = None;
             self.after_change();
         }
+    }
+
+    /// The edited title's app: the menu's choice, RetroArch, Emu4Vita++.
+    /// Saved in `emulators.json`.
+    fn change_open_with(&mut self, host: &mut dyn Host, delta: i32) {
+        use crate::library::settings::{Emulator, EMULATORS_FILE};
+        let Some(game) = self.editor_game() else { return };
+        let choices = [None, Some(Emulator::RetroArch), Some(Emulator::Emu4Vita)];
+        let titles = &mut self.settings.emulators.titles;
+        let now = titles.get(&*game.id).copied();
+        match super::cycle_by(&choices, now, delta) {
+            Some(app) => titles.insert(game.id.to_string(), app),
+            None => titles.remove(&*game.id),
+        };
+        host.write(EMULATORS_FILE, self.settings.emulators.render().as_bytes());
     }
 
     /// Add the edited title to "Favorites" or take it out.
@@ -218,12 +267,16 @@ impl Shelf {
         self.persist(host);
     }
 
-    /// Back to the title's defaults; the favorite mark stays.
+    /// Back to the title's defaults, its app the menu's choice again; the
+    /// favorite mark stays.
     fn reset_game(&mut self, host: &mut dyn Host) {
         let Some(game) = self.editor_game() else { return };
         let favorite = game.favorite;
         self.library.patch(&game.id, |c| *c = crate::library::overrides::TitleOverride { favorite, ..Default::default() });
         self.save_overrides(host);
+        if self.settings.emulators.titles.remove(&*game.id).is_some() {
+            host.write(crate::library::settings::EMULATORS_FILE, self.settings.emulators.render().as_bytes());
+        }
         self.after_change();
         let done = self.t().reset_done;
         if let Some(editor) = &mut self.editor {
@@ -274,20 +327,39 @@ impl Shelf {
             ScrapeSource::Libretro => "libretro",
         };
         let fit = |gfx: &mut Gfx, text: &str| gfx.fit(Role::BodyBold, text, VALUE_W);
-        let rows: [(&str, String, Step); EDITOR_ROWS] = [
-            (t.favorite, (if game.favorite { t.on } else { t.off }).to_string(), Step::Both),
-            (t.category, category, Step::Both),
-            (t.title, fit(gfx, &game.title), Step::Right),
-            (t.box_art, fit(gfx, &art), Step::Right),
-            (t.backdrop, fit(gfx, &backdrop), Step::Right),
-            (t.find_art, scraper.to_string(), Step::Both),
-            (t.reset, String::new(), Step::None),
-        ];
+        let favorite = match (game.favorite, game.emu_favorite) {
+            (true, _) => t.on.to_string(),
+            (false, true) => fill(t.favorite_in, &[("app", crate::library::settings::Emulator::Emu4Vita.name())]),
+            (false, false) => t.off.to_string(),
+        };
+        let open_with = match self.settings.emulators.titles.get(&*game.id) {
+            Some(app) => app.name().to_string(),
+            None => {
+                let app = self.settings.emulators.pick("", game.opens).unwrap_or(self.settings.emulators.default);
+                fill(t.default_app, &[("app", app.name())])
+            }
+        };
+        let rows: Vec<(&str, String, Step)> = editor_rows(&game)
+            .into_iter()
+            .map(|r| match r {
+                Row::Favorite => (t.favorite, favorite.clone(), Step::Both),
+                Row::Category => (t.category, category.clone(), Step::Both),
+                Row::OpenWith => (t.open_with, open_with.clone(), Step::Both),
+                Row::Title => (t.title, fit(gfx, &game.title), Step::Right),
+                Row::BoxArt => (t.box_art, fit(gfx, &art), Step::Right),
+                Row::Backdrop => (t.backdrop, fit(gfx, &backdrop), Step::Right),
+                Row::FindArt => (t.find_art, scraper.to_string(), Step::Both),
+                Row::Reset => (t.reset, String::new(), Step::None),
+            })
+            .collect();
         let slide = self.drawer.at(self.now);
         let mut drawer = Drawer::open(gfx, &theme, &upper(t.editor_title, self.settings.language), panel::Size::Wide, slide);
         // Every row does something, Reset included.
         drawer.selectable = true;
-        for (i, (label, value, step)) in rows.iter().enumerate() {
+        // The highlight in the middle where it can be, as the menu scrolls.
+        let first = row.saturating_sub(EDITOR_VISIBLE / 2).min(rows.len().saturating_sub(EDITOR_VISIBLE));
+        drawer.index = first;
+        for (i, (label, value, step)) in rows.iter().enumerate().skip(first).take(EDITOR_VISIBLE) {
             let value = (!value.is_empty()).then_some(value.as_str());
             drawer.row(gfx, label, value, None, i == row, *step);
         }

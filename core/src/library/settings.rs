@@ -166,6 +166,75 @@ impl KeyboardKind {
     }
 }
 
+keyed!(
+    /// The app that starts a game both RetroArch and Emu4Vita++ can open.
+    Emulator { RetroArch = "retroarch", Emu4Vita = "emu4vita" }
+);
+
+/// Which app starts a game, a setting of its own (`emulators.json`): the
+/// choice for every game, and the titles the user chose otherwise for, by
+/// id: `{"default": "retroarch", "titles": {"ra1x2y3z4": "emu4vita"}}`.
+pub const EMULATORS_FILE: &str = "emulators.json";
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct EmulatorChoice {
+    pub default: Emulator,
+    pub titles: std::collections::BTreeMap<String, Emulator>,
+}
+
+impl Default for EmulatorChoice {
+    /// RetroArch, which started every game before Emu4Vita++ was read.
+    fn default() -> Self {
+        EmulatorChoice { default: Emulator::RetroArch, titles: Default::default() }
+    }
+}
+
+impl Emulator {
+    /// The app's name, the same in every language.
+    pub fn name(self) -> &'static str {
+        match self {
+            Emulator::RetroArch => "RetroArch",
+            Emulator::Emu4Vita => "Emu4Vita++",
+        }
+    }
+}
+
+impl EmulatorChoice {
+    /// The saved choice; the default for a missing or unusable file or value.
+    pub fn parse(bytes: &[u8]) -> EmulatorChoice {
+        let mut choice = EmulatorChoice::default();
+        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return choice };
+        if let Some(app) = raw.get("default").and_then(Value::as_str).and_then(Emulator::from_key) {
+            choice.default = app;
+        }
+        if let Some(titles) = raw.get("titles").and_then(Value::as_object) {
+            for (id, app) in titles {
+                if let Some(app) = app.as_str().and_then(Emulator::from_key) {
+                    choice.titles.insert(id.clone(), app);
+                }
+            }
+        }
+        choice
+    }
+
+    /// Two-space JSON and a newline, as the app's other files; titles by id.
+    pub fn render(&self) -> String {
+        let mut map = Map::new();
+        map.insert("default".into(), self.default.key().into());
+        let titles: Map<String, Value> = self.titles.iter().map(|(id, app)| (id.clone(), app.key().into())).collect();
+        map.insert("titles".into(), Value::Object(titles));
+        serde_json::to_string_pretty(&Value::Object(map)).expect("json") + "\n"
+    }
+
+    /// The app that starts `id`, which `opens` says can: the title's own
+    /// choice, else the default, else the one app that can. None for a
+    /// title neither app opens (an installed title).
+    pub fn pick(&self, id: &str, opens: crate::library::catalog::Emulators) -> Option<Emulator> {
+        let can = |app: Emulator| opens.has(app).then_some(app);
+        self.titles.get(id).copied().and_then(can).or_else(|| can(self.default)).or_else(|| Emulator::ALL.iter().copied().find_map(can))
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Settings {
     pub language: Language,
@@ -191,6 +260,8 @@ pub struct Settings {
     pub text_size: TextSize,
     /// Saved in its own file, `keyboard.json` (not rendered here).
     pub keyboard: KeyboardKind,
+    /// Saved in its own file, `emulators.json` (not rendered here).
+    pub emulators: EmulatorChoice,
 }
 
 impl Settings {
@@ -215,6 +286,7 @@ impl Settings {
             layout: StatusLayout::default(),
             text_size: TextSize::Normal,
             keyboard: KeyboardKind::Own,
+            emulators: EmulatorChoice::default(),
         }
     }
 
@@ -300,6 +372,30 @@ mod tests {
         assert_eq!(KeyboardKind::parse(KeyboardKind::Own.render().as_bytes()), KeyboardKind::Own);
         assert_eq!(KeyboardKind::parse(KeyboardKind::System.render().as_bytes()), KeyboardKind::System);
         assert_eq!(KeyboardKind::parse(b"nope"), KeyboardKind::Own);
+    }
+
+    #[test]
+    fn emulator_choices_round_trip_and_pick_an_app_that_can_open() {
+        use crate::library::catalog::Emulators;
+        let mut choice = EmulatorChoice::default();
+        assert_eq!(choice.render(), "{\n  \"default\": \"retroarch\",\n  \"titles\": {}\n}\n");
+        choice.default = Emulator::Emu4Vita;
+        choice.titles.insert("ra0000002".into(), Emulator::RetroArch);
+        assert_eq!(EmulatorChoice::parse(choice.render().as_bytes()), choice);
+        let parsed = EmulatorChoice::parse(br#"{"default": "nope", "titles": {"a": "emu4vita", "b": 3}}"#);
+        assert_eq!(parsed.default, Emulator::RetroArch);
+        assert_eq!(parsed.titles.len(), 1);
+        assert_eq!(EmulatorChoice::parse(b"nope"), EmulatorChoice::default());
+
+        let both = Emulators { retroarch: true, emu4vita: true };
+        let retroarch = Emulators { retroarch: true, emu4vita: false };
+        let emu4vita = Emulators { retroarch: false, emu4vita: true };
+        assert_eq!(choice.pick("ra0000001", both), Some(Emulator::Emu4Vita));
+        assert_eq!(choice.pick("ra0000002", both), Some(Emulator::RetroArch));
+        // A choice the game cannot follow falls to the app that can.
+        assert_eq!(choice.pick("ra0000001", retroarch), Some(Emulator::RetroArch));
+        assert_eq!(choice.pick("ra0000002", emu4vita), Some(Emulator::Emu4Vita));
+        assert_eq!(choice.pick("PCSA00069", Emulators::default()), None);
     }
 
     #[test]

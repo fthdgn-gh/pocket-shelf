@@ -22,7 +22,7 @@ pub const DATA: &str = "ux0:data/PocketShelf";
 fn writable(path: &str) -> bool {
     matches!(
         path,
-        "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "text-size.json" | "keyboard.json" | "plays.json" | "sort.json" | "steamgriddb.txt" | "update.json" | "update/version.txt"
+        "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "text-size.json" | "keyboard.json" | "emulators.json" | "plays.json" | "sort.json" | "steamgriddb.txt" | "update.json" | "update/version.txt"
     )
         || path.strip_prefix("titles/").is_some_and(|_| removable(path))
 }
@@ -449,8 +449,8 @@ impl Host for VitaHost {
         log_line(line);
     }
 
-    fn launch(&mut self, id: &str) -> bool {
-        unsafe { installed::launch(id) }
+    fn launch(&mut self, id: &str, with: Option<shelf_core::host::Emulator>) -> bool {
+        unsafe { installed::launch(id, with) }
     }
 
     fn plugin_state(&mut self) -> PluginState {

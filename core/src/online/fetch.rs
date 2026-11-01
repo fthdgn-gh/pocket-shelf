@@ -547,7 +547,7 @@ mod tests {
     use crate::library::testing::Files;
 
     fn game(id: &str, title: &str, platform: &str, console: Option<&str>) -> Game {
-        load_catalog(&[TitleInfo { id: id.into(), title: title.into(), platform: platform.into(), adrenaline: false, console: console.map(String::from) }]).remove(0)
+        load_catalog(&[TitleInfo { id: id.into(), title: title.into(), platform: platform.into(), adrenaline: false, console: console.map(String::from), ..Default::default() }]).remove(0)
     }
 
     #[test]
@@ -600,7 +600,7 @@ mod tests {
         fn request(&mut self, _: PictureKey) {}
         fn poll(&mut self, _: &mut Vec<Event>) {}
         fn log(&mut self, _: &str) {}
-        fn launch(&mut self, _: &str) -> bool {
+        fn launch(&mut self, _: &str, _: Option<crate::host::Emulator>) -> bool {
             true
         }
         fn plugin_state(&mut self) -> crate::host::PluginState {

@@ -132,7 +132,7 @@ impl Shelf {
         let Some(game) = self.selected_game().cloned() else { return };
         let title = gfx.fit(role, &game.title, width);
         let line = gfx.line_height(role);
-        let detail = (self.settings.detail == DetailLevel::Detailed).then(|| format!("{}  ·  {}", game.shown_id(), self.category_label(&game)));
+        let detail = (self.settings.detail == DetailLevel::Detailed).then(|| format!("{}  ·  {}", self.shown_id(&game), self.category_label(&game)));
         match left {
             Some(x) => {
                 gfx.text_top(role, x, top, theme.text, &title);
@@ -213,9 +213,10 @@ impl Shelf {
         let title = gfx.fit(Role::Display, &game.title, text_w);
         gfx.text_top(Role::Display, HOME_LEFT, y, theme.text, &title);
         y += gfx.line_height(Role::Display) + 8.0;
-        let mut parts = vec![game.platform.genre().to_string(), self.category_label(&game)];
+        let genre = if game.console.is_some() { self.shown_id(&game) } else { game.platform.genre() };
+        let mut parts = vec![genre.to_string(), self.category_label(&game)];
         if detail == DetailLevel::Detailed {
-            parts.push(game.shown_id().to_string());
+            parts.push(self.shown_id(&game).to_string());
         }
         let first = parts[0].clone();
         let line: Vec<String> = parts.into_iter().enumerate().filter(|(i, p)| *i == 0 || *p != first).map(|(_, p)| p).collect();
@@ -344,7 +345,7 @@ impl Shelf {
             gfx.text(role, row.x + 24.0 + 44.0 + 16.0, baseline, if selected { theme.text } else { theme.dim }, &title);
             if detailed {
                 let small = (y + LIST_ROW_H / 2.0 - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
-                gfx.text_right(Role::Small, row.right() - 24.0, small, if selected { theme.dim } else { theme.faint }, game.shown_id());
+                gfx.text_right(Role::Small, row.right() - 24.0, small, if selected { theme.dim } else { theme.faint }, self.shown_id(&game));
             }
         }
         gfx.clip(None);

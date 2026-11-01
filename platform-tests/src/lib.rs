@@ -9,6 +9,8 @@ pub mod accent;
 pub mod adrenaline_config;
 #[path = "../../vita/src/platform/dds.rs"]
 pub mod dds;
+#[path = "../../vita/src/platform/emu4vita.rs"]
+pub mod emu4vita;
 #[path = "../../vita/src/platform/iso.rs"]
 pub mod iso;
 #[path = "../../vita/src/platform/retroarch.rs"]

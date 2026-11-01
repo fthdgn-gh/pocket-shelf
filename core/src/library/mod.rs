@@ -303,7 +303,7 @@ impl Library {
         let mut list = match id {
             SEARCH_ID => return search::search(&self.games, &self.search_term, |g| (&g.title, &g.id)),
             RECENT_ID => return self.recent.iter().filter_map(|rid| self.games.iter().position(|g| *g.id == **rid)).collect(),
-            FAVORITES_ID => (0..self.games.len()).filter(|&i| self.games[i].favorite).collect(),
+            FAVORITES_ID => (0..self.games.len()).filter(|&i| self.games[i].in_favorites()).collect(),
             _ => self.by_category.get(id).cloned().unwrap_or_default(),
         };
         order::sort(&mut list, self.orders.get(id), |i| {
@@ -415,7 +415,7 @@ pub(crate) mod testing {
         fn request(&mut self, _: PictureKey) {}
         fn poll(&mut self, _: &mut Vec<Event>) {}
         fn log(&mut self, _: &str) {}
-        fn launch(&mut self, _: &str) -> bool {
+        fn launch(&mut self, _: &str, _: Option<crate::host::Emulator>) -> bool {
             true
         }
         fn plugin_state(&mut self) -> crate::host::PluginState {
@@ -433,7 +433,7 @@ mod tests {
     use super::*;
 
     fn info(id: &str, title: &str, platform: &str, console: Option<&str>) -> TitleInfo {
-        TitleInfo { id: id.into(), title: title.into(), platform: platform.into(), adrenaline: false, console: console.map(String::from) }
+        TitleInfo { id: id.into(), title: title.into(), platform: platform.into(), adrenaline: false, console: console.map(String::from), ..Default::default() }
     }
 
     fn library(files: &[(&str, &str)]) -> Library {
@@ -534,7 +534,7 @@ mod timing {
     fn rebuild_time() {
         let consoles = ["Nintendo - Nintendo Entertainment System", "Nintendo - Super Nintendo Entertainment System", "Sega - Mega Drive - Genesis", "MAME 2003-Plus", "Neo Geo"];
         let mut infos: Vec<TitleInfo> = (0..70)
-            .map(|i| TitleInfo { id: format!("PCSA{i:05}"), title: format!("Game {i}"), platform: "vita".into(), adrenaline: false, console: None })
+            .map(|i| TitleInfo { id: format!("PCSA{i:05}"), title: format!("Game {i}"), platform: "vita".into(), adrenaline: false, console: None, ..Default::default() })
             .collect();
         infos.extend((0..5709).map(|i| TitleInfo {
             id: format!("ra{i:07}"),
@@ -542,6 +542,7 @@ mod timing {
             platform: "retro".into(),
             adrenaline: false,
             console: Some(consoles[i % consoles.len()].into()),
+            ..Default::default()
         }));
         let mut host = Files::default();
         // As the user's data: 85 art files, 87 changed titles.

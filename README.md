@@ -2,7 +2,8 @@
 
 A launcher for the PS Vita. It lists the titles installed on the console
 (Vita games, homebrew, PlayStation Mobile, PSP and PS1 games, and system
-applications) and the games in your RetroArch playlists, in tabs. Each title
+applications) and the games in your RetroArch playlists and Emu4Vita++
+favourites, in tabs. Each title
 gets an icon and a backdrop, and it starts with one button press.
 
 Pocket Shelf is a native Rust app: it draws with vita2d, rasterizes its own
@@ -42,6 +43,10 @@ the colored tiles with initials stand in for game icons.
 - **RetroArch games** from RetroArch's own playlists, one tab per console.
   Each game starts straight into the core its playlist names, without
   RetroArch's menu (see [RetroArch](#retroarch)).
+- **[Emu4Vita++](https://github.com/noword/Emu4VitaPlus) games** from the
+  same playlists, its own playlist folder and its favourites. Games that both
+  apps can open start in the one you choose, for all games or per game (see
+  [Emu4Vita++](#emu4vita)).
 - **PSP and PS1 games through Adrenaline.** This covers EBOOTs in
   `PSP/GAME` and ISO and CSO images in `ISO`. Pocket Shelf boots the game with
   its own small VSH plugin, so you don't have to pick it in the XMB. Before it
@@ -141,6 +146,31 @@ else the playlist's default core, else an installed core for its console.
 - Games whose file path holds `&` are left out: RetroArch cuts its launch
   parameter there. Rename the file to bring the game in.
 - RetroArch's PlayStation and PSP games join the PSX and PSP tabs.
+
+### Emu4Vita++
+
+Install Emu4Vita++ 0.81 or later (`EMU4VPLUS`, the VPK with every core), then
+run **Rescan titles**. Pocket Shelf lists games from the places Emu4Vita++
+reads names from: RetroArch's playlists on `ux0:`, its own folder
+`ux0:/data/EMU4VITAPLUS/playlists`, and RetroArch's playlists on `uma0:`. A
+game starts in Emu4Vita++ with the core its playlist entry names when
+Emu4Vita++ has it, else with Emu4Vita++'s preferred core for the console.
+
+- **Open games with** (SELECT ▸ Library) picks the app for games both
+  RetroArch and Emu4Vita++ can open; **Open with** in a game's editor
+  (TRIANGLE) picks it for that game. A game only one app can open always
+  starts in that app.
+- **Favourites** you mark in Emu4Vita++ show in the Favorites tab, as games
+  of their own when no playlist lists them. Pocket Shelf reads them at each
+  start and never changes Emu4Vita++'s files: remove a favourite in
+  Emu4Vita++. The editor shows "In Emu4Vita++" for such a game; its own
+  Favorite mark works as for any title.
+- Paths with `&` work in Emu4Vita++, which RetroArch cannot start.
+- A favourite's box art is RetroArch's thumbnail, else the one Emu4Vita++
+  downloaded; a game's backdrop falls back to a PNG in the `.previews` folder
+  next to the file.
+- The core-only VPKs in Emu4Vita++'s `StandAlones.7z` cannot be started with a
+  game and are not used.
 
 ### SteamGridDB API key
 
@@ -246,6 +276,7 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `status-bar.json` | Which status items show, and on which side |
 | `text-size.json` | The text size |
 | `keyboard.json` | Which keyboard you type with |
+| `emulators.json` | The app that opens games both RetroArch and Emu4Vita++ can open, for all games and per game |
 | `sort.json` | Each tab's sort order |
 | `plays.json` | How often and when Pocket Shelf started each title |
 | `categories.json` | Your categories and their order |

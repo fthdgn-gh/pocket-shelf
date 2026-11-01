@@ -246,7 +246,7 @@ impl Shelf {
             return Some((picker.row, self.picker_count() + 2));
         }
         if let Some(editor) = &self.editor {
-            return Some((editor.row, super::editor::EDITOR_ROWS));
+            return Some((editor.row, self.editor_row_list().len().max(1)));
         }
         if let Some(manager) = &self.categories {
             return Some((manager.row, self.library.all_categories().len() + 1));
@@ -296,8 +296,11 @@ impl Shelf {
             self.picker_focus(row);
             return;
         }
-        if let Some(editor) = &mut self.editor {
-            editor.row = row.min(super::editor::EDITOR_ROWS - 1);
+        if self.editor.is_some() {
+            let count = self.editor_row_list().len().max(1);
+            if let Some(editor) = &mut self.editor {
+                editor.row = row.min(count - 1);
+            }
             return;
         }
         if self.categories.is_some() {

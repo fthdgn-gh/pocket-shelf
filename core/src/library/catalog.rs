@@ -12,6 +12,29 @@ pub const TINT_COUNT: usize = 6;
 /// The tints as `0xRRGGBB`, for a title whose icon gives no color.
 pub const TINT_COLORS: [u32; TINT_COUNT] = [0xf59e0b, 0x10b981, 0x3b82f6, 0x8b5cf6, 0xec4899, 0x06b6d4];
 
+/// The apps that can start a game from a playlist or Emu4Vita++'s
+/// favourites; neither for an installed title.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Emulators {
+    pub retroarch: bool,
+    pub emu4vita: bool,
+}
+
+impl Emulators {
+    pub fn has(self, app: crate::library::settings::Emulator) -> bool {
+        match app {
+            crate::library::settings::Emulator::RetroArch => self.retroarch,
+            crate::library::settings::Emulator::Emu4Vita => self.emu4vita,
+        }
+    }
+
+    /// Both apps can start it, so the user chooses (the editor's "Open
+    /// with").
+    pub fn both(self) -> bool {
+        self.retroarch && self.emu4vita
+    }
+}
+
 /// One title as the launcher shows it. The strings are shared (`Arc`): the
 /// library copies every title at each change, and a copy of a shared string
 /// is a count, not an allocation.
@@ -28,7 +51,12 @@ pub struct Game {
     pub adrenaline: bool,
     /// A RetroArch game's console database name (`Nintendo - Game Boy`).
     pub console: Option<Arc<str>>,
+    /// The apps that can start it.
+    pub opens: Emulators,
     pub favorite: bool,
+    /// In Emu4Vita++'s own favourites, which the "Favorites" tab lists too.
+    /// Read from its files at each start, never written.
+    pub emu_favorite: bool,
     /// Box art: a file name in `art/`.
     pub art: Option<String>,
     /// `art` was found by name, not chosen by the user.
@@ -41,13 +69,20 @@ pub struct Game {
 
 impl Game {
     /// The id the "Detailed" views show: "RetroArch" for a RetroArch game,
-    /// whose id is a hash.
+    /// whose id is a hash; "Emu4Vita++" for one only Emu4Vita++ opens.
     pub fn shown_id(&self) -> &str {
-        if self.console.is_some() {
-            Platform::Retro.genre()
-        } else {
+        if self.console.is_none() {
             &self.id
+        } else if self.opens.emu4vita && !self.opens.retroarch {
+            crate::library::settings::Emulator::Emu4Vita.name()
+        } else {
+            Platform::Retro.genre()
         }
+    }
+
+    /// In the "Favorites" tab: the user's own mark, or Emu4Vita++'s.
+    pub fn in_favorites(&self) -> bool {
+        self.favorite || self.emu_favorite
     }
 }
 
@@ -152,7 +187,9 @@ pub fn load_catalog(infos: &[TitleInfo]) -> Vec<Game> {
                 tint: (index % TINT_COUNT) as u8,
                 adrenaline: info.adrenaline,
                 console,
+                opens: info.opens,
                 favorite: false,
+                emu_favorite: info.emu_favorite,
                 art: None,
                 art_auto: false,
                 art_icon: false,
@@ -198,6 +235,7 @@ mod tests {
             platform: platform.into(),
             adrenaline: false,
             console: console.map(String::from),
+            ..Default::default()
         };
         let games = load_catalog(&[
             info("PCSA00069", "vita", None),

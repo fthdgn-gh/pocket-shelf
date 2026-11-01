@@ -23,8 +23,11 @@ pub struct Status {
 
 pub use crate::library::catalog::Game;
 
+pub use crate::library::catalog::Emulators;
+pub use crate::library::settings::Emulator;
+
 /// One installed title as the host lists it.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct TitleInfo {
     pub id: String,
     pub title: String,
@@ -35,6 +38,11 @@ pub struct TitleInfo {
     /// A RetroArch game's console: its database name from the playlist
     /// (`Nintendo - Game Boy`).
     pub console: Option<String>,
+    /// The apps that can start a game from a playlist or Emu4Vita++'s
+    /// favourites.
+    pub opens: Emulators,
+    /// In Emu4Vita++'s favourites.
+    pub emu_favorite: bool,
 }
 
 /// An RGBA picture.
@@ -308,8 +316,10 @@ pub trait Host {
     /// A line for the app's own log.
     fn log(&mut self, line: &str);
     /// Accept a launch of a listed title, sent once the frame that asked is
-    /// on screen (the platform's `finish_launch`); false when refused.
-    fn launch(&mut self, id: &str) -> bool;
+    /// on screen (the platform's `finish_launch`); false when refused. A
+    /// game from a playlist or Emu4Vita++'s favourites starts in `with`
+    /// (`EmulatorChoice::pick`); None for the rest.
+    fn launch(&mut self, id: &str, with: Option<Emulator>) -> bool;
     /// Adrenaline's boot plugin, checked before a title with no bubble
     /// starts.
     fn plugin_state(&mut self) -> PluginState;

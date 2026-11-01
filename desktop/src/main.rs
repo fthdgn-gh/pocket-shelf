@@ -57,6 +57,10 @@ fn retro() -> fake::FakeHost {
     fake::FakeHost::new().with_retro_library()
 }
 
+fn emu4vita() -> fake::FakeHost {
+    fake::FakeHost::new().with_emu4vita()
+}
+
 fn turkish() -> fake::FakeHost {
     fake::FakeHost::new().with_language("tr")
 }
@@ -274,6 +278,33 @@ const SHOTS: &[Shot] = &[
         ],
         setup: retro,
     },
+    // Emu4Vita++: the GBA tab (L twice from the first tab, past System);
+    // the Favorites tab with its favourite; the editor of a game both apps
+    // open (Open with set to Emu4Vita++, then scrolled to Reset), of the
+    // favourite (no Open with); SELECT > Library > Open games with.
+    Shot { name: "270-emu4vita-tab", script: &[(0, 4), (L, TAP), (0, TAP), (L, TAP), (0, SETTLE)], setup: emu4vita },
+    Shot { name: "271-emu4vita-favorites", script: &[(0, SETTLE)], setup: emu4vita },
+    Shot {
+        name: "272-emu4vita-open-with",
+        script: &[(0, 4), (L, TAP), (0, TAP), (L, TAP), (0, TAP), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)],
+        setup: emu4vita,
+    },
+    Shot {
+        name: "273-emu4vita-editor-scrolled",
+        script: &[(0, 4), (L, TAP), (0, TAP), (L, TAP), (0, TAP), (TRIANGLE, TAP), (0, TAP), (UP, TAP), (0, SETTLE)],
+        setup: emu4vita,
+    },
+    Shot {
+        name: "274-emu4vita-favorite-editor",
+        script: &[(0, 4), (L, TAP), (0, TAP), (L, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (TRIANGLE, TAP), (0, SETTLE)],
+        setup: emu4vita,
+    },
+    Shot {
+        name: "275-emu4vita-menu",
+        script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, SETTLE)],
+        setup: emu4vita,
+    },
+    Shot { name: "276-larger-emu4vita-menu", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, SETTLE)], setup: larger_turkish },
     // Velocity Run (PSP tab, second) starts through Adrenaline: the drawer
     // offers the plugin; confirm adds it and launches.
     shot("92-adrenaline-drawer", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, SETTLE)]),

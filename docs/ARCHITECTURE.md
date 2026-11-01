@@ -9,7 +9,7 @@ reads and writes that app's saved data unchanged.
 | `core/` | State and screens, text, shapes, themes, frame timing, the `Host` trait, the library (`core/src/library/`). No platform code; `cargo test` runs on the desktop. |
 | `desktop/` | A software rasterizer for the same draw commands, a fake `Host` with a sample library, a fake SteamGridDB, libretro, GitHub and updater, and scripted screenshots. |
 | `vita/` | `Host` on the Vita (title scan, picture decoding, file writes, downloads and the log on worker threads), the vita2d backend, the frame loop, the platform modules (`vita/src/platform/`), and the VPK's other files (`vita/package/`). |
-| `platform-tests/` | The Vita platform modules with no system calls (`accent`, `adrenaline_config`, `dds`, `iso`, `retroarch`, `seplugins`), included by path so their tests run on the desktop. |
+| `platform-tests/` | The Vita platform modules with no system calls (`accent`, `adrenaline_config`, `dds`, `emu4vita`, `iso`, `retroarch`, `seplugins`), included by path so their tests run on the desktop. |
 | `tools/` | `make art` draws the LiveArea pictures (`tiny-skia`, `fontdue`, a 256-color quantizer); `make updater` lays out the updater's package and its `head.bin`. |
 
 ## Drawing
@@ -81,7 +81,7 @@ titles over 40), with the same cases tested.
 **The Vita host writes `ux0:data/PocketShelf/` only for named files**:
 those with a round-trip test (`settings.json`, `categories.json`,
 `recent.json`, `titles.cache.json`, `titles/<id>.json`), `status-bar.json`,
-`text-size.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
+`text-size.json`, `emulators.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
 `vita/host.rs`), pictures in `art/` and `backdrops/`, and downloads to
 `libretro/` and `update/`; it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
 order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
@@ -162,7 +162,8 @@ download, the unpack and package check on a thread, then the updater app
 **Launching** (`launch_selected`): a title with no bubble first needs
 Adrenaline's boot plugin on, and the drawer offers to add it or turn it on;
 then `recent.json` and `settings.json` are written, the host accepts the id
-(`installed::launch`), and once the frame with the "Launching" line is on
+and, for a game from a playlist or Emu4Vita++'s favourites, the app that
+`EmulatorChoice::pick` gives (`installed::launch`), and once the frame with the "Launching" line is on
 screen the main loop sends the request and the process ends
 (`installed::finish_launch`). A launch the host rejects puts `recent.json`
 back. The VPK carries `psp/pocketshelf.prx`, which an Adrenaline launch
@@ -266,7 +267,7 @@ page, `80`–`82` saved data, `90` test titles, `91` launching, `92`–`93` the
 Adrenaline drawer, `100`–`105` the SELECT menu, `110`–`115` the keyboard and
 search, `120`–`134` the editor, pickers and category manager, `140`–`152`
 rescan and Diagnostics, `160`–`164` the status items' layout, `170`–`177`
-Find artwork, `180`–`186` Fetch and Clean up artwork, `190`–`196` updates,
+Find artwork, `180`–`186` Fetch and Clean up artwork, `190`–`196` updates, `270`–`276` Emu4Vita++ (its tab, the Favorites tab, Open with, the menu row),
 `64`–`66` Turkish and German.
 
 ## Timing

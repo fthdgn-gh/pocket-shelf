@@ -19,12 +19,19 @@
 //! RetroArch names after its database (`Nintendo - Game Boy.lpl`); that is
 //! also the folder its thumbnails are in.
 //!
+//! Emu4Vita++ (`emu4vita.rs`) reads the same playlists, its own playlist
+//! folder and RetroArch's on `uma0:`; with it installed, `scan` reads those
+//! folders too and gives each game the Emu4Vita++ core that opens it. A game
+//! is listed when either app can start it.
+//!
 //! This file uses std, serde_json and miniz_oxide only, so its tests run on
 //! the build machine: `make test` (platform-tests).
 
 use std::fs;
 use std::string::String;
 use std::vec::Vec;
+
+use super::emu4vita;
 
 /// RetroArch's title id on the Vita.
 pub const RETROARCH_ID: &str = "RETROVITA";
@@ -59,9 +66,12 @@ pub struct Game {
     pub title: String,
     /// The console's database name, `Nintendo - Super Nintendo Entertainment System`.
     pub console: String,
-    /// The core's file name in RetroArch's app folder, `snes9x_libretro.self`.
+    /// The core's file name in RetroArch's app folder, `snes9x_libretro.self`;
+    /// empty when RetroArch cannot start the game.
     pub core: String,
-    /// The content path RetroArch opens, as the playlist has it.
+    /// The Emu4Vita++ core that opens it, `snes9x`; empty when none does.
+    pub emu: String,
+    /// The content path, as the playlist has it.
     pub path: String,
 }
 
@@ -340,9 +350,9 @@ fn is_menu_playlist(stem: &str) -> bool {
     stem.starts_with("content_") || stem.starts_with("images_") || stem.starts_with("music_") || stem.starts_with("video_")
 }
 
-/// The `.lpl` files of the playlist folder, by name.
-fn playlist_files(roots: &Roots) -> Vec<String> {
-    let mut files: Vec<String> = fs::read_dir(playlist_dir(roots))
+/// The `.lpl` files of a playlist folder, by name.
+fn playlist_files(folder: &str) -> Vec<String> {
+    let mut files: Vec<String> = fs::read_dir(folder)
         .map(|entries| {
             entries
                 .flatten()
@@ -357,13 +367,25 @@ fn playlist_files(roots: &Roots) -> Vec<String> {
     files
 }
 
-/// How many steps `scan` reports: one per playlist file.
-pub fn item_count(roots: &Roots) -> u32 {
-    if roots.installed() {
-        playlist_files(roots).len() as u32
-    } else {
-        0
+/// The playlist folders `scan` reads, each once: RetroArch's, then those
+/// Emu4Vita++ reads besides it. None when neither app is installed.
+fn playlist_folders(roots: &Roots, emu: Option<&emu4vita::Install>) -> Vec<String> {
+    if !roots.installed() && emu.is_none() {
+        return Vec::new();
     }
+    let mut folders = vec![playlist_dir(roots)];
+    for folder in emu.map(emu4vita::Install::playlist_dirs).unwrap_or_default() {
+        let key = emu4vita::path_key(&folder);
+        if !folders.iter().any(|known| emu4vita::path_key(known) == key) {
+            folders.push(folder);
+        }
+    }
+    folders
+}
+
+/// How many steps `scan` reports: one per playlist file.
+pub fn item_count(roots: &Roots, emu: Option<&emu4vita::Install>) -> u32 {
+    playlist_folders(roots, emu).iter().map(|folder| playlist_files(folder).len() as u32).sum()
 }
 
 /// A value for a report entry: no `,` or `=`, which separate the entries.
@@ -384,92 +406,136 @@ fn title_of(entry: &Entry) -> String {
 }
 
 /// Read every playlist and list its games. `step` is called once per
-/// playlist file. An entry is left out when it names no file, when no core
-/// is found for it, when its path holds `&` (the stub cuts the parameter
-/// there), a tab or a line break, when its URI is longer than `URI_MAX`, or
-/// when an earlier playlist already listed the same file.
-pub fn scan(roots: &Roots, step: &mut dyn FnMut()) -> Scan {
-    if !roots.installed() {
+/// playlist file. An entry is left out when it names no file, when neither
+/// RetroArch nor Emu4Vita++ (when installed) has a core for it, when its path
+/// holds a tab or a line break, or when an earlier playlist already listed
+/// the same file (`emu4vita::path_key`); a later listing of a file adds the
+/// core the first one lacked. RetroArch does not get a path with `&` (its
+/// stub cuts the parameter there) or a URI longer than `URI_MAX`.
+pub fn scan(roots: &Roots, emu: Option<&emu4vita::Install>, step: &mut dyn FnMut()) -> Scan {
+    let retroarch = roots.installed();
+    if !retroarch && emu.is_none() {
         return Scan { games: Vec::new(), report: String::from("RetroArch=notInstalled") };
     }
-    let files = playlist_files(roots);
     let mut games: Vec<Game> = Vec::new();
-    // The content path of each id listed so far.
+    // Each listed file's place in `games`, and the content path of each id.
+    let mut places: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut listed: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut skips: Vec<String> = Vec::new();
     let mut skipped = 0usize;
     let mut unreadable = 0usize;
     let mut unreadable_first = String::new();
+    let mut playlists = 0usize;
     // Read only when an entry needs it: every core's info file.
     let mut cores: Option<Vec<CoreInfo>> = None;
-    let folder = playlist_dir(roots);
-    for file in &files {
-        step();
-        let stem = &file[..file.len() - 4];
-        let playlist = match read_playlist(&format!("{folder}/{file}")) {
-            Ok(playlist) => playlist,
-            Err(reason) => {
-                if unreadable == 0 {
-                    unreadable_first = format!("{} {reason}", report_value(file));
-                }
-                unreadable += 1;
-                continue;
-            }
-        };
-        let default_core = core_file(roots, &playlist.default_core);
-        for entry in &playlist.entries {
-            let mut skip = |reason: &str| {
-                skipped += 1;
-                if skips.len() < SKIPS_SHOWN {
-                    skips.push(format!("RetroArch skip={} {reason}", report_value(&title_of(entry))));
+    for folder in playlist_folders(roots, emu) {
+        let files = playlist_files(&folder);
+        playlists += files.len();
+        for file in &files {
+            step();
+            let stem = &file[..file.len() - 4];
+            let playlist = match read_playlist(&format!("{folder}/{file}")) {
+                Ok(playlist) => playlist,
+                Err(reason) => {
+                    if unreadable == 0 {
+                        unreadable_first = format!("{} {reason}", report_value(file));
+                    }
+                    unreadable += 1;
+                    continue;
                 }
             };
-            if entry.path.trim().is_empty() {
-                skip("noPath");
-                continue;
+            let default_core = if retroarch { core_file(roots, &playlist.default_core) } else { None };
+            for entry in &playlist.entries {
+                let mut skip = |reason: &str| {
+                    skipped += 1;
+                    if skips.len() < SKIPS_SHOWN {
+                        skips.push(format!("RetroArch skip={} {reason}", report_value(&title_of(entry))));
+                    }
+                };
+                if entry.path.trim().is_empty() {
+                    skip("noPath");
+                    continue;
+                }
+                if entry.path.contains(['\t', '\n', '\r']) {
+                    skip("pathChars");
+                    continue;
+                }
+                let console = {
+                    let db = entry.db_name.trim();
+                    let db = db.strip_suffix(".lpl").unwrap_or(db);
+                    String::from(if db.is_empty() { stem } else { db })
+                };
+                if console.contains(['\t', '\n', '\r']) {
+                    skip("consoleChars");
+                    continue;
+                }
+                let mut long = false;
+                let mut core = None;
+                if retroarch && !entry.path.contains('&') {
+                    let found = core_file(roots, &entry.core_path).or_else(|| default_core.clone()).or_else(|| {
+                        let cores = cores.get_or_insert_with(|| installed_cores(roots));
+                        cores
+                            .iter()
+                            .find(|core| core.databases.iter().any(|name| *name == console))
+                            .map(|core| core.file.clone())
+                    });
+                    long |= found.as_ref().is_some_and(|core| launch_uri(core, &entry.path).len() > URI_MAX);
+                    core = found.filter(|core| launch_uri(core, &entry.path).len() <= URI_MAX);
+                }
+                let named = emu4vita::retroarch_core_name(&entry.core_path)
+                    .or_else(|| emu4vita::retroarch_core_name(&playlist.default_core));
+                let found = emu.and_then(|emu| emu.core_for(named, &console));
+                long |= found.as_ref().is_some_and(|core| emu4vita::launch_uri(core, &entry.path).len() > emu4vita::URI_MAX);
+                let emu_core = found.filter(|core| emu4vita::launch_uri(core, &entry.path).len() <= emu4vita::URI_MAX);
+                if core.is_none() && emu_core.is_none() {
+                    skip(if long {
+                        "long"
+                    } else if entry.path.contains('&') {
+                        "pathChars"
+                    } else {
+                        "noCore"
+                    });
+                    continue;
+                }
+                let key = emu4vita::path_key(&entry.path);
+                if let Some(&place) = places.get(&key) {
+                    let known = &mut games[place];
+                    if known.core.is_empty() {
+                        known.core = core.unwrap_or_default();
+                    }
+                    if known.emu.is_empty() {
+                        known.emu = emu_core.unwrap_or_default();
+                    }
+                    skip("duplicate");
+                    continue;
+                }
+                let id = game_id(&entry.path);
+                if listed.contains_key(&id) {
+                    skip("idTaken");
+                    continue;
+                }
+                listed.insert(id.clone(), entry.path.clone());
+                places.insert(key, games.len());
+                games.push(Game {
+                    id,
+                    title: title_of(entry),
+                    console,
+                    core: core.unwrap_or_default(),
+                    emu: emu_core.unwrap_or_default(),
+                    path: entry.path.clone(),
+                });
             }
-            if entry.path.contains(['&', '\t', '\n', '\r']) {
-                skip("pathChars");
-                continue;
-            }
-            let console = {
-                let db = entry.db_name.trim();
-                let db = db.strip_suffix(".lpl").unwrap_or(db);
-                String::from(if db.is_empty() { stem } else { db })
-            };
-            if console.contains(['\t', '\n', '\r']) {
-                skip("consoleChars");
-                continue;
-            }
-            let core = core_file(roots, &entry.core_path).or_else(|| default_core.clone()).or_else(|| {
-                let cores = cores.get_or_insert_with(|| installed_cores(roots));
-                cores
-                    .iter()
-                    .find(|core| core.databases.iter().any(|name| *name == console))
-                    .map(|core| core.file.clone())
-            });
-            let Some(core) = core else {
-                skip("noCore");
-                continue;
-            };
-            if launch_uri(&core, &entry.path).len() > URI_MAX {
-                skip("long");
-                continue;
-            }
-            let id = game_id(&entry.path);
-            if let Some(known) = listed.get(&id) {
-                skip(if *known == entry.path { "duplicate" } else { "idTaken" });
-                continue;
-            }
-            listed.insert(id.clone(), entry.path.clone());
-            games.push(Game { id, title: title_of(entry), console, core, path: entry.path.clone() });
         }
     }
-    let mut report = format!(
-        "RetroArch playlists={},RetroArch titles={},RetroArch skipped={skipped}",
-        files.len(),
-        games.len()
-    );
+    let mut report = format!("RetroArch playlists={playlists},RetroArch titles={},RetroArch skipped={skipped}", games.len());
+    if !retroarch {
+        report.push_str(",RetroArch=notInstalled");
+    }
+    if emu.is_some() {
+        let both = games.iter().filter(|game| !game.core.is_empty() && !game.emu.is_empty()).count();
+        let emu_only = games.iter().filter(|game| game.core.is_empty()).count();
+        report.push_str(&format!(",Emu4Vita titles={},Emu4Vita only={emu_only}", both + emu_only));
+    }
     if unreadable > 0 {
         report.push_str(&format!(",RetroArch unreadable={unreadable},RetroArch firstUnreadable={unreadable_first}"));
     }
@@ -661,7 +727,7 @@ mod tests {
             ]}"#,
         );
         let mut steps = 0;
-        let scan = scan(&roots, &mut || steps += 1);
+        let scan = scan(&roots, None, &mut || steps += 1);
         assert_eq!(steps, 2);
         let core = |title: &str| scan.games.iter().find(|game| game.title == title).map(|game| game.core.clone());
         assert_eq!(core("Own").as_deref(), Some("bsnes_libretro.self"));
@@ -696,7 +762,7 @@ mod tests {
             ]}"#,
         );
         add_playlist(&roots, "content_history.lpl", r#"{"items": [{"path": "ux0:/x.gb", "core_path": "app0:/gambatte_libretro.self"}]}"#);
-        let scan = scan(&roots, &mut || {});
+        let scan = scan(&roots, None, &mut || {});
         let titles: Vec<&str> = scan.games.iter().map(|game| game.title.as_str()).collect();
         assert_eq!(titles, vec!["Ok"]);
         assert!(scan.report.starts_with("RetroArch playlists=2,RetroArch titles=1,RetroArch skipped=4"), "{}", scan.report);
@@ -717,7 +783,7 @@ mod tests {
             r#"{"items": [{"path": "ux0:/roms/gb/A.gb", "label": "A", "core_path": "DETECT"}]}"#,
         )
         .unwrap();
-        assert_eq!(scan(&roots, &mut || {}).games.len(), 1);
+        assert_eq!(scan(&roots, None, &mut || {}).games.len(), 1);
         assert_eq!(thumbnail_dir(&roots), format!("{}/thumbnails", roots.data));
     }
 
@@ -749,7 +815,7 @@ mod tests {
         add_core(&roots, "gambatte", "Nintendo - Game Boy");
         fs::write(format!("{}/playlists/Nintendo - Game Boy.lpl", roots.data), rzip(text.as_bytes(), 32)).unwrap();
         fs::write(format!("{}/playlists/Broken.lpl", roots.data), &zstd).unwrap();
-        let scan = scan(&roots, &mut || {});
+        let scan = scan(&roots, None, &mut || {});
         assert_eq!(scan.games.len(), 1);
         assert!(scan.report.contains("RetroArch unreadable=1,RetroArch firstUnreadable=Broken.lpl rzipZstd"), "{}", scan.report);
     }
@@ -806,11 +872,85 @@ mod tests {
         assert!(names.iter().any(|name| name == "Battleship (USA)"));
     }
 
+    /// Emu4Vita++ installed with `cores` beside `roots`.
+    fn add_emu4vita(roots: &Roots, cores: &[&str]) -> emu4vita::Install {
+        let base = std::path::Path::new(&roots.app).parent().unwrap().join("emu4vita");
+        let emu = emu4vita::Roots {
+            app: base.join("app").to_string_lossy().into_owned(),
+            data: base.join("data").to_string_lossy().into_owned(),
+            uma0_retroarch: base.join("uma0").to_string_lossy().into_owned(),
+        };
+        fs::create_dir_all(format!("{}/playlists", emu.data)).unwrap();
+        fs::create_dir_all(format!("{}/playlists", emu.uma0_retroarch)).unwrap();
+        fs::create_dir_all(&emu.app).unwrap();
+        fs::write(format!("{}/eboot.bin", emu.app), b"").unwrap();
+        for core in cores {
+            fs::write(format!("{}/eboot_{core}.self", emu.app), b"").unwrap();
+        }
+        emu4vita::Install::find(emu).unwrap()
+    }
+
+    #[test]
+    fn gives_games_the_emu4vita_core_and_reads_its_folders() {
+        let (_temp, roots) = setup("emu4vita");
+        add_core(&roots, "gpsp", "Nintendo - Game Boy Advance");
+        add_playlist(
+            &roots,
+            "Nintendo - Game Boy Advance.lpl",
+            r#"{"items": [
+              {"path": "ux0:/roms/gba/A.gba", "label": "A", "core_path": "app0:/gpsp_libretro.self"},
+              {"path": "ux0:/roms/gba/Tom & Jerry.gba", "label": "Tom & Jerry", "core_path": "DETECT"},
+              {"path": "ux0:/roms/n64/M.z64", "label": "M", "core_path": "DETECT", "db_name": "Nintendo - Nintendo 64.lpl"}
+            ]}"#,
+        );
+        let emu = add_emu4vita(&roots, &["mgba", "fceumm"]);
+        // Its own folder: the same file under another spelling, and a game
+        // RetroArch has no core for.
+        fs::write(
+            format!("{}/playlists/Mine.lpl", emu.roots.data),
+            r#"{"items": [
+              {"path": "ux0:roms/GBA/A.gba", "label": "A again", "core_path": "DETECT", "db_name": "Nintendo - Game Boy Advance.lpl"},
+              {"path": "ux0:/roms/nes/N.nes", "label": "N", "core_path": "DETECT", "db_name": "Nintendo - Nintendo Entertainment System.lpl"}
+            ]}"#,
+        )
+        .unwrap();
+        fs::write(
+            format!("{}/playlists/Nintendo - Nintendo Entertainment System.lpl", emu.roots.uma0_retroarch),
+            r#"{"items": [{"path": "uma0:/roms/nes/U.nes", "label": "U", "core_path": "app0:/fceumm_libretro.self"}]}"#,
+        )
+        .unwrap();
+        let mut steps = 0;
+        let found = scan(&roots, Some(&emu), &mut || steps += 1);
+        assert_eq!(steps, 3);
+        assert_eq!(item_count(&roots, Some(&emu)), 3);
+        let summary: Vec<(&str, &str, &str)> = found.games.iter().map(|g| (g.title.as_str(), g.core.as_str(), g.emu.as_str())).collect();
+        assert_eq!(
+            summary,
+            [
+                ("A", "gpsp_libretro.self", "mgba"),
+                ("Tom & Jerry", "", "mgba"),
+                ("N", "", "fceumm"),
+                ("U", "", "fceumm"),
+            ]
+        );
+        // The first listing keeps its id, as before Emu4Vita++ was read.
+        assert_eq!(found.games[0].id, game_id("ux0:/roms/gba/A.gba"));
+        assert!(found.report.starts_with("RetroArch playlists=3,RetroArch titles=4,RetroArch skipped=2,Emu4Vita titles=4,Emu4Vita only=3"), "{}", found.report);
+        assert!(found.report.contains("RetroArch skip=M noCore"), "{}", found.report);
+        assert!(found.report.contains("RetroArch skip=A again duplicate"), "{}", found.report);
+
+        // Without RetroArch, Emu4Vita++ still lists RetroArch's playlists.
+        fs::remove_file(format!("{}/eboot.bin", roots.app)).unwrap();
+        let found = scan(&roots, Some(&emu), &mut || {});
+        assert_eq!(found.games.iter().filter(|g| g.core.is_empty()).count(), 4);
+        assert!(found.report.contains("RetroArch=notInstalled"), "{}", found.report);
+    }
+
     #[test]
     fn nothing_without_retroarch() {
         let (_temp, roots) = setup("absent");
         fs::remove_file(format!("{}/eboot.bin", roots.app)).unwrap();
-        let scan = scan(&roots, &mut || {});
+        let scan = scan(&roots, None, &mut || {});
         assert!(scan.games.is_empty());
         assert_eq!(scan.report, "RetroArch=notInstalled");
     }
