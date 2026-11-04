@@ -81,10 +81,10 @@ titles over 40), with the same cases tested.
 **The Vita host writes `ux0:data/PocketShelf/` only for named files**:
 those with a round-trip test (`settings.json`, `categories.json`,
 `recent.json`, `titles.cache.json`, `titles/<id>.json`), `status-bar.json`,
-`text-size.json`, `emulators.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
+`text-size.json`, `emulators.json`, `game-info.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
 `vita/host.rs`), pictures in `art/` and `backdrops/`, downloads to
-`libretro/`, `gamedb/` and `update/`, and the game files' CRCs in
-`gamedb/crcs.tsv` (written by the thread that reads them); it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
+`libretro/`, `gamedb/` and `update/`, and `gamedb/crcs.tsv` and
+`gamedb/known.tsv` (written by the thread that identifies titles); it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
 order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
 in the frame took 24–30 ms, so every view change was a missed refresh.
 `Host::flush` waits for them before a launch ends the process. **The log**
@@ -249,7 +249,20 @@ Shelf's own (`plays.json`, count and time, written with `recent.json`
 before a launch), the launch count, or the system's first install. The
 host reads both system dates from `app.db` on the scan thread after the
 title list (`Event::Dates`), since the last launch changes with every
-launch. Search and Last Played keep their own order.
+launch. Newest and Oldest release sort by the year the game database
+gives (`Game::details`), titles with none last. With names from the game
+database (Appearance ▸ Game names), the host's order is no longer name
+order: the rebuild ranks the titles by name once and each tab's list is
+sorted by that rank. Search and Last Played keep their own order.
+
+**The game database** (`online/gamedb.rs`, `shelf/database.rs`): each
+title's details come with the title list (`TitleInfo::details`, from
+`gamedb/known.tsv` on the host's thread) or from `Event::Identified`
+(`Library::set_details`, one rebuild for a database's results). The
+details panel (Appearance ▸ Game details) is drawn by the views
+(`views.rs`): a column of symbol and text rows right of the title in Home
+and the Cascade, one centered row under the title in the Carousel and the
+Grid, nothing in the List.
 
 **Text size** (Appearance ▸ Text size, saved in `text-size.json` for the
 same reason): five steps, Smaller ×0.85, Small ×0.92, Normal, Large ×1.12
@@ -276,6 +289,8 @@ search, `120`–`134` the editor, pickers and category manager, `140`–`152`
 rescan and Diagnostics, `160`–`164` the status items' layout, `170`–`177`
 Find artwork, `180`–`187` Fetch and Clean up artwork (`187` the game
 database download, `184` naming a console's games), `190`–`196` updates, `270`–`276` Emu4Vita++ (its tab, the Favorites tab, Open with, the menu row),
+`277`–`279` SELECT ▸ Library ▸ Game database, `280`–`289` the details
+panel in each view, Game names, the panel off and the release sort,
 `64`–`66` Turkish and German.
 
 ## Timing

@@ -537,17 +537,36 @@ unsafe fn titles() -> &'static [Title] {
     CACHE.as_deref().unwrap_or(&[])
 }
 
-/// The listed RetroArch games of a database (a console), for
-/// `gamedb::identify`.
-pub unsafe fn retro_roms(database: &str) -> Vec<shelf_core::online::gamedb::Rom> {
-    use shelf_core::online::gamedb::{database_name, Rom};
+/// The listed titles a database covers, for `gamedb::identify`: RetroArch
+/// games with their content path, PSP and PS1 titles by their id.
+pub unsafe fn database_roms(database: &str) -> Vec<shelf_core::online::gamedb::Rom> {
+    use shelf_core::online::gamedb::{database_for, Rom};
     titles()
         .iter()
+        .filter(|item| shelf_core::library::catalog::is_listed(&item.title_id))
         .filter_map(|item| {
-            let retro = item.retro.as_ref()?;
-            (database_name(&retro.console) == database).then(|| Rom { id: item.title_id.clone(), label: item.title.clone(), path: retro.path.clone() })
+            let console = item.retro.as_ref().map(|retro| retro.console.as_str());
+            (database_for(item.platform, &item.title_id, console)? == database).then(|| Rom {
+                id: item.title_id.clone(),
+                label: item.title.clone(),
+                path: item.retro.as_ref().map_or_else(String::new, |retro| retro.path.clone()),
+            })
         })
         .collect()
+}
+
+/// The databases the listed titles belong to, each once.
+pub unsafe fn databases() -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for item in titles() {
+        let console = item.retro.as_ref().map(|retro| retro.console.as_str());
+        if let Some(database) = shelf_core::online::gamedb::database_for(item.platform, &item.title_id, console) {
+            if !found.contains(&database) {
+                found.push(database);
+            }
+        }
+    }
+    found
 }
 
 /// Whether the title list is in memory, reading the list file when it is
@@ -743,6 +762,7 @@ pub unsafe fn infos() -> Vec<shelf_core::host::TitleInfo> {
                 emu4vita: !retro.emu.is_empty(),
             }),
             emu_favorite: item.retro.as_ref().is_some_and(|retro| retro.favourite),
+            details: None,
         })
         .collect()
 }

@@ -9,7 +9,7 @@ use super::{Shelf, Slot, TileAnim};
 use crate::gfx::{Gfx, Rect};
 use crate::library::catalog::Game;
 use crate::library::settings::{DetailLevel, ViewMode};
-use crate::shapes::Symbol;
+use crate::shapes::{Icon, Symbol};
 use crate::text::Role;
 use crate::touch::Hit;
 use crate::{H, W};
@@ -21,6 +21,15 @@ const VIEW_H: f32 = H - BAR_H - FOOTER_H;
 
 /// Tiles kept on each side of the carousel's selected tile.
 const SIDE_TILES: usize = 5;
+
+/// The details panel's left edge in Home and the Cascade, and its rows'
+/// pitch.
+const DETAILS_LEFT: f32 = 540.0;
+const DETAILS_PITCH: f32 = 28.0;
+/// Space from an icon's left edge to its text, and between two items in
+/// the details row.
+const DETAIL_TEXT: f32 = 30.0;
+const DETAIL_GAP: f32 = 28.0;
 
 impl Shelf {
     /// Start over when the view, the details or the tab changed: tiles
@@ -122,17 +131,108 @@ impl Shelf {
         }
     }
 
+    /// Whether the selected title's details panel shows: the setting is on,
+    /// the view shows text, and the game database knows the title.
+    fn details_shown(&self, game: &Game) -> bool {
+        self.settings.game_info.details && self.settings.detail != DetailLevel::Basic && game.details.is_some()
+    }
+
+    /// The release year and genre for a details line, when the panel does
+    /// not show them.
+    fn line_details(&self, game: &Game) -> Vec<String> {
+        let Some(d) = game.details.as_deref().filter(|_| !self.details_shown(game)) else { return Vec::new() };
+        let year = (d.year > 0).then(|| d.year.to_string());
+        let genre = (!d.genre.is_empty()).then(|| d.genre.clone());
+        year.into_iter().chain(genre).collect()
+    }
+
+    /// The panel's items, each with its icon: year, genre, developer, the
+    /// publisher when another company (with `publisher`), players, region.
+    fn detail_items(&self, game: &Game, publisher: bool) -> Vec<(Icon, String)> {
+        let Some(d) = game.details.as_deref() else { return Vec::new() };
+        let t = self.t();
+        let mut items = Vec::new();
+        if d.year > 0 {
+            items.push((Icon::Calendar, d.year.to_string()));
+        }
+        if !d.genre.is_empty() {
+            items.push((Icon::Genre, d.genre.clone()));
+        }
+        if !d.developer.is_empty() {
+            items.push((Icon::Developer, d.developer.clone()));
+        }
+        if publisher && !d.publisher.is_empty() && d.publisher != d.developer {
+            items.push((Icon::Publisher, d.publisher.clone()));
+        }
+        if d.players > 0 {
+            let text = if d.players == 1 { t.players_one.to_string() } else { crate::i18n::fill(t.players_many, &[("count", &d.players.to_string())]) };
+            items.push((Icon::Players, text));
+        }
+        if !d.region.is_empty() {
+            items.push((Icon::Region, d.region.clone()));
+        }
+        items
+    }
+
+    /// The details panel as a column of rows from `(x, y)`, `w` wide, down
+    /// to `bottom` at most.
+    fn draw_details_column(&mut self, gfx: &mut Gfx, game: &Game, x: f32, y: f32, w: f32, bottom: f32) {
+        let theme = self.theme;
+        let mut y = y;
+        for (icon, text) in self.detail_items(game, true) {
+            if y + DETAILS_PITCH > bottom {
+                break;
+            }
+            gfx.icon(icon, x, y + (DETAILS_PITCH - 20.0) / 2.0 - 2.0, theme.accent);
+            let text = gfx.fit(Role::Small, &text, w - DETAIL_TEXT);
+            let baseline = (y + DETAILS_PITCH / 2.0 - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small) - 2.0).round();
+            gfx.text(Role::Small, x + DETAIL_TEXT, baseline, theme.dim, &text);
+            y += DETAILS_PITCH;
+        }
+    }
+
+    /// The details panel as one row centered on the screen, top at `y`:
+    /// the items that fit in `w`, in order.
+    fn draw_details_row(&mut self, gfx: &mut Gfx, game: &Game, y: f32, w: f32) {
+        let theme = self.theme;
+        let mut items: Vec<(Icon, String, f32)> = Vec::new();
+        let mut width = 0.0;
+        for (icon, text) in self.detail_items(game, false) {
+            let text = gfx.fit(Role::Small, &text, 260.0);
+            let item = DETAIL_TEXT + gfx.measure(Role::Small, &text);
+            let added = if items.is_empty() { item } else { DETAIL_GAP + item };
+            if width + added > w {
+                break;
+            }
+            width += added;
+            items.push((icon, text, item));
+        }
+        let mut x = ((W - width) / 2.0).round();
+        let baseline = (y + 10.0 - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
+        for (icon, text, item) in items {
+            gfx.icon(icon, x, y, theme.accent);
+            gfx.text(Role::Small, x + DETAIL_TEXT, baseline, theme.dim, &text);
+            x += item + DETAIL_GAP;
+        }
+    }
+
     /// The selected title's name and, at "Detailed", its id and category,
-    /// centered on `cx` (or from `left` when given), top at `top`.
-    fn draw_info(&mut self, gfx: &mut Gfx, role: Role, top: f32, width: f32, left: Option<f32>) {
+    /// centered on `cx` (or from `left` when given), top at `top`. Returns
+    /// the bottom of the text.
+    fn draw_info(&mut self, gfx: &mut Gfx, role: Role, top: f32, width: f32, left: Option<f32>) -> f32 {
         if self.settings.detail == DetailLevel::Basic {
-            return;
+            return top;
         }
         let theme = self.theme;
-        let Some(game) = self.selected_game().cloned() else { return };
+        let Some(game) = self.selected_game().cloned() else { return top };
         let title = gfx.fit(role, &game.title, width);
         let line = gfx.line_height(role);
-        let detail = (self.settings.detail == DetailLevel::Detailed).then(|| format!("{}  ·  {}", self.shown_id(&game), self.category_label(&game)));
+        let detail = (self.settings.detail == DetailLevel::Detailed).then(|| {
+            let mut parts = vec![self.shown_id(&game).to_string(), self.category_label(&game)];
+            parts.extend(self.line_details(&game));
+            gfx.fit(Role::Small, &parts.join("  ·  "), width)
+        });
+        let bottom = top + line + if detail.is_some() { 4.0 + gfx.line_height(Role::Small) } else { 0.0 };
         match left {
             Some(x) => {
                 gfx.text_top(role, x, top, theme.text, &title);
@@ -146,6 +246,20 @@ impl Shelf {
                     gfx.text_top_centered(Role::Small, W / 2.0, top + line + 4.0, theme.dim, &detail);
                 }
             }
+        }
+        bottom
+    }
+
+    /// The details row under a centered title (Carousel, Grid), when it
+    /// fits above the footer.
+    fn draw_details_under(&mut self, gfx: &mut Gfx, bottom: f32) {
+        let Some(game) = self.selected_game().cloned() else { return };
+        if !self.details_shown(&game) {
+            return;
+        }
+        let y = bottom + 12.0;
+        if y + 20.0 <= H - FOOTER_H - 4.0 {
+            self.draw_details_row(gfx, &game, y, 880.0);
         }
     }
 
@@ -208,8 +322,12 @@ impl Shelf {
         }
         let theme = self.theme;
         let Some(game) = self.selected_game().cloned() else { return };
-        let text_w = W - HOME_LEFT * 2.0;
+        let panel = self.details_shown(&game);
+        let text_w = if panel { DETAILS_LEFT - HOME_LEFT - 32.0 } else { W - HOME_LEFT * 2.0 };
         let mut y = TOP + row_h + 12.0;
+        if panel {
+            self.draw_details_column(gfx, &game, DETAILS_LEFT, y + 4.0, W - DETAILS_LEFT - HOME_LEFT, H - FOOTER_H - 8.0);
+        }
         let title = gfx.fit(Role::Display, &game.title, text_w);
         gfx.text_top(Role::Display, HOME_LEFT, y, theme.text, &title);
         y += gfx.line_height(Role::Display) + 8.0;
@@ -218,6 +336,7 @@ impl Shelf {
         if detail == DetailLevel::Detailed {
             parts.push(self.shown_id(&game).to_string());
         }
+        parts.extend(self.line_details(&game));
         let first = parts[0].clone();
         let line: Vec<String> = parts.into_iter().enumerate().filter(|(i, p)| *i == 0 || *p != first).map(|(_, p)| p).collect();
         let line = gfx.fit(Role::Small, &line.join("  ·  "), text_w);
@@ -272,7 +391,8 @@ impl Shelf {
         let ramp = self.ramp(gfx);
         gfx.image_full(ramp, Rect::new(0.0, edge + 4.0, W, 88.0), theme.accent.with_a(0x2e));
         let role = if detail == DetailLevel::Detailed { Role::Heading } else { Role::Title };
-        self.draw_info(gfx, role, edge + 20.0, 880.0, None);
+        let bottom = self.draw_info(gfx, role, edge + 20.0, 880.0, None);
+        self.draw_details_under(gfx, bottom);
     }
 
     /// The Grid: rows of five, scrolling a row at a time.
@@ -306,7 +426,8 @@ impl Shelf {
             self.draw_tile(gfx, index, Rect::new(x, y, side, side), tile, slot.opacity, selected, false);
         }
         gfx.clip(None);
-        self.draw_info(gfx, Role::Title, TOP + area_h + 8.0, 880.0, None);
+        let bottom = self.draw_info(gfx, Role::Title, TOP + area_h + 8.0, 880.0, None);
+        self.draw_details_under(gfx, bottom);
     }
 
     /// The List: a title per row, scrolling a row at a
@@ -383,6 +504,14 @@ impl Shelf {
         }
         gfx.clip(None);
         let role = if detail == DetailLevel::Detailed { Role::Heading } else { Role::Title };
-        self.draw_info(gfx, role, TOP + row, W - CASCADE_LEFT * 2.0, Some(CASCADE_LEFT));
+        let game = self.selected_game().cloned();
+        let panel = game.as_ref().is_some_and(|g| self.details_shown(g));
+        let width = if panel { DETAILS_LEFT - CASCADE_LEFT - 32.0 } else { W - CASCADE_LEFT * 2.0 };
+        self.draw_info(gfx, role, TOP + row, width, Some(CASCADE_LEFT));
+        if let (true, Some(game)) = (panel, game) {
+            // Higher than the title: right of the selected tile, the
+            // receding ones end above it.
+            self.draw_details_column(gfx, &game, DETAILS_LEFT, TOP + row - 64.0, W - DETAILS_LEFT - CASCADE_LEFT, H - FOOTER_H - 8.0);
+        }
     }
 }

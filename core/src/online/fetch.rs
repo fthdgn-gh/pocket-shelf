@@ -72,8 +72,10 @@ pub struct Job {
     pub scraper: Scraper,
     /// Its console's folder on libretro's server.
     pub folder: Option<String>,
-    /// A RetroArch game's database ([`gamedb::database_name`]), for libretro.
+    /// The title's database ([`gamedb::database_of`]), for libretro.
     pub database: Option<String>,
+    /// Its name in the database, when an earlier run identified it.
+    pub known: Option<String>,
     pub kinds: Vec<AssetKind>,
 }
 
@@ -87,8 +89,9 @@ impl Job {
         }
         let scraper = scraper_for(source, game)?;
         let folder = (scraper == Scraper::Libretro).then(|| libretro::libretro_folder(game.console.as_deref(), game.platform)).flatten();
-        let database = (scraper == Scraper::Libretro).then(|| game.console.as_deref().map(gamedb::database_name)).flatten();
-        Some(Job { id: game.id.to_string(), title: game.title.to_string(), label: label.to_string(), scraper, folder, database, kinds })
+        let database = (scraper == Scraper::Libretro).then(|| gamedb::database_of(game)).flatten();
+        let known = game.details.as_ref().map(|d| d.name.clone()).filter(|n| !n.is_empty());
+        Some(Job { id: game.id.to_string(), title: game.title.to_string(), label: label.to_string(), scraper, folder, database, known, kinds })
     }
 }
 
@@ -318,7 +321,7 @@ impl Fetch {
         if folder.is_empty() || self.unknown.contains(&folder) {
             return self.not_found(host, t, listings);
         }
-        if let Some(database) = self.job.as_ref().and_then(|j| j.database.clone()) {
+        if let Some(database) = self.job.as_ref().filter(|j| j.known.is_none()).and_then(|j| j.database.clone()) {
             if !listings.identified(&database) && !self.no_database.contains(&database) {
                 let newer = host.unix_ms().saturating_sub(gamedb::MAX_AGE_MS);
                 if host.identify(&database, newer) {
@@ -392,7 +395,7 @@ impl Fetch {
         let Some(job) = self.job.clone() else { return Vec::new() };
         let Some(listing) = listings.get(folder) else { return Vec::new() };
         let label = if job.label.is_empty() { &job.title } else { &job.label };
-        let known = job.database.as_deref().and_then(|database| listings.database_name(database, &job.id));
+        let known = job.known.as_deref().or_else(|| job.database.as_deref().and_then(|database| listings.database_name(database, &job.id)));
         let by_database = known.and_then(|name| match_name(name, listing));
         if by_database.is_some() {
             self.by_database += 1;
@@ -841,7 +844,7 @@ mod tests {
         assert_eq!(host.identify.as_ref().unwrap().last(), Some(&(gb.to_string(), 0)));
         fetch.identifying(t(), gb, 3, 10);
         assert_eq!(fetch.status, "Identifying games... 3 of 10");
-        listings.set_named(gb, vec![("ra0000001".into(), "Tetris (Japan)".into())]);
+        listings.set_named(gb, &[("ra0000001".into(), gamedb::Details { name: "Tetris (Japan)".into(), ..Default::default() })]);
         actions.extend(fetch.identified(&mut host, t(), &mut listings, gb, true));
         listings.answer(&folder, libretro::Listing::parse("Tetris (World)\nTetris (Japan)\n"));
         actions.extend(fetch.listing_ready(&mut host, t(), &mut listings, &folder));

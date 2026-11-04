@@ -140,6 +140,52 @@ impl TextSize {
 }
 
 keyed!(
+    /// The name a title identified in a game database shows: its own (the
+    /// playlist label or the title's name), the database's, or the
+    /// database's without the brackets.
+    GameNames { Playlist = "playlist", Database = "database", Short = "short" }
+);
+
+/// What the game database adds to the shelf, a setting of its own for the
+/// reason `status-bar.json` is: `{"names": "playlist", "details": true}`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct GameInfo {
+    pub names: GameNames,
+    /// The details panel next to the selected title.
+    pub details: bool,
+}
+
+pub const GAME_INFO_FILE: &str = "game-info.json";
+
+impl Default for GameInfo {
+    fn default() -> Self {
+        GameInfo { names: GameNames::Playlist, details: true }
+    }
+}
+
+impl GameInfo {
+    pub fn parse(bytes: &[u8]) -> GameInfo {
+        let mut info = GameInfo::default();
+        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return info };
+        if let Some(names) = raw.get("names").and_then(Value::as_str).and_then(GameNames::from_key) {
+            info.names = names;
+        }
+        if let Some(details) = raw.get("details").and_then(Value::as_bool) {
+            info.details = details;
+        }
+        info
+    }
+
+    /// Two-space JSON and a newline, as the app's other files.
+    pub fn render(self) -> String {
+        let mut map = Map::new();
+        map.insert("names".into(), self.names.key().into());
+        map.insert("details".into(), self.details.into());
+        serde_json::to_string_pretty(&Value::Object(map)).expect("json") + "\n"
+    }
+}
+
+keyed!(
     /// The keyboard text is typed with: the Vita's own, or Pocket Shelf's.
     KeyboardKind { System = "system", Own = "pocket-shelf" }
 );
@@ -262,6 +308,8 @@ pub struct Settings {
     pub keyboard: KeyboardKind,
     /// Saved in its own file, `emulators.json` (not rendered here).
     pub emulators: EmulatorChoice,
+    /// Saved in its own file, `game-info.json` (not rendered here).
+    pub game_info: GameInfo,
 }
 
 impl Settings {
@@ -287,6 +335,7 @@ impl Settings {
             text_size: TextSize::Normal,
             keyboard: KeyboardKind::Own,
             emulators: EmulatorChoice::default(),
+            game_info: GameInfo::default(),
         }
     }
 

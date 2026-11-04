@@ -64,6 +64,8 @@ fn sample_titles() -> Vec<TitleInfo> {
             console: (!console.is_empty()).then(|| console.into()),
             opens: shelf_core::host::Emulators { retroarch: platform == "retro", emu4vita: false },
             emu_favorite: false,
+            // As `gamedb/known.tsv` would give them.
+            details: fake_database(id),
         })
         .collect();
     for index in 0..120 {
@@ -285,10 +287,30 @@ pub struct FakeHost {
 /// Frames the fake takes to name a database's games.
 const IDENTIFY_FRAMES: u64 = 90;
 
-/// What the fake game database names: a sample game's label and its name.
-/// "Pixel Quest" is the European release, which the label alone would
-/// match as the American one.
-const DATABASE_NAMES: [(&str, &str); 2] = [("Pixel Quest", "Pixel Quest (Europe)"), ("Star Knight Saga (USA)", "Star Knight Saga (USA)")];
+/// What the fake game database knows about a sample title: name, year,
+/// genre, developer, publisher, players, region. "Pixel Quest" is the
+/// European release, which its label alone would match as the American one.
+const DATABASE: [(&str, &str, u16, &str, &str, &str, u8, &str); 5] = [
+    ("ra0snes01", "Star Knight Saga (USA)", 1994, "Role-playing (RPG)", "Lumen Soft", "Northwind Games", 1, "USA"),
+    ("ra0snes02", "Pixel Quest (Europe)", 1993, "Platform", "Sunrise Studio", "Sunrise Studio", 2, "Europe"),
+    ("ra0md0001", "Turbo Hedgehog (World)", 1991, "Platform", "Blue Comet", "Blue Comet", 1, "World"),
+    ("ULUS10041", "Velocity Run (USA)", 2005, "Racing", "Apex Works", "Apex Works", 1, "USA"),
+    ("SCUS94163", "Crystal Quest, The (USA)", 1997, "Adventure", "Prism Labs", "Northwind Games", 1, "USA"),
+];
+
+/// A sample title's entry in the fake game database.
+pub fn fake_database(id: &str) -> Option<shelf_core::online::gamedb::Details> {
+    let &(_, name, year, genre, developer, publisher, players, region) = DATABASE.iter().find(|row| row.0 == id)?;
+    Some(shelf_core::online::gamedb::Details {
+        name: name.into(),
+        year,
+        genre: genre.into(),
+        developer: developer.into(),
+        publisher: publisher.into(),
+        players,
+        region: region.into(),
+    })
+}
 
 /// GitHub's releases list: a beta newer than the fake build (0.1.0, beta)
 /// and the build's own release.
@@ -436,6 +458,7 @@ impl FakeHost {
                 console: Some(consoles[n % consoles.len()].into()),
                 opens: shelf_core::host::Emulators { retroarch: true, emu4vita: false },
                 emu_favorite: false,
+                details: None,
             });
         }
         self
@@ -730,13 +753,14 @@ impl Host for FakeHost {
             }
         }
         if let Some((database, start)) = self.identifying.clone() {
-            use shelf_core::online::gamedb::database_name;
-            let games: Vec<&TitleInfo> = self.titles.iter().filter(|t| t.console.as_deref().map(database_name).as_deref() == Some(&database)).collect();
+            use shelf_core::online::gamedb::database_for;
+            let games: Vec<&TitleInfo> =
+                self.titles.iter().filter(|t| database_for(&t.platform, &t.id, t.console.as_deref()).as_deref() == Some(&database)).collect();
             let total = games.len() as u32;
             let elapsed = self.frame - start;
             if elapsed >= IDENTIFY_FRAMES {
                 self.identifying = None;
-                let names = games.iter().filter_map(|t| DATABASE_NAMES.iter().find(|(label, _)| *label == t.title).map(|(_, name)| (t.id.clone(), name.to_string()))).collect();
+                let names = games.iter().filter_map(|t| Some((t.id.clone(), fake_database(&t.id)?))).collect();
                 events.push(Event::Identified(database, Some(names)));
             } else {
                 events.push(Event::Identifying { database, done: (elapsed * total as u64 / IDENTIFY_FRAMES) as u32, total });
@@ -792,7 +816,7 @@ impl Host for FakeHost {
                 FakeRequest { polls: 0, status, text: if status == 200 { "PNG".into() } else { String::new() }, size: 480 * 1024 }
             }
             NetKind::Save(path) if path.starts_with("gamedb/") => {
-                let table = format!("#pocket-shelf-gamedb 1 {}\n", self.unix_ms());
+                let table = shelf_core::online::gamedb::table_header(self.unix_ms());
                 self.files.insert(path, table.into_bytes());
                 FakeRequest { polls: 0, status: 200, text: String::new(), size: 1800 * 1024 }
             }

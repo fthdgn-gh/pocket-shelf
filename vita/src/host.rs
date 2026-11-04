@@ -410,13 +410,21 @@ impl Host for VitaHost {
                     }
                 }
             }
-            let titles = shelf_core::library::catalog::load_catalog(&installed::infos());
+            // What the game database found for each title, saved by the
+            // runs before.
+            let mut infos = installed::infos();
+            let known = crate::platform::gamedb::known();
+            known.apply(&mut infos);
+            let titles = shelf_core::library::catalog::load_catalog(&infos);
+            log_line(&format!("gamedb: {} titles known", known.len()));
             let _ = sender.send(Event::Titles(titles, ((now_us() - started) / 1000) as u32));
             // The system's last-launch and install dates, for the sort orders.
             let read = now_us();
             let dates = crate::platform::appdb::dates().unwrap_or_default();
             log_line(&format!("dates: {} titles from app.db in {} ms", dates.len(), (now_us() - read) / 1000));
             let _ = sender.send(Event::Dates(dates));
+            // Titles new since the last start, in the tables on the card.
+            crate::platform::gamedb::identify_new(&sender);
         });
     }
 

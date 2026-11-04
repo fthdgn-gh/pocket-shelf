@@ -10,6 +10,7 @@ pub mod layout;
 pub mod menu;
 pub mod navigation;
 pub mod panel;
+mod database;
 mod tools;
 mod update;
 mod online;
@@ -196,6 +197,7 @@ pub struct Shelf {
     /// A picker confirm that waited for its file to decode, now due.
     pending_picker_confirm: bool,
     rescan: Option<tools::Rescan>,
+    database: Option<database::DatabaseRun>,
     fetch: Option<artwork::FetchPanel>,
     /// Pictures Fetch artwork applied since the title changes were written.
     fetch_unsaved: u32,
@@ -286,6 +288,7 @@ impl Shelf {
             categories: None,
             pending_picker_confirm: false,
             rescan: None,
+            database: None,
             fetch: None,
             fetch_unsaved: 0,
             cleanup: None,
@@ -306,6 +309,7 @@ impl Shelf {
             listings: Default::default(),
             pending_free: Vec::new(),
         };
+        shelf.library.set_names(shelf.settings.game_info.names);
         shelf.tab = shelf.settings.category.clone().unwrap_or_default();
         shelf.refresh();
         shelf
@@ -372,6 +376,21 @@ impl Shelf {
             if let Some(index) = self.list.iter().position(|&i| *self.library.games()[i].id == id) {
                 self.selected = index;
             }
+        }
+    }
+
+    /// The tabs and the current tab's titles again after the titles'
+    /// names or details changed, the title `keep` still selected.
+    pub(super) fn relist(&mut self, keep: Option<String>) {
+        let tab = self.tab.clone();
+        self.refresh();
+        if let Some(id) = keep {
+            if let Some(index) = self.list.iter().position(|&i| *self.library.games()[i].id == id) {
+                self.selected = index;
+            }
+        }
+        if self.tab == tab {
+            self.placed = Some((self.settings.view, self.settings.detail, tab));
         }
     }
 
@@ -529,6 +548,8 @@ impl Shelf {
             self.cleanup_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.rescan.is_some() {
             self.rescan_input(host, pressed & confirm != 0, pressed & cancel != 0);
+        } else if self.database.is_some() {
+            self.database_input(host, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.diagnostics.is_some() {
             self.diagnostics_input(step, pressed & cancel != 0);
         } else if self.picker.is_some() {
@@ -611,6 +632,7 @@ impl Shelf {
         // Before the selection is compared: a backdrop fetched for the
         // selected title is asked for like a newly selected one.
         self.fetch_frame(host);
+        self.database_frame(host);
         if self.frame == 1 {
             self.updates_at_start(host);
         }
@@ -918,6 +940,27 @@ impl Shelf {
             }
             Item::Rescan => {
                 self.open_rescan();
+                return;
+            }
+            Item::GameDatabase => {
+                self.open_database();
+                return;
+            }
+            Item::GameNames => {
+                use crate::library::settings::{GameNames, GAME_INFO_FILE};
+                s.game_info.names = cycle_by(GameNames::ALL, s.game_info.names, delta);
+                // Saved in a file of its own (`game-info.json`).
+                host.write(GAME_INFO_FILE, s.game_info.render().as_bytes());
+                let names = s.game_info.names;
+                let keep = self.selected_game().map(|g| g.id.to_string());
+                self.library.set_names(names);
+                self.relist(keep);
+                return;
+            }
+            Item::GameDetails => {
+                use crate::library::settings::GAME_INFO_FILE;
+                s.game_info.details = !s.game_info.details;
+                host.write(GAME_INFO_FILE, s.game_info.render().as_bytes());
                 return;
             }
             Item::Diagnostics => {
@@ -1280,6 +1323,9 @@ impl Shelf {
         if self.rescan.is_some() {
             self.draw_rescan(gfx);
         }
+        if self.database.is_some() {
+            self.draw_database(gfx);
+        }
         if self.diagnostics.is_some() {
             self.draw_diagnostics(gfx);
         }
@@ -1479,6 +1525,8 @@ impl Shelf {
                     SortOrder::LeastPlayed => o.least_played,
                     SortOrder::NewestInstalled => o.newest_installed,
                     SortOrder::OldestInstalled => o.oldest_installed,
+                    SortOrder::NewestReleased => o.newest_released,
+                    SortOrder::OldestReleased => o.oldest_released,
                 };
                 // Search keeps the best match first: no value. Last Played
                 // shows its fixed order.
@@ -1569,6 +1617,17 @@ impl Shelf {
             }
             Item::CleanArt => (t.clean_art, None, None, Right),
             Item::Rescan => (t.rescan, None, None, Right),
+            Item::GameDatabase => (t.game_database, None, None, Right),
+            Item::GameNames => {
+                use crate::library::settings::GameNames;
+                let name = match s.game_info.names {
+                    GameNames::Playlist => t.names_own,
+                    GameNames::Database => t.names_database,
+                    GameNames::Short => t.names_short,
+                };
+                (t.game_names, Some(name.into()), None, Both)
+            }
+            Item::GameDetails => (t.game_details, on_off(s.game_info.details), None, Both),
             Item::UpdateChannel => {
                 let u = &t.update_channels;
                 let name = match s.updates {

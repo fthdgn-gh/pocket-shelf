@@ -244,6 +244,7 @@ impl Shelf {
     /// The host's progress naming a database's games, for a run waiting on
     /// it.
     pub fn identifying(&mut self, database: &str, done: u32, total: u32) {
+        self.database_progress(database, done, total);
         let t = self.t();
         if let Some(panel) = &mut self.fetch {
             panel.flow.identifying(t, database, done, total);
@@ -251,12 +252,18 @@ impl Shelf {
     }
 
     /// A database's games named by the host (`None`: no table yet).
-    pub fn identified(&mut self, host: &mut dyn Host, database: &str, names: Option<Vec<(String, String)>>) {
+    pub fn identified(&mut self, host: &mut dyn Host, database: &str, names: Option<Vec<(String, crate::online::gamedb::Details)>>) {
         let found = names.is_some();
+        let count = names.as_ref().map(Vec::len);
         if let Some(names) = names {
-            host.log(&format!("gamedb {database}: {} games named", names.len()));
-            self.listings.set_named(database, names);
+            let started = host.time_us();
+            self.listings.set_named(database, &names);
+            let keep = self.selected_game().map(|g| g.id.to_string());
+            self.library.set_details(&names);
+            self.relist(keep);
+            host.log(&format!("gamedb {database}: {} titles identified, library in {} us", names.len(), host.time_us() - started));
         }
+        self.database_identified(host, database, count);
         let t = self.t();
         let Some(panel) = &mut self.fetch else { return };
         let actions = panel.flow.identified(host, t, &mut self.listings, database, found);

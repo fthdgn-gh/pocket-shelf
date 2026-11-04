@@ -59,6 +59,15 @@ fn index_of(names: impl IntoIterator<Item = String>) -> FxHashMap<String, String
         .collect()
 }
 
+/// Two names compared as lowercase, without making lowercase copies; ASCII
+/// without the Unicode tables.
+fn caseless_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    if a.is_ascii() && b.is_ascii() {
+        return a.bytes().map(|c| c.to_ascii_lowercase()).cmp(b.bytes().map(|c| c.to_ascii_lowercase()));
+    }
+    a.chars().flat_map(char::to_lowercase).cmp(b.chars().flat_map(char::to_lowercase))
+}
+
 /// `text` lowercased into `out`; ASCII without the Unicode tables.
 fn lowercase_into(text: &str, out: &mut String) {
     out.clear();
@@ -88,6 +97,8 @@ pub struct Library {
     pub orders: SortOrders,
     /// The open search's term; empty when no search is open.
     pub search_term: String,
+    /// The names identified titles show ([`Library::set_names`]).
+    names: settings::GameNames,
 
     /// Every category in tab order, hidden ones included.
     categories: Vec<Category>,
@@ -97,6 +108,9 @@ pub struct Library {
     by_category: FxHashMap<Arc<str>, Vec<usize>>,
     /// Index of each title by id.
     index: FxHashMap<Arc<str>, usize>,
+    /// Each title's place in name order, when names from the game database
+    /// change the host's order; empty when they do not.
+    name_rank: Vec<u32>,
 }
 
 impl Library {
@@ -119,10 +133,12 @@ impl Library {
             system: FxHashMap::default(),
             orders,
             search_term: String::new(),
+            names: settings::GameNames::Playlist,
             categories: Vec::new(),
             games: Vec::new(),
             by_category: FxHashMap::default(),
             index: FxHashMap::default(),
+            name_rank: Vec::new(),
         };
         library.rebuild();
         library
@@ -132,6 +148,32 @@ impl Library {
     pub fn set_catalog(&mut self, games: Vec<Game>) {
         self.base = games;
         self.rebuild();
+    }
+
+    /// The names identified titles show; the titles are recomputed when it
+    /// changes.
+    pub fn set_names(&mut self, names: settings::GameNames) {
+        if self.names != names {
+            self.names = names;
+            self.rebuild();
+        }
+    }
+
+    /// Titles identified in the game database (the host saved them to
+    /// `gamedb/known.tsv`); recomputed once for the lot.
+    pub fn set_details(&mut self, found: &[(String, crate::online::gamedb::Details)]) {
+        let mut changed = false;
+        for (id, details) in found {
+            let Some(&index) = self.index.get(id.as_str()) else { continue };
+            let game = &mut self.base[index];
+            if game.details.as_deref() != Some(details) {
+                game.with_details(Some(Arc::new(details.clone())));
+                changed = true;
+            }
+        }
+        if changed {
+            self.rebuild();
+        }
     }
 
     /// [`Library::set_catalog`] from the host's list.
@@ -159,6 +201,28 @@ impl Library {
             self.index.insert(game.id.clone(), index);
             self.by_category.entry(game.category.clone()).or_default().push(index);
         }
+        // The host lists titles by their own names; with names from the
+        // database, name order is worked out here once.
+        self.name_rank.clear();
+        if self.names != settings::GameNames::Playlist && self.base.iter().any(|g| g.db_names.is_some()) {
+            let mut order: Vec<usize> = (0..self.games.len()).collect();
+            order.sort_by(|&a, &b| caseless_cmp(&self.games[a].title, &self.games[b].title));
+            self.name_rank = vec![0; order.len()];
+            for (rank, index) in order.into_iter().enumerate() {
+                self.name_rank[index] = rank as u32;
+            }
+        }
+    }
+
+    /// The name a title shows before the user's own: the database's (whole
+    /// or short) when the names setting asks for it and the title was
+    /// identified, else the host's.
+    fn own_title(&self, game: &Game) -> Arc<str> {
+        match (self.names, &game.db_names) {
+            (settings::GameNames::Database, Some((name, _))) => name.clone(),
+            (settings::GameNames::Short, Some((_, short))) => short.clone(),
+            _ => game.title.clone(),
+        }
     }
 
     /// A host title with the user's changes and its art file. `key` is a
@@ -176,11 +240,11 @@ impl Library {
             })
         };
         let change = self.overrides.titles.get(&*game.id);
-        let title: Arc<str> = change.and_then(|c| c.title.as_deref()).map_or_else(|| game.title.clone(), Arc::from);
+        let title: Arc<str> = change.and_then(|c| c.title.as_deref()).map_or_else(|| self.own_title(game), Arc::from);
         let chosen = change.and_then(|c| c.art.clone());
         let force_icon = chosen.as_deref() == Some(USE_ICON);
         let art = if force_icon { None } else { chosen.clone().or_else(|| find_art([&game.id, &game.title, &title])) };
-        let Some(change) = change else { return Game { art_auto: art.is_some(), art, ..game.clone() } };
+        let Some(change) = change else { return Game { art_auto: art.is_some(), art, title, ..game.clone() } };
         // A category that was deleted falls back to the title's own.
         let category = change
             .category
@@ -306,9 +370,13 @@ impl Library {
             FAVORITES_ID => (0..self.games.len()).filter(|&i| self.games[i].in_favorites()).collect(),
             _ => self.by_category.get(id).cloned().unwrap_or_default(),
         };
+        if !self.name_rank.is_empty() {
+            list.sort_by_key(|&i| self.name_rank[i]);
+        }
         order::sort(&mut list, self.orders.get(id), |i| {
-            let id: &str = &self.games[i].id;
-            Facts { play: self.plays.get(id).copied(), system: self.system.get(id).copied() }
+            let game = &self.games[i];
+            let id: &str = &game.id;
+            Facts { play: self.plays.get(id).copied(), system: self.system.get(id).copied(), year: game.details.as_ref().map_or(0, |d| d.year) }
         });
         list
     }
@@ -492,6 +560,32 @@ mod tests {
         assert_eq!(game("PCSB00245").art.as_deref(), Some("Neon Drift.png"));
         assert_eq!(game("VITASHELL").art, None);
         assert!(game("VITASHELL").art_icon);
+    }
+
+    #[test]
+    fn database_names_show_under_the_users_own_and_keep_name_order() {
+        use crate::online::gamedb::Details;
+        use settings::GameNames;
+        let gb = "Nintendo - Game Boy";
+        let named = |name: &str| Some(Details { name: name.into(), year: 1990, ..Default::default() });
+        let mut infos = vec![info("ra1", "Alpha (U)", "retro", Some(gb)), info("ra2", "Beta", "retro", Some(gb)), info("ra3", "Gamma", "retro", Some(gb))];
+        infos[0].details = named("Zeta, The (USA)");
+        let mut library = library(&[]);
+        library.set_titles(&infos);
+        let shown = |library: &Library| -> Vec<String> { library.titles_of("retro-gb").into_iter().map(|i| library.games()[i].title.to_string()).collect() };
+        assert_eq!(shown(&library), ["Alpha (U)", "Beta", "Gamma"]);
+        library.set_names(GameNames::Database);
+        assert_eq!(shown(&library), ["Beta", "Gamma", "Zeta, The (USA)"]);
+        library.set_names(GameNames::Short);
+        assert_eq!(shown(&library), ["Beta", "Gamma", "The Zeta"]);
+        // The user's own title wins; a title identified later moves.
+        library.set_override("ra1", TitleOverride { title: Some("Mine".into()), ..Default::default() });
+        library.set_details(&[("ra3".into(), Details { name: "Aardvark (Japan)".into(), ..Default::default() })]);
+        assert_eq!(shown(&library), ["Aardvark", "Beta", "Mine"]);
+        // The playlist label stays the title's own name for matching.
+        assert_eq!(&*library.base_game("ra3").unwrap().title, "Gamma");
+        library.orders.set("retro-gb", order::SortOrder::NewestReleased);
+        assert_eq!(shown(&library), ["Mine", "Aardvark", "Beta"], "ra1 has a year; the rest keep name order");
     }
 
     #[test]

@@ -255,6 +255,15 @@ pub enum Icon {
     /// something or steps a value.
     ArrowRight,
     ArrowLeft,
+    /// The game details' symbols, 20×20: a calendar (release year), a tag
+    /// (genre), code brackets (developer), a building (publisher), a person
+    /// (players) and a globe (region).
+    Calendar,
+    Genre,
+    Developer,
+    Publisher,
+    Players,
+    Region,
 }
 
 /// Distance from `(x, y)` to the segment `a`–`b`.
@@ -286,6 +295,7 @@ impl Icon {
             Icon::ShoulderL | Icon::ShoulderR => (48.0, 32.0),
             Icon::Wifi { .. } | Icon::Bluetooth => (24.0, 24.0),
             Icon::ArrowRight | Icon::ArrowLeft => (16.0, 32.0),
+            Icon::Calendar | Icon::Genre | Icon::Developer | Icon::Publisher | Icon::Players | Icon::Region => (20.0, 20.0),
         }
     }
 
@@ -297,6 +307,12 @@ impl Icon {
             Icon::Bluetooth => 3,
             Icon::ArrowRight => 4,
             Icon::ArrowLeft => 5,
+            Icon::Calendar => 6,
+            Icon::Genre => 7,
+            Icon::Developer => 8,
+            Icon::Publisher => 9,
+            Icon::Players => 10,
+            Icon::Region => 11,
         }
     }
 
@@ -339,6 +355,59 @@ impl Icon {
                     ((17.4, 16.8), (6.6, 7.2)),
                 ];
                 lines.iter().map(|&(a, b)| segment(x, y, a, b)).fold(f32::MAX, f32::min) - 1.2
+            }
+            Icon::Calendar => {
+                // A page outlined 1.6 wide, its top band filled, two rings.
+                let page = round_box(x, y, (2.5, 4.0, 17.5, 18.0), [3.0; 4]);
+                let outline = page.abs() - 0.8;
+                let band = round_box(x, y, (2.5, 4.0, 17.5, 8.5), [3.0, 3.0, 0.0, 0.0]);
+                let rings = segment(x, y, (6.5, 2.0), (6.5, 5.5)).min(segment(x, y, (13.5, 2.0), (13.5, 5.5))) - 1.0;
+                let dot = round_box(x, y, (5.5, 11.0, 9.0, 14.5), [0.8; 4]);
+                outline.min(band).min(rings).min(dot)
+            }
+            Icon::Genre => {
+                // A tag pointing left with a hole: a box and a triangle.
+                let body = round_box(x, y, (8.0, 4.0, 18.0, 16.0), [0.0, 2.5, 2.5, 0.0]);
+                let (dx, dy) = (x - 8.0, (y - 10.0).abs());
+                let point = (dy * 6.0 - (dx + 6.0) * 6.0) / (72f32).sqrt();
+                let tip = point.max(x - 8.5).max(dy - 6.0);
+                let hole = -(length(x - 8.0, y - 10.0) - 1.8);
+                body.min(tip).max(hole)
+            }
+            Icon::Developer => {
+                // `</>`.
+                let strokes = [
+                    ((7.0, 5.0), (2.5, 10.0)),
+                    ((2.5, 10.0), (7.0, 15.0)),
+                    ((13.0, 5.0), (17.5, 10.0)),
+                    ((17.5, 10.0), (13.0, 15.0)),
+                    ((11.5, 3.5), (8.5, 16.5)),
+                ];
+                strokes.iter().map(|&(a, b)| segment(x, y, a, b)).fold(f32::MAX, f32::min) - 1.0
+            }
+            Icon::Publisher => {
+                // A building with two rows of windows.
+                let body = round_box(x, y, (4.0, 3.0, 16.0, 18.0), [1.5, 1.5, 0.0, 0.0]);
+                let windows = [(6.5, 6.0), (11.0, 6.0), (6.5, 10.5), (11.0, 10.5)]
+                    .iter()
+                    .map(|&(wx, wy)| round_box(x, y, (wx, wy, wx + 2.5, wy + 2.5), [0.5; 4]))
+                    .fold(f32::MAX, f32::min);
+                let door = round_box(x, y, (8.5, 14.0, 11.5, 18.5), [0.5; 4]);
+                body.max(-windows).max(-door)
+            }
+            Icon::Players => {
+                // A head and shoulders.
+                let head = length(x - 10.0, y - 6.5) - 3.6;
+                let body = round_box(x, y, (3.5, 12.0, 16.5, 19.0), [6.0, 6.0, 1.0, 1.0]);
+                head.min(body)
+            }
+            Icon::Region => {
+                // A globe: a ring, the equator, and a meridian as an ellipse.
+                let r = length(x - 10.0, y - 10.0);
+                let ring = (r - 7.6).abs() - 0.8;
+                let equator = segment(x, y, (2.8, 10.0), (17.2, 10.0)) - 0.8;
+                let meridian = ((length((x - 10.0) / 0.45, y - 10.0) - 7.6) * 0.45).abs() - 0.8;
+                ring.min(equator).min(meridian.max(r - 7.6))
             }
         }
     }

@@ -13,12 +13,12 @@
 //! never written to the card: NES's 6.3 MB becomes about 1.5 MB of text.
 //!
 //! **A game is identified** ([`identify`]) by its playlist label when that
-//! is a database name already (RetroArch's own scanner wrote it), an arcade
-//! set by its zip's name, then by CRC-32: a zip's directory holds each
-//! file's CRC, a loose file is read once. The CRCs are kept in
-//! `gamedb/crcs.tsv`, so a file is read on the first run only.
-
-use std::collections::HashSet;
+//! is a database name already (RetroArch's own scanner wrote it), a PSP or
+//! PS1 title by its title id (the disc's serial), an arcade set by its
+//! zip's name, then by CRC-32: a zip's directory holds each file's CRC, a
+//! loose file is read once. The CRCs are kept in `gamedb/crcs.tsv`, so a
+//! file is read on the first run only; what each title was found to be is
+//! kept in `gamedb/known.tsv` ([`Known`]) and read with the title list.
 
 use super::encode_uri_component;
 use crate::library::fxhash::FxHashMap;
@@ -33,10 +33,13 @@ pub const MAX_AGE_MS: u64 = 90 * 24 * 60 * 60 * 1000;
 /// The file of the CRCs worked out so far, by content path.
 pub const CRCS_PATH: &str = "gamedb/crcs.tsv";
 
+/// What each title was found to be ([`Known`]).
+pub const KNOWN_PATH: &str = "gamedb/known.tsv";
+
 /// The first line of a table: this text, the table's version, and when it
 /// was built in milliseconds since 1970.
 const TABLE_MARK: &str = "#pocket-shelf-gamedb";
-const TABLE_VERSION: u32 = 1;
+const TABLE_VERSION: u32 = 2;
 
 /// The database for a RetroArch console: its database name, or for the
 /// user's "Neo Geo" playlist (no `db_name`), `SNK - Neo Geo`. Every MAME
@@ -50,6 +53,107 @@ pub fn database_name(console: &str) -> String {
 
 pub fn rdb_url(database: &str) -> String {
     format!("{SERVER}/{}.rdb", encode_uri_component(database))
+}
+
+/// The PSP and PS1 databases: PSN titles (`NP…`) are in a database of
+/// their own.
+pub const PSP: &str = "Sony - PlayStation Portable";
+pub const PSP_PSN: &str = "Sony - PlayStation Portable (PSN)";
+pub const PS1: &str = "Sony - PlayStation";
+
+/// The database a title is looked up in: a RetroArch game's console, or
+/// for a PSP or PS1 title (platform `psp`, `psx`) the Sony database its
+/// title id belongs to. None for the rest.
+pub fn database_for(platform: &str, id: &str, console: Option<&str>) -> Option<String> {
+    match (platform, console) {
+        ("retro", Some(console)) => Some(database_name(console)),
+        ("psp", _) if id.starts_with("NP") => Some(PSP_PSN.into()),
+        ("psp", _) => Some(PSP.into()),
+        ("psx", _) => Some(PS1.into()),
+        _ => None,
+    }
+}
+
+/// The database a listed title is looked up in ([`database_for`]).
+pub fn database_of(game: &crate::library::catalog::Game) -> Option<String> {
+    use crate::library::categories::Platform;
+    let platform = match game.platform {
+        Platform::Retro => "retro",
+        Platform::Psp => "psp",
+        Platform::Psx => "psx",
+        _ => return None,
+    };
+    database_for(platform, &game.id, game.console.as_deref())
+}
+
+/// A serial as a title id spells it: `ULUS-10041`, `SLPS-02269-3` and
+/// `ULES-01513/E` become `ULUS10041`, `SLPS02269` and `ULES01513` (four
+/// letters, five digits); any other serial is its letters and digits,
+/// uppercase.
+pub fn serial_key(serial: &str) -> String {
+    let head = serial.split('/').next().unwrap_or("");
+    let plain: String = head.chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_uppercase()).collect();
+    let bytes = plain.as_bytes();
+    if bytes.len() >= 9 && bytes[..4].iter().all(u8::is_ascii_alphabetic) && bytes[4..9].iter().all(u8::is_ascii_digit) {
+        return plain[..9].to_string();
+    }
+    plain
+}
+
+/// A database name without its brackets, with a trailing article moved to
+/// the front: `Legend of Zelda, The - A Link to the Past (USA)` becomes
+/// `The Legend of Zelda - A Link to the Past`.
+pub fn short_name(name: &str) -> String {
+    let cut = name.find(" (").or_else(|| name.find(" [")).filter(|&at| at > 0).map_or(name, |at| &name[..at]).trim();
+    for article in ["The", "A", "An"] {
+        let marker = format!(", {article}");
+        let Some(at) = cut.find(&marker) else { continue };
+        let rest = &cut[at + marker.len()..];
+        if rest.is_empty() || rest.starts_with(" - ") || rest.starts_with(": ") {
+            return format!("{article} {}{rest}", &cut[..at]);
+        }
+    }
+    cut.to_string()
+}
+
+/// What a database says about a game; empty or zero when it does not say.
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+pub struct Details {
+    pub name: String,
+    pub year: u16,
+    pub genre: String,
+    pub developer: String,
+    pub publisher: String,
+    pub players: u8,
+    pub region: String,
+}
+
+/// A text field of a table or `known.tsv`, on one line and with no tabs.
+fn field(text: &str) -> String {
+    text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>().trim().to_string()
+}
+
+impl Details {
+    /// The fields after a name in a table or `known.tsv` line: year, genre,
+    /// developer, publisher, players, region.
+    fn read(name: &str, mut rest: std::str::Split<'_, char>) -> Details {
+        let mut next = || rest.next().unwrap_or("");
+        Details {
+            name: name.to_string(),
+            year: next().parse().unwrap_or(0),
+            genre: next().to_string(),
+            developer: next().to_string(),
+            publisher: next().to_string(),
+            players: next().parse().unwrap_or(0),
+            region: next().to_string(),
+        }
+    }
+
+    fn write(&self, out: &mut String) {
+        let number = |n: u32| if n == 0 { String::new() } else { n.to_string() };
+        let fields = [field(&self.name), number(self.year as u32), field(&self.genre), field(&self.developer), field(&self.publisher), number(self.players as u32), field(&self.region)];
+        out.push_str(&fields.join("\t"));
+    }
 }
 
 /// Where a database's table is kept under the data folder.
@@ -157,6 +261,7 @@ pub struct Row {
     pub developer: String,
     pub publisher: String,
     pub users: u32,
+    pub region: String,
 }
 
 impl Row {
@@ -173,6 +278,7 @@ impl Row {
         fill(&mut self.genre, other.genre);
         fill(&mut self.developer, other.developer);
         fill(&mut self.publisher, other.publisher);
+        fill(&mut self.region, other.region);
         if self.year == 0 {
             self.year = other.year;
         }
@@ -223,6 +329,7 @@ pub fn read_rdb(bytes: &[u8]) -> Result<Vec<Row>, &'static str> {
                 (b"developer", Value::Text(text)) => row.developer = clean(text),
                 (b"publisher", Value::Text(text)) => row.publisher = clean(text),
                 (b"users", Value::Int(users)) => row.users = users.clamp(0, 255) as u32,
+                (b"region", Value::Text(text)) => row.region = clean(text),
                 _ => {}
             }
         }
@@ -246,21 +353,26 @@ pub fn read_rdb(bytes: &[u8]) -> Result<Vec<Row>, &'static str> {
 /// A downloaded `.rdb` as the table kept on the card: a first line with the
 /// version and `built_ms`, then one game per line, `crc`, `serial`, `rom`,
 /// `name`, `year`, `genre`, `developer`, `publisher`, `users` separated by
-/// tabs (empty when unknown; the crc as eight hex digits).
+/// tabs, then `region` (empty when unknown; the crc as eight hex digits).
 pub fn table_from_rdb(bytes: &[u8], built_ms: u64) -> Result<String, &'static str> {
     let rows = read_rdb(bytes)?;
     if rows.is_empty() {
         return Err("no games in the database");
     }
-    let mut out = format!("{TABLE_MARK} {TABLE_VERSION} {built_ms}\n");
+    let mut out = table_header(built_ms);
     for row in rows {
         let crc = row.crc.map(|crc| format!("{crc:08x}")).unwrap_or_default();
         let number = |n: u32| if n == 0 { String::new() } else { n.to_string() };
-        let fields = [crc, row.serial, row.rom, row.name, number(row.year), row.genre, row.developer, row.publisher, number(row.users)];
+        let fields = [crc, row.serial, row.rom, row.name, number(row.year), row.genre, row.developer, row.publisher, number(row.users), row.region];
         out.push_str(&fields.join("\t"));
         out.push('\n');
     }
     Ok(out)
+}
+
+/// A table's first line, with its newline.
+pub fn table_header(built_ms: u64) -> String {
+    format!("{TABLE_MARK} {TABLE_VERSION} {built_ms}\n")
 }
 
 /// When a table was built, from its first line; None for anything else.
@@ -270,57 +382,167 @@ pub fn table_built(first_line: &str) -> Option<u64> {
     words.next()?.parse().ok()
 }
 
-/// A table read for matching: names by CRC, by arcade set and by name.
+/// A table read for matching: games by CRC, by serial, by arcade set and
+/// by name.
 pub struct Table {
     pub built_ms: u64,
-    names: Vec<String>,
+    games: Vec<Details>,
     by_crc: FxHashMap<u32, usize>,
+    by_serial: FxHashMap<String, usize>,
     by_rom: FxHashMap<String, usize>,
-    by_name: HashSet<String>,
+    by_name: FxHashMap<String, usize>,
 }
 
 impl Table {
     pub fn parse(text: &str) -> Option<Table> {
         let mut lines = text.split('\n');
         let built_ms = table_built(lines.next()?)?;
-        let mut table = Table { built_ms, names: Vec::new(), by_crc: FxHashMap::default(), by_rom: FxHashMap::default(), by_name: HashSet::new() };
+        let mut table = Table {
+            built_ms,
+            games: Vec::new(),
+            by_crc: FxHashMap::default(),
+            by_serial: FxHashMap::default(),
+            by_rom: FxHashMap::default(),
+            by_name: FxHashMap::default(),
+        };
         for line in lines {
             let mut fields = line.split('\t');
-            let (Some(crc), Some(_serial), Some(rom), Some(name)) = (fields.next(), fields.next(), fields.next(), fields.next()) else { continue };
+            let (Some(crc), Some(serial), Some(rom), Some(name)) = (fields.next(), fields.next(), fields.next(), fields.next()) else { continue };
             if name.is_empty() {
                 continue;
             }
-            let at = table.names.len();
+            let at = table.games.len();
             if let Ok(crc) = u32::from_str_radix(crc, 16) {
                 table.by_crc.entry(crc).or_insert(at);
+            }
+            if !serial.is_empty() {
+                // A disc's own serial (`SLPS-02269`) wins over a disc of a
+                // set (`SLPS-02269-1`) for the title id they share.
+                let key = serial_key(serial);
+                let exact = serial.split('/').next().unwrap_or("").chars().filter(char::is_ascii_alphanumeric).count() == key.len();
+                match table.by_serial.get(&key) {
+                    Some(_) if !exact => {}
+                    _ => {
+                        table.by_serial.insert(key, at);
+                    }
+                }
             }
             if !rom.is_empty() {
                 table.by_rom.entry(rom.to_string()).or_insert(at);
             }
-            table.by_name.insert(name.to_string());
-            table.names.push(name.to_string());
+            table.by_name.entry(name.to_string()).or_insert(at);
+            table.games.push(Details::read(name, fields));
         }
-        (!table.names.is_empty()).then_some(table)
+        (!table.games.is_empty()).then_some(table)
     }
 
     pub fn len(&self) -> usize {
-        self.names.len()
+        self.games.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.names.is_empty()
+        self.games.is_empty()
     }
 
-    pub fn by_crc(&self, crc: u32) -> Option<&str> {
-        self.by_crc.get(&crc).map(|&at| self.names[at].as_str())
+    pub fn by_crc(&self, crc: u32) -> Option<&Details> {
+        self.by_crc.get(&crc).map(|&at| &self.games[at])
     }
 
-    fn by_rom(&self, stem: &str) -> Option<&str> {
-        self.by_rom.get(stem).map(|&at| self.names[at].as_str())
+    pub fn by_serial(&self, id: &str) -> Option<&Details> {
+        self.by_serial.get(&serial_key(id)).map(|&at| &self.games[at])
     }
 
-    fn has_name(&self, name: &str) -> bool {
-        self.by_name.contains(name)
+    fn by_rom(&self, stem: &str) -> Option<&Details> {
+        self.by_rom.get(stem).map(|&at| &self.games[at])
+    }
+
+    fn by_name(&self, name: &str) -> Option<&Details> {
+        self.by_name.get(name).map(|&at| &self.games[at])
+    }
+}
+
+// --- What each title was found to be ----------------------------------------------
+
+/// `gamedb/known.tsv`: for each title looked up, its database, the build
+/// time of the table it was looked up in, and its details, one title per
+/// line: `id`, `database`, `built`, then [`Details`]'s fields (`name`
+/// empty when the table did not have it). A title the table lacked is
+/// looked up again in a newer table only.
+#[derive(Default)]
+pub struct Known {
+    entries: FxHashMap<String, (String, u64, Option<Details>)>,
+}
+
+impl Known {
+    pub fn parse(text: &str) -> Known {
+        let mut known = Known::default();
+        for line in text.split('\n') {
+            let mut fields = line.split('\t');
+            let (Some(id), Some(database), Some(built), Some(name)) = (fields.next(), fields.next(), fields.next(), fields.next()) else { continue };
+            if id.is_empty() {
+                continue;
+            }
+            let built = built.parse().unwrap_or(0);
+            let details = (!name.is_empty()).then(|| Details::read(name, fields));
+            known.entries.insert(id.to_string(), (database.to_string(), built, details));
+        }
+        known
+    }
+
+    /// One title per line, in id order.
+    pub fn render(&self) -> String {
+        let mut ids: Vec<&String> = self.entries.keys().collect();
+        ids.sort();
+        let mut out = String::new();
+        for id in ids {
+            let (database, built, details) = &self.entries[id];
+            out.push_str(&format!("{}\t{}\t{built}\t", field(id), field(database)));
+            match details {
+                Some(details) => details.write(&mut out),
+                None => out.push_str("\t\t\t\t\t\t"),
+            }
+            out.push('\n');
+        }
+        out
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn get(&self, id: &str) -> Option<&Details> {
+        self.entries.get(id)?.2.as_ref()
+    }
+
+    /// Whether a title has not been looked up in `database`'s table built
+    /// at `built_ms` or later.
+    pub fn wants(&self, id: &str, database: &str, built_ms: u64) -> bool {
+        match self.entries.get(id) {
+            None => true,
+            Some((db, built, details)) => db != database || (details.is_none() && *built < built_ms),
+        }
+    }
+
+    /// A run over `roms`: those `found` with their details, the rest as
+    /// looked up and not found.
+    pub fn record(&mut self, database: &str, built_ms: u64, roms: &[Rom], found: &[(String, Details)]) {
+        let found: FxHashMap<&str, &Details> = found.iter().map(|(id, d)| (id.as_str(), d)).collect();
+        for rom in roms {
+            let details = found.get(rom.id.as_str()).map(|d| (*d).clone());
+            self.entries.insert(rom.id.clone(), (database.to_string(), built_ms, details));
+        }
+    }
+
+    /// Each title's details from this file (the host does this on its
+    /// thread before [`load_catalog`](crate::library::catalog::load_catalog)).
+    pub fn apply(&self, infos: &mut [crate::host::TitleInfo]) {
+        for info in infos {
+            info.details = self.get(&info.id).cloned();
+        }
     }
 }
 
@@ -431,13 +653,14 @@ pub fn zip_entries(directory: &[u8]) -> Vec<(u32, u64)> {
 
 // --- Identifying games ---------------------------------------------------------------
 
-/// A RetroArch game to identify.
+/// A title to identify: a RetroArch game, or a PSP or PS1 title (no path;
+/// its id is its serial).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Rom {
     pub id: String,
-    /// Its playlist label.
+    /// Its playlist label, or the title's name.
     pub label: String,
-    /// Its content path.
+    /// Its content path; empty for a PSP or PS1 title.
     pub path: String,
 }
 
@@ -542,6 +765,8 @@ fn read_crcs(path: &str, files: &mut dyn RomFiles) -> Option<Vec<u32>> {
 pub struct Counts {
     /// The label is a database name.
     pub label: usize,
+    /// A PSP or PS1 title id is a serial in the database.
+    pub serial: usize,
     /// An arcade set's zip name.
     pub rom: usize,
     /// A CRC kept from an earlier run.
@@ -554,10 +779,10 @@ pub struct Counts {
     pub stopped: bool,
 }
 
-/// Name each game from the table: `(title id, database name)` for those
-/// found. `progress` is told the games done of the total after each and
-/// stops the run when it answers false; CRCs read are added to `crcs`.
-pub fn identify(table: &Table, roms: &[Rom], crcs: &mut Crcs, files: &mut dyn RomFiles, progress: &mut dyn FnMut(usize, usize) -> bool) -> (Vec<(String, String)>, Counts) {
+/// Name each game from the table: `(title id, details)` for those found.
+/// `progress` is told the games done of the total after each and stops the
+/// run when it answers false; CRCs read are added to `crcs`.
+pub fn identify(table: &Table, roms: &[Rom], crcs: &mut Crcs, files: &mut dyn RomFiles, progress: &mut dyn FnMut(usize, usize) -> bool) -> (Vec<(String, Details)>, Counts) {
     let mut names = Vec::new();
     let mut counts = Counts::default();
     for (done, rom) in roms.iter().enumerate() {
@@ -565,16 +790,22 @@ pub fn identify(table: &Table, roms: &[Rom], crcs: &mut Crcs, files: &mut dyn Ro
             counts.stopped = true;
             break;
         }
-        let label = rom.label.trim();
-        if table.has_name(label) {
-            names.push((rom.id.clone(), label.to_string()));
+        if let Some(found) = table.by_name(rom.label.trim()) {
+            names.push((rom.id.clone(), found.clone()));
             counts.label += 1;
+            continue;
+        }
+        if rom.path.is_empty() {
+            if let Some(found) = table.by_serial(&rom.id) {
+                names.push((rom.id.clone(), found.clone()));
+                counts.serial += 1;
+            }
             continue;
         }
         let file = rom.path.rsplit(['/', ':']).next().unwrap_or("").to_lowercase();
         let stem = file.rsplit_once('.').map_or(file.as_str(), |(stem, _)| stem);
-        if let Some(name) = table.by_rom(stem) {
-            names.push((rom.id.clone(), name.to_string()));
+        if let Some(found) = table.by_rom(stem) {
+            names.push((rom.id.clone(), found.clone()));
             counts.rom += 1;
             continue;
         }
@@ -587,8 +818,8 @@ pub fn identify(table: &Table, roms: &[Rom], crcs: &mut Crcs, files: &mut dyn Ro
             crcs.changed = true;
         }
         let found = crcs.by_path.get(&key).and_then(|values| values.iter().find_map(|&crc| table.by_crc(crc)));
-        if let Some(name) = found {
-            names.push((rom.id.clone(), name.to_string()));
+        if let Some(found) = found {
+            names.push((rom.id.clone(), found.clone()));
             if kept {
                 counts.kept += 1;
             } else {
@@ -654,7 +885,7 @@ mod tests {
         rdb(&[
             record(&[("name", V::S("Tetris (World) (Rev 1)")), ("rom_name", V::S("Tetris (World) (Rev 1).gb")), ("size", V::U(32768)), ("crc", V::B(&[0x46, 0xdf, 0x91, 0xad]))]),
             // A second record of the same game: details only.
-            record(&[("crc", V::B(&[0x46, 0xdf, 0x91, 0xad])), ("genre", V::S("Puzzle")), ("releaseyear", V::U(1989)), ("users", V::U(2)), ("developer", V::S("Bullet-Proof\tSoftware"))]),
+            record(&[("crc", V::B(&[0x46, 0xdf, 0x91, 0xad])), ("genre", V::S("Puzzle")), ("releaseyear", V::U(1989)), ("users", V::U(2)), ("developer", V::S("Bullet-Proof\tSoftware")), ("region", V::S("World"))]),
             record(&[("name", V::S("Metal Slug - Super Vehicle-001")), ("rom_name", V::S("mslug.zip")), ("crc", V::B(&[1, 2, 3, 4]))]),
             record(&[("name", V::S("Daxter (USA)")), ("serial", V::B(b"UCUS-98618"))]),
             // No CRC and no serial: left out.
@@ -675,20 +906,23 @@ mod tests {
                 genre: "Puzzle".into(),
                 developer: "Bullet-Proof Software".into(),
                 users: 2,
+                region: "World".into(),
                 ..Default::default()
             }
         );
         assert_eq!((rows[1].rom.as_str(), rows[2].serial.as_str()), ("mslug", "UCUS-98618"));
         let text = table_from_rdb(&sample(), 1_762_000_000_000).unwrap();
-        assert_eq!(text.lines().next(), Some("#pocket-shelf-gamedb 1 1762000000000"));
-        assert_eq!(text.lines().nth(1), Some("46df91ad\t\t\tTetris (World) (Rev 1)\t1989\tPuzzle\tBullet-Proof Software\t\t2"));
+        assert_eq!(text.lines().next(), Some("#pocket-shelf-gamedb 2 1762000000000"));
+        assert_eq!(text.lines().nth(1), Some("46df91ad\t\t\tTetris (World) (Rev 1)\t1989\tPuzzle\tBullet-Proof Software\t\t2\tWorld"));
         let table = Table::parse(&text).unwrap();
         assert_eq!((table.built_ms, table.len()), (1_762_000_000_000, 3));
-        assert_eq!(table.by_crc(0x46df91ad), Some("Tetris (World) (Rev 1)"));
-        assert_eq!(table.by_rom("mslug"), Some("Metal Slug - Super Vehicle-001"));
+        let tetris = table.by_crc(0x46df91ad).unwrap();
+        assert_eq!((tetris.name.as_str(), tetris.year, tetris.genre.as_str(), tetris.players), ("Tetris (World) (Rev 1)", 1989, "Puzzle", 2));
+        assert_eq!(table.by_rom("mslug").map(|d| d.name.as_str()), Some("Metal Slug - Super Vehicle-001"));
+        assert_eq!(table.by_serial("UCUS98618").map(|d| d.name.as_str()), Some("Daxter (USA)"));
         assert!(read_rdb(b"PK\x03\x04").is_err());
         assert!(table_from_rdb(&rdb(&[]), 0).is_err());
-        assert_eq!(table_built("#pocket-shelf-gamedb 2 5"), None);
+        assert_eq!(table_built("#pocket-shelf-gamedb 1 5"), None, "a version 1 table is downloaded again");
     }
 
     #[test]
@@ -778,7 +1012,7 @@ mod tests {
         let mut headered = vec![0u8; 512];
         headered.extend(&snes_body);
         let table_text = format!(
-            "#pocket-shelf-gamedb 1 5\n{:08x}\t\t\tPixel Quest (USA)\n{:08x}\t\t\tKnight (Japan)\n{:08x}\t\t\tHeadered (USA)\n01020304\t\tmslug\tMetal Slug\n\t\t\tStar Saga (USA)\n",
+            "#pocket-shelf-gamedb 2 5\n{:08x}\t\t\tPixel Quest (USA)\n{:08x}\t\t\tKnight (Japan)\n{:08x}\t\t\tHeadered (USA)\n01020304\t\tmslug\tMetal Slug\n\t\t\tStar Saga (USA)\n",
             crc32(b"PIXEL"),
             crc32(b"KNIGHT"),
             crc32(&snes_body)
@@ -801,16 +1035,18 @@ mod tests {
         ];
         let mut crcs = Crcs::default();
         let mut seen = Vec::new();
+        let named = |found: Vec<(String, Details)>| -> Vec<(String, String)> { found.into_iter().map(|(id, d)| (id, d.name)).collect() };
         let (names, counts) = identify(&table, &roms, &mut crcs, &mut files, &mut |done, total| {
             seen.push((done, total));
             true
         });
+        let names = named(names);
         let expected: Vec<(String, String)> = [("ra1", "Star Saga (USA)"), ("ra2", "Pixel Quest (USA)"), ("ra3", "Knight (Japan)"), ("ra4", "Metal Slug"), ("ra7", "Headered (USA)")]
             .iter()
             .map(|(a, b)| (a.to_string(), b.to_string()))
             .collect();
         assert_eq!(names, expected);
-        assert_eq!(counts, Counts { label: 1, rom: 1, kept: 0, read: 3, files: 4, stopped: false });
+        assert_eq!(counts, Counts { label: 1, serial: 0, rom: 1, kept: 0, read: 3, files: 4, stopped: false });
         assert_eq!(seen.last(), Some(&(7, 7)));
         assert!(crcs.changed);
 
@@ -819,11 +1055,60 @@ mod tests {
         assert_eq!(kept.len(), 4);
         let reads = files.reads;
         let (again, counts) = identify(&table, &roms, &mut kept, &mut files, &mut |_, _| true);
-        assert_eq!((again, files.reads, counts.kept, kept.changed), (expected, reads, 3, false));
+        assert_eq!((named(again), files.reads, counts.kept, kept.changed), (expected, reads, 3, false));
 
         // Stopping keeps what was found.
         let (some, counts) = identify(&table, &roms, &mut Crcs::default(), &mut files, &mut |done, _| done < 2);
         assert_eq!((some.len(), counts.stopped), (2, true));
+    }
+
+    #[test]
+    fn psp_and_ps1_titles_are_found_by_serial_without_a_file() {
+        let text = "#pocket-shelf-gamedb 2 5\n\tULUS-10041\t\tLumines (USA)\t2005\tPuzzle\n\tSLPS-02269-1\t\tDisc Game (Japan) (Disc 1)\n\tSLPS-02269\t\tDisc Game (Japan)\n\tSLPS-02269-2\t\tDisc Game (Japan) (Disc 2)\n";
+        let table = Table::parse(text).unwrap();
+        let rom = |id: &str| Rom { id: id.into(), label: "LUMINES".into(), path: String::new() };
+        let (found, counts) = identify(&table, &[rom("ULUS10041"), rom("SLPS02269"), rom("ULES00001")], &mut Crcs::default(), &mut Files::default(), &mut |_, _| true);
+        let names: Vec<&str> = found.iter().map(|(_, d)| d.name.as_str()).collect();
+        assert_eq!(names, ["Lumines (USA)", "Disc Game (Japan)"]);
+        assert_eq!((counts.serial, counts.files), (2, 0));
+        assert_eq!(serial_key("ULES-01513/E"), "ULES01513");
+        assert_eq!(serial_key("SLPS-02269-3"), "SLPS02269");
+        assert_eq!(serial_key("DMG-VFJ-JPN"), "DMGVFJJPN");
+        assert_eq!(database_for("psp", "NPUZ00001", None).as_deref(), Some(PSP_PSN));
+        assert_eq!(database_for("psp", "ULUS10041", None).as_deref(), Some(PSP));
+        assert_eq!(database_for("psx", "SCUS94163", None).as_deref(), Some(PS1));
+        assert_eq!(database_for("retro", "ra1", Some("Neo Geo")).as_deref(), Some("SNK - Neo Geo"));
+        assert_eq!(database_for("vita", "PCSA00069", None), None);
+    }
+
+    #[test]
+    fn short_names_drop_brackets_and_move_the_article() {
+        assert_eq!(short_name("Frogger (Japan)"), "Frogger");
+        assert_eq!(short_name("Legend of Zelda, The - A Link to the Past (USA)"), "The Legend of Zelda - A Link to the Past");
+        assert_eq!(short_name("Adventures of Batman & Robin, The (USA)"), "The Adventures of Batman & Robin");
+        assert_eq!(short_name("Pixel Quest [b]"), "Pixel Quest");
+        assert_eq!(short_name("Tales, Myths and Legends"), "Tales, Myths and Legends");
+        assert_eq!(short_name("(Untitled)"), "(Untitled)");
+    }
+
+    #[test]
+    fn known_titles_round_trip_and_misses_wait_for_a_newer_table() {
+        let mut known = Known::default();
+        let rom = |id: &str| Rom { id: id.into(), label: String::new(), path: "p".into() };
+        let tetris = Details { name: "Tetris (World)".into(), year: 1989, genre: "Puzzle".into(), players: 2, region: "World".into(), ..Default::default() };
+        known.record("Nintendo - Game Boy", 100, &[rom("ra1"), rom("ra2")], &[("ra1".into(), tetris.clone())]);
+        let text = known.render();
+        assert_eq!(text, "ra1\tNintendo - Game Boy\t100\tTetris (World)\t1989\tPuzzle\t\t\t2\tWorld\nra2\tNintendo - Game Boy\t100\t\t\t\t\t\t\t\n");
+        let known = Known::parse(&text);
+        assert_eq!((known.get("ra1"), known.get("ra2")), (Some(&tetris), None));
+        assert!(!known.wants("ra1", "Nintendo - Game Boy", 999), "found stays found");
+        assert!(!known.wants("ra2", "Nintendo - Game Boy", 100));
+        assert!(known.wants("ra2", "Nintendo - Game Boy", 101), "a newer table is asked");
+        assert!(known.wants("ra1", "Nintendo - Game Boy Color", 100), "the console changed");
+        assert!(known.wants("ra3", "Nintendo - Game Boy", 0));
+        let mut infos = vec![crate::host::TitleInfo { id: "ra1".into(), ..Default::default() }];
+        known.apply(&mut infos);
+        assert_eq!(infos[0].details.as_ref(), Some(&tetris));
     }
 
     #[test]

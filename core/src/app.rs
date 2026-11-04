@@ -212,6 +212,9 @@ impl App {
             if let Some(bytes) = host.read(crate::library::settings::EMULATORS_FILE) {
                 settings.emulators = crate::library::settings::EmulatorChoice::parse(&bytes);
             }
+            if let Some(bytes) = host.read(crate::library::settings::GAME_INFO_FILE) {
+                settings.game_info = crate::library::settings::GameInfo::parse(&bytes);
+            }
             if let Some(bytes) = host.read(crate::library::settings::TEXT_SIZE_FILE) {
                 settings.text_size = crate::library::settings::TextSize::parse(&bytes);
             }

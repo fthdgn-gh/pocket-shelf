@@ -81,8 +81,8 @@ impl Listings {
     }
 
     /// The host's names for a database's games.
-    pub fn set_named(&mut self, database: &str, names: Vec<(String, String)>) {
-        self.named.insert(database.to_string(), names.into_iter().collect());
+    pub fn set_named(&mut self, database: &str, names: &[(String, crate::online::gamedb::Details)]) {
+        self.named.insert(database.to_string(), names.iter().map(|(id, d)| (id.clone(), d.name.clone())).collect());
     }
 
     /// Start fetching a console's listing to its file.

@@ -271,19 +271,43 @@ stick at each launch when it differs.
   downloads a console's table when it is missing or over 90 days old.
   **NES records hold the CRC of the file with its 16-byte header**; a
   GoodTools dump with another header does not match and goes by label.
-- **Identifying RetroArch games** (`platform/gamedb.rs`, a host thread):
-  the label when it is a database name (RetroArch's scanner wrote it), an
-  arcade set by its zip's name, then the CRC: a zip's directory holds each
+- **Identifying titles** (`platform/gamedb.rs`, a host thread): the label
+  when it is a database name (RetroArch's scanner wrote it), a PSP or PS1
+  title by its title id as a serial (`ULUS10041` is `ULUS-10041`; PSN
+  titles, `NP…`, are in `Sony - PlayStation Portable (PSN)`; no file is
+  read), an arcade set by its zip's name, then the CRC: a zip's directory holds each
   file's CRC (two reads of the file's end), a loose file up to 64 MB is
   read whole, with a second CRC after 512 bytes for a SNES copier header;
   disc images are not read. **The user's playlists carry no CRC** (every
   `crc32` is `00000000|crc`, a manual scan): 1,212 zips, 3,489 `.nes` and
   947 `.bin` files. CRCs are kept in `gamedb/crcs.tsv` by path, so a file
-  is read on the first run only. Fetch artwork matches the database name
-  before the label; Find artwork searches it when this run of the app has
-  one. **Not yet confirmed on hardware**: the download and the table on
-  the download thread, the time the first run's file reads take, and how
-  many of the user's games are named.
+  is read on the first run only. **What each title was found to be is
+  kept in `gamedb/known.tsv`** (database, the table's build time, the
+  details; a miss is looked up again in a newer table only) and read on
+  the scan thread with the title list. At each start, after the dates, the
+  titles new since the last run are identified for each table on the card
+  (no network). SELECT ▸ Library ▸ Game database downloads every table
+  over a week old and identifies every title, a database at a time.
+  Fetch artwork matches the database name before the label; Find artwork
+  searches it. **Coverage** of regular releases (2026-11-04): year 58% on
+  NES, 82–89% on SNES, Mega Drive, Game Boy and PS1; genre, developer and
+  players 13% on NES, 29% on Mega Drive, 47% on SNES, 83% on GBA, 86% on
+  PS1; region over 80% everywhere. **Not yet confirmed on hardware**: the
+  first run's file reads, how many of the user's games are identified,
+  and the frame that takes a console's results (2.1 ms on the Mac for
+  5,905 titles, about 100 ms on the Vita by the usual ratio).
+- **What identified titles show**: Appearance ▸ Game names (`game-info.json`):
+  Own (the playlist label or the title's name), Database, or Short (the
+  database name without brackets, a trailing ", The" moved to the front);
+  a title the user renamed keeps the user's name. With database names,
+  name order is worked out in the rebuild (0.3 ms more on the Mac for
+  5,905 titles); the names are made once per title (`Game::with_details`).
+  Appearance ▸ Game details: the panel of year, genre, developer,
+  publisher, players and region with their symbols (`shapes::Icon`), a
+  column right of the title in Home and the Cascade, one row under it in
+  the Carousel and the Grid; with the panel off, the line under the title
+  carries the year and genre. SELECT ▸ Sort has Newest and Oldest release;
+  titles with no year go last.
 - **The scraper is the user's choice** (`scraper` in `settings.json`): Auto
   (libretro for RetroArch games, SteamGridDB for the rest), SteamGridDB, or
   libretro.

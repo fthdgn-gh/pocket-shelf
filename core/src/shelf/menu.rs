@@ -37,6 +37,12 @@ pub enum Item {
     FetchArt,
     CleanArt,
     Rescan,
+    /// SELECT ▸ Library ▸ Game database: download and identify.
+    GameDatabase,
+    /// The names identified titles show.
+    GameNames,
+    /// The details panel next to the selected title.
+    GameDetails,
     UpdateChannel,
     CheckUpdates,
     Confirm,
@@ -55,9 +61,9 @@ pub fn items(page: Page) -> &'static [Item] {
     use Item::*;
     match page {
         Page::Main => &[Sort, Open(Page::Appearance), Open(Page::Library), Open(Page::Updates), Confirm, Keyboard, Language, Diagnostics],
-        Page::Appearance => &[Theme, View, Details, TextSize, Backdrop, IconBox, Open(Page::Status)],
+        Page::Appearance => &[Theme, View, Details, TextSize, Backdrop, IconBox, GameNames, GameDetails, Open(Page::Status)],
         Page::Status => &[StatusBar, StatusPosition, ShowWifi, ShowBluetooth, ShowBattery, BatteryPercent, Clock],
-        Page::Library => &[Categories, FetchArt, CleanArt, Rescan, Emulator],
+        Page::Library => &[Categories, FetchArt, CleanArt, Rescan, Emulator, GameDatabase],
         Page::Updates => &[UpdateChannel, CheckUpdates],
     }
 }

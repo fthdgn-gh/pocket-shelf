@@ -43,6 +43,8 @@ pub struct TitleInfo {
     pub opens: Emulators,
     /// In Emu4Vita++'s favourites.
     pub emu_favorite: bool,
+    /// What the game database says about it (`gamedb/known.tsv`).
+    pub details: Option<crate::online::gamedb::Details>,
 }
 
 /// An RGBA picture.
@@ -221,9 +223,10 @@ pub enum Event {
     Dates(Vec<(String, crate::library::played::SystemDates)>),
     /// [`Host::identify`] is reading a console's games: done of the total.
     Identifying { database: String, done: u32, total: u32 },
-    /// A console's games named by its database table, `(title id, name)`;
-    /// `None` when there is no table built after the time asked for.
-    Identified(String, Option<Vec<(String, String)>>),
+    /// A database's titles identified from its table, `(title id,
+    /// details)`; `None` when there is no table built after the time asked
+    /// for. The host has saved them to `gamedb/known.tsv` already.
+    Identified(String, Option<Vec<(String, crate::online::gamedb::Details)>>),
 }
 
 /// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP

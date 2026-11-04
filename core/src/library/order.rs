@@ -22,11 +22,14 @@ pub enum SortOrder {
     /// The system's first-install date.
     NewestInstalled,
     OldestInstalled,
+    /// The release year the game database gives.
+    NewestReleased,
+    OldestReleased,
 }
 
 impl SortOrder {
     /// In the Sort row's order.
-    pub const ALL: [SortOrder; 8] = [
+    pub const ALL: [SortOrder; 10] = [
         SortOrder::NameAsc,
         SortOrder::NameDesc,
         SortOrder::RecentlyPlayed,
@@ -35,6 +38,8 @@ impl SortOrder {
         SortOrder::LeastPlayed,
         SortOrder::NewestInstalled,
         SortOrder::OldestInstalled,
+        SortOrder::NewestReleased,
+        SortOrder::OldestReleased,
     ];
 
     pub fn key(self) -> &'static str {
@@ -47,6 +52,8 @@ impl SortOrder {
             SortOrder::LeastPlayed => "played-least",
             SortOrder::NewestInstalled => "installed-newest",
             SortOrder::OldestInstalled => "installed-oldest",
+            SortOrder::NewestReleased => "released-newest",
+            SortOrder::OldestReleased => "released-oldest",
         }
     }
 
@@ -94,6 +101,8 @@ impl SortOrders {
 pub struct Facts {
     pub play: Option<Play>,
     pub system: Option<SystemDates>,
+    /// The release year from the game database; 0 when unknown.
+    pub year: u16,
 }
 
 impl Facts {
@@ -107,8 +116,8 @@ impl Facts {
 
 /// `list` (a tab's titles in name order) in `order`. Ties and titles with
 /// nothing to sort by keep name order: a title never played counts as the
-/// least recently and least played, one with no install date goes last in
-/// both install orders.
+/// least recently and least played, one with no install date or release
+/// year goes last in both install or release orders.
 pub fn sort(list: &mut [usize], order: SortOrder, facts: impl Fn(usize) -> Facts) {
     match order {
         SortOrder::NameAsc => {}
@@ -131,9 +140,18 @@ pub fn sort(list: &mut [usize], order: SortOrder, facts: impl Fn(usize) -> Facts
             }
             write_back(list, keyed);
         }
-        SortOrder::NewestInstalled | SortOrder::OldestInstalled => {
-            let mut keyed: Vec<(Option<u64>, usize)> = list.iter().map(|&i| (facts(i).system.and_then(|s| s.installed), i)).collect();
-            let newest = order == SortOrder::NewestInstalled;
+        SortOrder::NewestInstalled | SortOrder::OldestInstalled | SortOrder::NewestReleased | SortOrder::OldestReleased => {
+            let released = matches!(order, SortOrder::NewestReleased | SortOrder::OldestReleased);
+            let when = |i: usize| {
+                let facts = facts(i);
+                if released {
+                    Some(facts.year as u64).filter(|&y| y > 0)
+                } else {
+                    facts.system.and_then(|s| s.installed)
+                }
+            };
+            let mut keyed: Vec<(Option<u64>, usize)> = list.iter().map(|&i| (when(i), i)).collect();
+            let newest = matches!(order, SortOrder::NewestInstalled | SortOrder::NewestReleased);
             keyed.sort_by(|a, b| match (a.0, b.0) {
                 (Some(x), Some(y)) if newest => y.cmp(&x),
                 (Some(x), Some(y)) => x.cmp(&y),
@@ -192,6 +210,7 @@ mod tests {
                     _ => None,
                 },
             }),
+            year: [1991, 0, 1989, 1991, 1995][i],
         };
         let sorted = |order| {
             let mut list = vec![0, 1, 2, 3, 4];
@@ -206,5 +225,8 @@ mod tests {
         assert_eq!(sorted(SortOrder::LeastPlayed), [0, 2, 4, 3, 1]);
         assert_eq!(sorted(SortOrder::NewestInstalled), [4, 3, 2, 0, 1]);
         assert_eq!(sorted(SortOrder::OldestInstalled), [0, 2, 3, 4, 1]);
+        // 1 has no year: last both ways; a tie keeps name order.
+        assert_eq!(sorted(SortOrder::NewestReleased), [4, 0, 3, 2, 1]);
+        assert_eq!(sorted(SortOrder::OldestReleased), [2, 0, 3, 4, 1]);
     }
 }

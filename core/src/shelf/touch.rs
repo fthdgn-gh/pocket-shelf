@@ -36,6 +36,7 @@ impl Shelf {
             || self.fetch.is_some()
             || self.cleanup.is_some()
             || self.rescan.is_some()
+            || self.database.is_some()
             || self.diagnostics.is_some()
             || self.picker.is_some()
             || self.editor.is_some()
