@@ -176,9 +176,9 @@ impl App {
                         shelf.listing(host, folder, listing);
                     }
                 }
-                Event::Identifying { database, done, total } => {
+                Event::Identifying { database, done, total, found } => {
                     if let Some(shelf) = &mut self.shelf {
-                        shelf.identifying(&database, done, total);
+                        shelf.identifying(&database, done, total, found);
                     }
                 }
                 Event::Identified(database, names) => {

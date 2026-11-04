@@ -780,13 +780,14 @@ pub struct Counts {
 }
 
 /// Name each game from the table: `(title id, details)` for those found.
-/// `progress` is told the games done of the total after each and stops the
-/// run when it answers false; CRCs read are added to `crcs`.
-pub fn identify(table: &Table, roms: &[Rom], crcs: &mut Crcs, files: &mut dyn RomFiles, progress: &mut dyn FnMut(usize, usize) -> bool) -> (Vec<(String, Details)>, Counts) {
+/// `progress` is told the games done of the total and those found so far,
+/// before each game, and stops the run when it answers false; CRCs read are
+/// added to `crcs`.
+pub fn identify(table: &Table, roms: &[Rom], crcs: &mut Crcs, files: &mut dyn RomFiles, progress: &mut dyn FnMut(usize, usize, usize) -> bool) -> (Vec<(String, Details)>, Counts) {
     let mut names = Vec::new();
     let mut counts = Counts::default();
     for (done, rom) in roms.iter().enumerate() {
-        if !progress(done, roms.len()) {
+        if !progress(done, roms.len(), names.len()) {
             counts.stopped = true;
             break;
         }
@@ -828,7 +829,7 @@ pub fn identify(table: &Table, roms: &[Rom], crcs: &mut Crcs, files: &mut dyn Ro
         }
     }
     if !counts.stopped {
-        progress(roms.len(), roms.len());
+        progress(roms.len(), roms.len(), names.len());
     }
     (names, counts)
 }
@@ -1036,7 +1037,7 @@ mod tests {
         let mut crcs = Crcs::default();
         let mut seen = Vec::new();
         let named = |found: Vec<(String, Details)>| -> Vec<(String, String)> { found.into_iter().map(|(id, d)| (id, d.name)).collect() };
-        let (names, counts) = identify(&table, &roms, &mut crcs, &mut files, &mut |done, total| {
+        let (names, counts) = identify(&table, &roms, &mut crcs, &mut files, &mut |done, total, _| {
             seen.push((done, total));
             true
         });
@@ -1054,11 +1055,11 @@ mod tests {
         let mut kept = Crcs::parse(&crcs.render());
         assert_eq!(kept.len(), 4);
         let reads = files.reads;
-        let (again, counts) = identify(&table, &roms, &mut kept, &mut files, &mut |_, _| true);
+        let (again, counts) = identify(&table, &roms, &mut kept, &mut files, &mut |_, _, _| true);
         assert_eq!((named(again), files.reads, counts.kept, kept.changed), (expected, reads, 3, false));
 
         // Stopping keeps what was found.
-        let (some, counts) = identify(&table, &roms, &mut Crcs::default(), &mut files, &mut |done, _| done < 2);
+        let (some, counts) = identify(&table, &roms, &mut Crcs::default(), &mut files, &mut |done, _, _| done < 2);
         assert_eq!((some.len(), counts.stopped), (2, true));
     }
 
@@ -1067,7 +1068,7 @@ mod tests {
         let text = "#pocket-shelf-gamedb 2 5\n\tULUS-10041\t\tLumines (USA)\t2005\tPuzzle\n\tSLPS-02269-1\t\tDisc Game (Japan) (Disc 1)\n\tSLPS-02269\t\tDisc Game (Japan)\n\tSLPS-02269-2\t\tDisc Game (Japan) (Disc 2)\n";
         let table = Table::parse(text).unwrap();
         let rom = |id: &str| Rom { id: id.into(), label: "LUMINES".into(), path: String::new() };
-        let (found, counts) = identify(&table, &[rom("ULUS10041"), rom("SLPS02269"), rom("ULES00001")], &mut Crcs::default(), &mut Files::default(), &mut |_, _| true);
+        let (found, counts) = identify(&table, &[rom("ULUS10041"), rom("SLPS02269"), rom("ULES00001")], &mut Crcs::default(), &mut Files::default(), &mut |_, _, _| true);
         let names: Vec<&str> = found.iter().map(|(_, d)| d.name.as_str()).collect();
         assert_eq!(names, ["Lumines (USA)", "Disc Game (Japan)"]);
         assert_eq!((counts.serial, counts.files), (2, 0));

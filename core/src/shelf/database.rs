@@ -38,6 +38,14 @@ pub struct DatabaseRun {
     pub done: usize,
     /// Titles identified this run.
     pub named: usize,
+    /// The console being identified: games checked of its total, and found.
+    pub checked: (u32, u32),
+    pub found: u32,
+    /// The library's titles identified and those a database covers, and the
+    /// databases, worked out when the drawer opens and after each console:
+    /// counting them walked every title, every frame.
+    known: (usize, usize),
+    consoles: usize,
     wait: Wait,
 }
 
@@ -57,6 +65,7 @@ fn databases(shelf: &Shelf) -> Vec<String> {
 
 impl Shelf {
     pub(super) fn open_database(&mut self) {
+        let (known, consoles) = (self.database_counts(), databases(self).len());
         self.database = Some(DatabaseRun {
             running: false,
             status: String::new(),
@@ -65,6 +74,10 @@ impl Shelf {
             total: 0,
             done: 0,
             named: 0,
+            checked: (0, 0),
+            found: 0,
+            known,
+            consoles,
             wait: Wait::Idle,
         });
         self.drawer = panel::slide();
@@ -121,6 +134,8 @@ impl Shelf {
         };
         run.current = database.clone();
         run.status = t.identifying_start.to_string();
+        run.checked = (0, 0);
+        run.found = 0;
         if host.identify(&database, newer) {
             run.wait = Wait::Identify { database, downloaded: false };
         } else {
@@ -132,7 +147,10 @@ impl Shelf {
     /// The host's answer for a database the run waits on.
     pub(super) fn database_identified(&mut self, host: &mut dyn Host, database: &str, found: Option<usize>) {
         let t = self.t();
+        // The library took the console's results already (`identified`).
+        let known = self.database_counts();
         let Some(run) = &mut self.database else { return };
+        run.known = known;
         let Wait::Identify { database: waiting, downloaded } = run.wait.clone() else { return };
         if waiting != database {
             return;
@@ -156,11 +174,11 @@ impl Shelf {
     }
 
     /// The host's progress identifying a database's titles.
-    pub(super) fn database_progress(&mut self, database: &str, done: u32, total: u32) {
-        let t = self.t();
+    pub(super) fn database_progress(&mut self, database: &str, done: u32, total: u32, found: u32) {
         let Some(run) = &mut self.database else { return };
         if matches!(&run.wait, Wait::Identify { database: waiting, .. } if waiting == database) {
-            run.status = fill(t.identifying, &[("done", &done.to_string()), ("total", &total.to_string())]);
+            run.checked = (done, total);
+            run.found = found;
         }
     }
 
@@ -206,17 +224,22 @@ impl Shelf {
     pub(super) fn draw_database(&mut self, gfx: &mut Gfx) {
         let Some(run) = &self.database else { return };
         let (running, status, current, done, total) = (run.running, run.status.clone(), run.current.clone(), run.done, run.total);
+        let ((known, titles), consoles, checked, found) = (run.known, run.consoles, run.checked, run.found);
         let t = self.t();
         let theme = self.theme;
         let slide = self.drawer.at(self.now);
-        let (known, titles) = self.database_counts();
-        let consoles = databases(self).len();
         let mut drawer = Drawer::open(gfx, &theme, &upper(t.game_database, self.settings.language), panel::Size::Wide, slide);
-        let identified = fill(t.identified_count, &[("count", &known.to_string()), ("total", &titles.to_string())]);
+        let of = |count: usize, total: usize| fill(t.identified_count, &[("count", &count.to_string()), ("total", &total.to_string())]);
+        let identified = of(known, titles);
         if running {
             let name = gfx.fit(Role::BodyBold, &current, 420.0);
             drawer.row(gfx, t.database_current, Some(&name), None, true, Step::None);
-            drawer.row(gfx, t.progress, Some(&format!("{done} / {total}")), None, false, Step::None);
+            // The console's games as the host reads them, then the library's
+            // count once the console is done.
+            let games = if checked.1 > 0 { of(checked.0 as usize, checked.1 as usize) } else { "-".to_string() };
+            drawer.row(gfx, t.database_games, Some(&games), None, false, Step::None);
+            drawer.row(gfx, t.database_found, Some(&found.to_string()), None, false, Step::None);
+            drawer.row(gfx, t.database_consoles, Some(&of(done, total)), None, false, Step::None);
             drawer.row(gfx, t.database_identified, Some(&identified), None, false, Step::None);
             drawer.note(gfx, &status, 1);
             drawer.hints(gfx, &[(Button::cancel(self.settings.confirm), t.stop)]);

@@ -221,8 +221,9 @@ pub enum Event {
     /// home screen's database after [`Event::Titles`] at each start (they
     /// change with every launch, so a saved list does not keep them).
     Dates(Vec<(String, crate::library::played::SystemDates)>),
-    /// [`Host::identify`] is reading a console's games: done of the total.
-    Identifying { database: String, done: u32, total: u32 },
+    /// [`Host::identify`] is reading a console's games: done of the total,
+    /// and found so far.
+    Identifying { database: String, done: u32, total: u32, found: u32 },
     /// A database's titles identified from its table, `(title id,
     /// details)`; `None` when there is no table built after the time asked
     /// for. The host has saved them to `gamedb/known.tsv` already.

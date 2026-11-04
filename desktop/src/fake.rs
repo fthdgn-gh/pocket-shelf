@@ -763,7 +763,9 @@ impl Host for FakeHost {
                 let names = games.iter().filter_map(|t| Some((t.id.clone(), fake_database(&t.id)?))).collect();
                 events.push(Event::Identified(database, Some(names)));
             } else {
-                events.push(Event::Identifying { database, done: (elapsed * total as u64 / IDENTIFY_FRAMES) as u32, total });
+                let done = (elapsed * total as u64 / IDENTIFY_FRAMES) as u32;
+                let found = games.iter().take(done as usize).filter(|t| fake_database(&t.id).is_some()).count() as u32;
+                events.push(Event::Identifying { database, done, total, found });
             }
         }
         events.append(&mut self.next);

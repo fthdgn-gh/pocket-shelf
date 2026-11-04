@@ -144,11 +144,11 @@ fn identify(database: &str, newer_than_ms: u64, sender: &Sender<Event>, only_new
     let mut crcs = read_text(&crcs_path).map(|text| Crcs::parse(&text)).unwrap_or_default();
     let mut files = CardFiles { buffer: vec![0; 64 * 1024], run };
     let mut last = 0u64;
-    let mut progress = |done: usize, total: usize| {
+    let mut progress = |done: usize, total: usize, found: usize| {
         let now = now_us();
         if now - last >= PROGRESS_EVERY_US || done == total {
             last = now;
-            let _ = sender.send(Event::Identifying { database: database.to_string(), done: done as u32, total: total as u32 });
+            let _ = sender.send(Event::Identifying { database: database.to_string(), done: done as u32, total: total as u32, found: found as u32 });
         }
         RUN.load(Ordering::Relaxed) == run
     };

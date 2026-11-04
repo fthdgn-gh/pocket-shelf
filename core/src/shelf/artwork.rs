@@ -243,8 +243,8 @@ impl Shelf {
 
     /// The host's progress naming a database's games, for a run waiting on
     /// it.
-    pub fn identifying(&mut self, database: &str, done: u32, total: u32) {
-        self.database_progress(database, done, total);
+    pub fn identifying(&mut self, database: &str, done: u32, total: u32, found: u32) {
+        self.database_progress(database, done, total, found);
         let t = self.t();
         if let Some(panel) = &mut self.fetch {
             panel.flow.identifying(t, database, done, total);
