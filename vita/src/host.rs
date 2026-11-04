@@ -305,6 +305,16 @@ impl Host for VitaHost {
         });
     }
 
+    fn identify(&mut self, database: &str, newer_than_ms: u64) -> bool {
+        let (database, sender) = (database.to_string(), self.answer_sender.clone());
+        spawn("shelf-gamedb", move || crate::platform::gamedb::run(database, newer_than_ms, sender));
+        true
+    }
+
+    fn identify_stop(&mut self) {
+        crate::platform::gamedb::stop();
+    }
+
     fn build(&self) -> shelf_core::updates::BuildInfo {
         shelf_core::updates::BuildInfo {
             version: env!("SHELF_VERSION").into(),

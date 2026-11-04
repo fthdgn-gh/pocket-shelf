@@ -80,6 +80,9 @@ enum Kind {
     /// A thumbnail folder's listing page (libretro's thumbnail server): read
     /// in memory, and the file names it links to written one per line.
     Index,
+    /// A game database (`.rdb`, libretro-database): read in memory and
+    /// written as its table (`gamedb::table_from_rdb`).
+    Database,
 }
 
 enum Outcome {
@@ -118,7 +121,8 @@ fn tls_config() -> Option<Arc<ClientConfig>> {
 
 /// A file a download may be written to: `art/<name>.png` or
 /// `backdrops/<name>.png` with a plain file name, `libretro/<name>.txt` for a
-/// listing's names, or `UPDATE_VPK`.
+/// listing's names, `gamedb/<name>.tsv` for a database's table, or
+/// `UPDATE_VPK`.
 fn valid_dest(path: &str) -> bool {
     if path == UPDATE_VPK {
         return true;
@@ -126,8 +130,12 @@ fn valid_dest(path: &str) -> bool {
     let Some((dir, name)) = path.split_once('/') else {
         return false;
     };
-    let extension = if dir == "libretro" { ".txt" } else { ".png" };
-    (dir == "art" || dir == "backdrops" || dir == "libretro")
+    let extension = match dir {
+        "libretro" => ".txt",
+        "gamedb" => ".tsv",
+        _ => ".png",
+    };
+    (dir == "art" || dir == "backdrops" || dir == "libretro" || dir == "gamedb")
         && name.len() >= 5
         && name.len() <= 64
         && !name.starts_with('.')
@@ -197,6 +205,7 @@ fn start_kind(url: &str, auth: &str, dest: Option<&str>, icon: bool, bytes: bool
         None => Kind::Text,
         Some(UPDATE_VPK) => Kind::Package,
         Some(path) if path.starts_with("libretro/") => Kind::Index,
+        Some(path) if path.starts_with("gamedb/") => Kind::Database,
         Some(path) if icon && path.starts_with("art/") => Kind::Icon,
         Some(_) => Kind::File,
     };
@@ -365,12 +374,19 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &
         (None, _) | (_, Kind::Text) | (_, Kind::Bytes) => TEXT_MAX,
         (Some(_), Kind::File | Kind::Icon) => FILE_MAX,
         (Some(_), Kind::Package) => VPK_MAX,
-        (Some(_), Kind::Index) => INDEX_MAX,
+        (Some(_), Kind::Index | Kind::Database) => INDEX_MAX,
     };
-    // A listing page is read in memory; everything else saved goes to a file.
-    let part = saving.filter(|_| kind != Kind::Index).map(|path| format!("{path}.part"));
+    // A listing page and a database are read in memory; everything else
+    // saved goes to a file.
+    let in_memory = matches!(kind, Kind::Index | Kind::Database);
+    // The whole reply at once: a growing buffer copies itself at each
+    // doubling (a 7.7 MB database would briefly hold 24 MB).
+    if let (true, Some(_), Some(length)) = (in_memory, saving, response.length.filter(|length| *length <= limit)) {
+        with_slot(id, |slot| slot.body.reserve_exact(length));
+    }
+    let part = saving.filter(|_| !in_memory).map(|path| format!("{path}.part"));
     let mut file = match (&part, saving) {
-        (Some(part), Some(path)) if kind != Kind::Index => {
+        (Some(part), Some(path)) if !in_memory => {
             if let Some((dir, _)) = path.rsplit_once('/') {
                 let _ = fs::create_dir_all(dir);
             }
@@ -453,6 +469,14 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &
             return Err(String::from("no names in the listing"));
         }
         write_atomic(path, (names.join("\n") + "\n").as_bytes())?;
+    }
+    if let (Kind::Database, Some(path)) = (kind, saving) {
+        let body = with_slot(id, |slot| core::mem::take(&mut slot.body)).unwrap_or_default();
+        let started = crate::host::now_us();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+        let table = shelf_core::online::gamedb::table_from_rdb(&body, now).map_err(String::from)?;
+        crate::host::log_line(&format!("gamedb: {} KB database as a {} KB table in {} ms", body.len() / 1024, table.len() / 1024, (crate::host::now_us() - started) / 1000));
+        write_atomic(path, table.as_bytes())?;
     }
     if let (Some(file), Some(part), Some(path)) = (file, part, saving) {
         drop(file);

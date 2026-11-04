@@ -278,7 +278,17 @@ pub struct FakeHost {
     pub update_report: String,
     /// The update step running and the frame it started on.
     update_step: Option<(&'static str, u64)>,
+    /// A database being identified and the frame it started on.
+    identifying: Option<(String, u64)>,
 }
+
+/// Frames the fake takes to name a database's games.
+const IDENTIFY_FRAMES: u64 = 90;
+
+/// What the fake game database names: a sample game's label and its name.
+/// "Pixel Quest" is the European release, which the label alone would
+/// match as the American one.
+const DATABASE_NAMES: [(&str, &str); 2] = [("Pixel Quest", "Pixel Quest (Europe)"), ("Star Knight Saga (USA)", "Star Knight Saga (USA)")];
 
 /// GitHub's releases list: a beta newer than the fake build (0.1.0, beta)
 /// and the build's own release.
@@ -398,6 +408,7 @@ impl FakeHost {
             plugin: PluginState::Missing,
             requests: HashMap::new(),
             next_request: 1,
+            identifying: None,
             launched: Vec::new(),
             log: Vec::new(),
             installable: false,
@@ -662,6 +673,23 @@ impl Host for FakeHost {
         self.later.push(Event::Listing(folder.to_string(), listing));
     }
 
+    /// A table the fake downloaded: the database's games one at a time over
+    /// `IDENTIFY_FRAMES`, then the names `DATABASE_NAMES` gives.
+    fn identify(&mut self, database: &str, newer_than_ms: u64) -> bool {
+        use shelf_core::online::gamedb::{table_built, table_path};
+        let built = self.files.get(&table_path(database)).and_then(|b| table_built(String::from_utf8_lossy(b).lines().next()?));
+        if built.is_some_and(|built| built >= newer_than_ms) {
+            self.identifying = Some((database.to_string(), self.frame));
+        } else {
+            self.later.push(Event::Identified(database.to_string(), None));
+        }
+        true
+    }
+
+    fn identify_stop(&mut self) {
+        self.identifying = None;
+    }
+
     fn keyboard_open(&mut self, _title: &str, _text: &str, _max: usize, _search: bool) -> bool {
         match &mut self.system_keyboard {
             Some((_, frames)) => {
@@ -699,6 +727,19 @@ impl Host for FakeHost {
                 let mut before = 0;
                 let phase = SCAN_PHASES.iter().find(|p| { before += p.1; done < before }).map_or(ScanPhase::Retro, |p| p.0);
                 events.push(Event::Scan { done, total, phase });
+            }
+        }
+        if let Some((database, start)) = self.identifying.clone() {
+            use shelf_core::online::gamedb::database_name;
+            let games: Vec<&TitleInfo> = self.titles.iter().filter(|t| t.console.as_deref().map(database_name).as_deref() == Some(&database)).collect();
+            let total = games.len() as u32;
+            let elapsed = self.frame - start;
+            if elapsed >= IDENTIFY_FRAMES {
+                self.identifying = None;
+                let names = games.iter().filter_map(|t| DATABASE_NAMES.iter().find(|(label, _)| *label == t.title).map(|(_, name)| (t.id.clone(), name.to_string()))).collect();
+                events.push(Event::Identified(database, Some(names)));
+            } else {
+                events.push(Event::Identifying { database, done: (elapsed * total as u64 / IDENTIFY_FRAMES) as u32, total });
             }
         }
         events.append(&mut self.next);
@@ -749,6 +790,11 @@ impl Host for FakeHost {
                 // libretro's title screens are missing on the fake server.
                 let status = if url.contains("/Named_Titles/") { 404 } else { 200 };
                 FakeRequest { polls: 0, status, text: if status == 200 { "PNG".into() } else { String::new() }, size: 480 * 1024 }
+            }
+            NetKind::Save(path) if path.starts_with("gamedb/") => {
+                let table = format!("#pocket-shelf-gamedb 1 {}\n", self.unix_ms());
+                self.files.insert(path, table.into_bytes());
+                FakeRequest { polls: 0, status: 200, text: String::new(), size: 1800 * 1024 }
             }
             NetKind::Save(path) | NetKind::SaveIcon(path) if path.starts_with("libretro/") => {
                 self.files.insert(path, format!("{}\n", LIBRETRO_NAMES.join("\n")).into_bytes());

@@ -241,6 +241,32 @@ impl Shelf {
         }
     }
 
+    /// The host's progress naming a database's games, for a run waiting on
+    /// it.
+    pub fn identifying(&mut self, database: &str, done: u32, total: u32) {
+        let t = self.t();
+        if let Some(panel) = &mut self.fetch {
+            panel.flow.identifying(t, database, done, total);
+        }
+    }
+
+    /// A database's games named by the host (`None`: no table yet).
+    pub fn identified(&mut self, host: &mut dyn Host, database: &str, names: Option<Vec<(String, String)>>) {
+        let found = names.is_some();
+        if let Some(names) = names {
+            host.log(&format!("gamedb {database}: {} games named", names.len()));
+            self.listings.set_named(database, names);
+        }
+        let t = self.t();
+        let Some(panel) = &mut self.fetch else { return };
+        let actions = panel.flow.identified(host, t, &mut self.listings, database, found);
+        let ended = panel.flow.step != fetch::Step::Running;
+        self.fetch_actions(host, actions);
+        if ended {
+            self.save_fetched(host);
+        }
+    }
+
     fn fetch_actions(&mut self, host: &mut dyn Host, actions: Vec<Action>) {
         if actions.is_empty() {
             return;
@@ -270,6 +296,10 @@ impl Shelf {
     }
 
     fn save_fetched(&mut self, host: &mut dyn Host) {
+        if let Some(panel) = &self.fetch {
+            let flow = &panel.flow;
+            host.log(&format!("fetch artwork: {} of {} titles, {} icons, {} backdrops, {} named by the game database", flow.done, flow.total, flow.found[0], flow.found[1], flow.by_database));
+        }
         if std::mem::take(&mut self.fetch_unsaved) > 0 && !self.library.overrides.save(host) {
             host.log("Title changes not saved");
         }

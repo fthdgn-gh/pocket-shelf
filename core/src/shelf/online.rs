@@ -26,7 +26,15 @@ impl Shelf {
         let folder = libretro::libretro_folder(game.console.as_deref(), game.platform);
         // libretro searches the playlist label, SteamGridDB the title.
         let label = self.library.base_game(&game.id).map(|g| g.title.to_string()).unwrap_or_default();
-        let term = if scraper == Scraper::Libretro && !label.is_empty() { label } else { game.title.to_string() };
+        // A name from the game database, when Fetch artwork found one this
+        // run, comes before the label.
+        let database = game.console.as_deref().map(crate::online::gamedb::database_name);
+        let known = database.and_then(|database| self.listings.database_name(&database, &game.id).map(String::from));
+        let term = match known {
+            Some(name) if scraper == Scraper::Libretro => name,
+            _ if scraper == Scraper::Libretro && !label.is_empty() => label,
+            _ => game.title.to_string(),
+        };
         let t = self.t();
         let art = self.library.art_names().cloned().collect();
         let (online, actions) = Online::start(host, t, scraper, &game.id, folder, &term, art, &mut self.listings);

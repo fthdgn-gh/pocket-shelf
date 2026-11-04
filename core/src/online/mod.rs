@@ -5,6 +5,7 @@
 
 pub mod fetch;
 pub mod flow;
+pub mod gamedb;
 pub mod libretro;
 pub mod steamgriddb;
 

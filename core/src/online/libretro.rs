@@ -77,6 +77,12 @@ pub fn listing_url(folder: &str) -> String {
 
 /// Where a console's names are kept under the data folder.
 pub fn listing_path(folder: &str) -> String {
+    format!("libretro/{}.txt", slug(folder))
+}
+
+/// A console's name as a file name: letters and digits, each run of
+/// anything else as one `-`, at most 56 characters.
+pub fn slug(folder: &str) -> String {
     let mut slug = String::new();
     let mut dash = false;
     for c in folder.chars() {
@@ -91,8 +97,11 @@ pub fn listing_path(folder: &str) -> String {
         }
     }
     slug.truncate(56);
-    let slug = if slug.is_empty() { "console".to_string() } else { slug };
-    format!("libretro/{slug}.txt")
+    if slug.is_empty() {
+        "console".to_string()
+    } else {
+        slug
+    }
 }
 
 /// A console's names, each with its base for matching.

@@ -4,12 +4,16 @@
 //! first game found gives its first icon and first backdrop. On libretro's
 //! server its name is matched in its console's box art list
 //! ([`match_name`]): the box art (else the title screen) becomes the icon,
-//! the screenshot (else the title screen) the backdrop. One request runs at a
-//! time, and files go straight to the card.
+//! the screenshot (else the title screen) the backdrop. A RetroArch game is
+//! first named from its console's game database ([`gamedb`]): the table is
+//! downloaded when missing or older than [`gamedb::MAX_AGE_MS`], the host
+//! names the console's games from it, and a database name is matched before
+//! the label. One request runs at a time, and files go straight to the card.
 
 use std::collections::{HashSet, VecDeque};
 
 use super::flow::{Listings, Online};
+use super::gamedb;
 use super::libretro::{self, match_name};
 use super::steamgriddb::{self as sgdb, AssetKind, Problem};
 use super::{candidate_path, libretro_candidates, scraper_for, Candidate, Scraper};
@@ -68,6 +72,8 @@ pub struct Job {
     pub scraper: Scraper,
     /// Its console's folder on libretro's server.
     pub folder: Option<String>,
+    /// A RetroArch game's database ([`gamedb::database_name`]), for libretro.
+    pub database: Option<String>,
     pub kinds: Vec<AssetKind>,
 }
 
@@ -81,7 +87,8 @@ impl Job {
         }
         let scraper = scraper_for(source, game)?;
         let folder = (scraper == Scraper::Libretro).then(|| libretro::libretro_folder(game.console.as_deref(), game.platform)).flatten();
-        Some(Job { id: game.id.to_string(), title: game.title.to_string(), label: label.to_string(), scraper, folder, kinds })
+        let database = (scraper == Scraper::Libretro).then(|| game.console.as_deref().map(gamedb::database_name)).flatten();
+        Some(Job { id: game.id.to_string(), title: game.title.to_string(), label: label.to_string(), scraper, folder, database, kinds })
     }
 }
 
@@ -110,6 +117,11 @@ enum Wait {
     /// the server this run.
     Listing { folder: String, fetched: bool },
     ListingFetch(NetId, String),
+    /// The host naming a database's games; `downloaded` once its table was
+    /// fetched this run.
+    Identify { database: String, downloaded: bool },
+    /// A database being downloaded and turned into its table.
+    DatabaseFetch(NetId, String),
     Search(NetId),
     Assets(NetId, u64, AssetKind),
     /// A SteamGridDB file being saved, for the game found.
@@ -151,6 +163,10 @@ pub struct Fetch {
     retry: Option<Retry>,
     /// Consoles libretro's server has no folder for, found this run.
     unknown: HashSet<String>,
+    /// Databases with no table, found this run: their games go by label.
+    no_database: HashSet<String>,
+    /// Titles whose libretro name came from the game database.
+    pub by_database: usize,
     /// Files in `art/` and `backdrops/`; these are not downloaded again.
     on_disk: [HashSet<String>; 2],
     key: String,
@@ -185,6 +201,8 @@ impl Fetch {
             busy_replies: 0,
             retry: None,
             unknown: HashSet::new(),
+            no_database: HashSet::new(),
+            by_database: 0,
             on_disk: [HashSet::new(), HashSet::new()],
             key: String::new(),
         }
@@ -213,6 +231,8 @@ impl Fetch {
         self.queue = jobs.into();
         self.busy_replies = 0;
         self.unknown.clear();
+        self.no_database.clear();
+        self.by_database = 0;
         self.on_disk = [art, list_png(host, "backdrops").into_iter().collect()];
         self.next(host, t, listings)
     }
@@ -249,7 +269,8 @@ impl Fetch {
 
     fn close(&mut self, host: &mut dyn Host) {
         match std::mem::replace(&mut self.wait, Wait::Idle) {
-            Wait::ListingFetch(id, _) | Wait::Search(id) | Wait::Assets(id, ..) | Wait::SgdbFile(id, ..) | Wait::LibretroFile(id, ..) => host.net_close(id),
+            Wait::ListingFetch(id, _) | Wait::DatabaseFetch(id, _) | Wait::Search(id) | Wait::Assets(id, ..) | Wait::SgdbFile(id, ..) | Wait::LibretroFile(id, ..) => host.net_close(id),
+            Wait::Identify { .. } => host.identify_stop(),
             Wait::Idle | Wait::Listing { .. } => {}
         }
     }
@@ -297,6 +318,17 @@ impl Fetch {
         if folder.is_empty() || self.unknown.contains(&folder) {
             return self.not_found(host, t, listings);
         }
+        if let Some(database) = self.job.as_ref().and_then(|j| j.database.clone()) {
+            if !listings.identified(&database) && !self.no_database.contains(&database) {
+                let newer = host.unix_ms().saturating_sub(gamedb::MAX_AGE_MS);
+                if host.identify(&database, newer) {
+                    self.status = t.identifying_start.to_string();
+                    self.wait = Wait::Identify { database, downloaded: false };
+                    return Vec::new();
+                }
+                self.no_database.insert(database);
+            }
+        }
         if listings.get(&folder).is_some() {
             return self.matched(host, t, listings, &folder);
         }
@@ -327,11 +359,45 @@ impl Fetch {
         Vec::new()
     }
 
+    /// The host named a database's games (`found`, now in `listings`), or
+    /// has no table for it: the table is downloaded once, else the
+    /// console's games go by label.
+    pub fn identified(&mut self, host: &mut dyn Host, t: &Messages, listings: &mut Listings, database: &str, found: bool) -> Vec<Action> {
+        let Wait::Identify { database: waiting, downloaded } = self.wait.clone() else { return Vec::new() };
+        if waiting != database {
+            return Vec::new();
+        }
+        self.wait = Wait::Idle;
+        if !found && !downloaded {
+            self.status = t.getting_database.to_string();
+            if let Some(id) = self.start(host, t, &gamedb::rdb_url(database), NetKind::Save(gamedb::table_path(database))) {
+                self.wait = Wait::DatabaseFetch(id, database.to_string());
+            }
+            return Vec::new();
+        }
+        if !found {
+            self.no_database.insert(database.to_string());
+        }
+        self.libretro(host, t, listings)
+    }
+
+    /// The host's progress naming a database's games.
+    pub fn identifying(&mut self, t: &Messages, database: &str, done: u32, total: u32) {
+        if matches!(&self.wait, Wait::Identify { database: waiting, .. } if waiting == database) {
+            self.status = fill(t.identifying, &[("done", &done.to_string()), ("total", &total.to_string())]);
+        }
+    }
+
     fn matched(&mut self, host: &mut dyn Host, t: &Messages, listings: &mut Listings, folder: &str) -> Vec<Action> {
         let Some(job) = self.job.clone() else { return Vec::new() };
         let Some(listing) = listings.get(folder) else { return Vec::new() };
         let label = if job.label.is_empty() { &job.title } else { &job.label };
-        let Some(name) = match_name(label, listing).or_else(|| match_name(&job.title, listing)) else {
+        let known = job.database.as_deref().and_then(|database| listings.database_name(database, &job.id));
+        let by_database = known.and_then(|name| match_name(name, listing));
+        if by_database.is_some() {
+            self.by_database += 1;
+        }
+        let Some(name) = by_database.or_else(|| match_name(label, listing)).or_else(|| match_name(&job.title, listing)) else {
             return self.not_found(host, t, listings);
         };
         self.candidates = job.kinds.iter().map(|&kind| (kind, libretro_candidates(folder, &name, &job.id, kind))).collect();
@@ -424,13 +490,18 @@ impl Fetch {
             return Vec::new();
         }
         let id = match &self.wait {
-            Wait::ListingFetch(id, _) | Wait::Search(id) | Wait::Assets(id, ..) | Wait::SgdbFile(id, ..) | Wait::LibretroFile(id, ..) => *id,
-            Wait::Idle | Wait::Listing { .. } => return Vec::new(),
+            Wait::ListingFetch(id, _) | Wait::DatabaseFetch(id, _) | Wait::Search(id) | Wait::Assets(id, ..) | Wait::SgdbFile(id, ..) | Wait::LibretroFile(id, ..) => *id,
+            Wait::Idle | Wait::Listing { .. } | Wait::Identify { .. } => return Vec::new(),
         };
         let state = host.net_state(id);
         if let NetState::Busy { received, total } = state {
-            if matches!(self.wait, Wait::SgdbFile(..) | Wait::LibretroFile(..)) && total > 0 {
-                self.status = fill(t.downloading_percent, &[("percent", &(received * 100 / total).to_string())]);
+            if total > 0 {
+                let percent = (received * 100 / total).to_string();
+                match self.wait {
+                    Wait::SgdbFile(..) | Wait::LibretroFile(..) => self.status = fill(t.downloading_percent, &[("percent", &percent)]),
+                    Wait::DatabaseFetch(..) => self.status = fill(t.getting_database_percent, &[("percent", &percent)]),
+                    _ => {}
+                }
             }
             return Vec::new();
         }
@@ -446,6 +517,18 @@ impl Fetch {
             _ => None,
         };
         match wait {
+            // Whatever the reply, the host is asked again with any table it
+            // has: a failed download leaves an older table usable, and with
+            // none the console's games go by label.
+            Wait::DatabaseFetch(_, database) => {
+                if host.identify(&database, 0) {
+                    self.status = t.identifying_start.to_string();
+                    self.wait = Wait::Identify { database, downloaded: true };
+                } else {
+                    self.no_database.insert(database);
+                    return self.libretro(host, t, listings);
+                }
+            }
             Wait::ListingFetch(_, folder) => match error {
                 // A network failure would repeat for every title.
                 Some(error) => self.halt(host, fill(t.unreachable_libretro, &[("error", &error)])),
@@ -531,7 +614,7 @@ impl Fetch {
                 actions.extend(self.next_kind(host, t, listings, game));
                 return actions;
             }
-            Wait::Idle | Wait::Listing { .. } => {}
+            Wait::Idle | Wait::Listing { .. } | Wait::Identify { .. } => {}
         }
         Vec::new()
     }
@@ -575,6 +658,8 @@ mod tests {
         asked: Vec<String>,
         saved: Vec<String>,
         listings: Vec<String>,
+        /// `identify` calls: database and the oldest table taken.
+        identify: Option<Vec<(String, u64)>>,
     }
 
     impl Host for Server {
@@ -629,6 +714,18 @@ mod tests {
         }
         fn listing(&mut self, folder: &str) {
             self.listings.push(folder.into());
+        }
+        fn unix_ms(&self) -> u64 {
+            gamedb::MAX_AGE_MS + 1000
+        }
+        fn identify(&mut self, database: &str, newer_than_ms: u64) -> bool {
+            match &mut self.identify {
+                Some(calls) => {
+                    calls.push((database.into(), newer_than_ms));
+                    true
+                }
+                None => false,
+            }
         }
     }
 
@@ -723,6 +820,59 @@ mod tests {
         assert_eq!(fetch.step, Step::Key);
         assert!(!fetch.submit_key(&mut host, t(), "not a key"));
         assert!(fetch.submit_key(&mut host, t(), KEY));
+    }
+
+    #[test]
+    fn a_database_name_comes_before_the_label() {
+        let (mut host, mut listings, mut fetch) = (server(), Listings::default(), Fetch::new(0));
+        host.identify = Some(Vec::new());
+        let gb = "Nintendo - Game Boy";
+        let names = jobs(&[game("ra0000001", "tetris_v1", "retro", Some(gb))], ScrapeSource::Auto);
+        assert_eq!(names[0].database.as_deref(), Some(gb));
+        let folder = names[0].folder.clone().unwrap();
+        let mut actions = fetch.run(&mut host, t(), &mut listings, names, HashSet::new());
+        // No table, or one older than 90 days: it is downloaded, then the
+        // host names the games with whatever table it has.
+        assert_eq!(host.identify.as_deref(), Some(&[(gb.to_string(), 1000)][..]));
+        actions.extend(fetch.identified(&mut host, t(), &mut listings, gb, false));
+        assert_eq!(host.saved, [gamedb::table_path(gb)]);
+        assert_eq!(fetch.status, t().getting_database);
+        actions.extend(fetch.frame(&mut host, t(), &mut listings));
+        assert_eq!(host.identify.as_ref().unwrap().last(), Some(&(gb.to_string(), 0)));
+        fetch.identifying(t(), gb, 3, 10);
+        assert_eq!(fetch.status, "Identifying games... 3 of 10");
+        listings.set_named(gb, vec![("ra0000001".into(), "Tetris (Japan)".into())]);
+        actions.extend(fetch.identified(&mut host, t(), &mut listings, gb, true));
+        listings.answer(&folder, libretro::Listing::parse("Tetris (World)\nTetris (Japan)\n"));
+        actions.extend(fetch.listing_ready(&mut host, t(), &mut listings, &folder));
+        actions = run_to_end(&mut fetch, &mut host, t(), &mut listings, actions);
+        let boxart = libretro_candidates(&folder, "Tetris (Japan)", "ra0000001", AssetKind::Icon);
+        assert!(host.asked.contains(&boxart[0].url));
+        assert_eq!(actions.len(), 2);
+        assert_eq!((fetch.done, fetch.missing, fetch.by_database), (1, 0, 1));
+    }
+
+    #[test]
+    fn a_console_with_no_database_goes_by_label() {
+        let (mut host, mut listings, mut fetch) = (server(), Listings::default(), Fetch::new(0));
+        host.identify = Some(Vec::new());
+        let odd = "Odd - Console";
+        let names = jobs(&[game("ra0000001", "Odd Game (USA)", "retro", Some(odd)), game("ra0000002", "Odd Game 2 (USA)", "retro", Some(odd))], ScrapeSource::Auto);
+        let folder = names[0].folder.clone().unwrap();
+        fetch.run(&mut host, t(), &mut listings, names, HashSet::new());
+        fetch.identified(&mut host, t(), &mut listings, odd, false);
+        // A 404 from GitHub: no table after the download either.
+        host.replies.insert(gamedb::rdb_url(odd), (404, String::new()));
+        fetch.frame(&mut host, t(), &mut listings);
+        fetch.identified(&mut host, t(), &mut listings, odd, false);
+        assert_eq!(host.listings, [folder.clone()]);
+        listings.answer(&folder, libretro::Listing::parse("Odd Game (USA)\nOdd Game 2 (USA)\n"));
+        let mut actions = fetch.listing_ready(&mut host, t(), &mut listings, &folder);
+        actions = run_to_end(&mut fetch, &mut host, t(), &mut listings, actions);
+        // The second title does not ask again.
+        assert_eq!(host.identify.as_ref().unwrap().len(), 2);
+        assert_eq!(host.asked.iter().filter(|u| **u == gamedb::rdb_url(odd)).count(), 1);
+        assert_eq!((actions.len(), fetch.by_database), (4, 0));
     }
 
     #[test]

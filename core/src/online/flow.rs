@@ -38,6 +38,9 @@ pub struct Listings {
     loaded: HashMap<String, Listing>,
     /// Folders the host is reading and parsing (`Host::listing`).
     asked: HashSet<String>,
+    /// Database names of RetroArch games by database, then title id
+    /// ([`Host::identify`]), kept for this run of the app.
+    named: HashMap<String, HashMap<String, String>>,
 }
 
 impl Listings {
@@ -65,6 +68,21 @@ impl Listings {
             }
             None => false,
         }
+    }
+
+    /// Whether a database's games were named this run of the app.
+    pub fn identified(&self, database: &str) -> bool {
+        self.named.contains_key(database)
+    }
+
+    /// A RetroArch game's name in its database, once identified.
+    pub fn database_name(&self, database: &str, id: &str) -> Option<&str> {
+        self.named.get(database)?.get(id).map(String::as_str)
+    }
+
+    /// The host's names for a database's games.
+    pub fn set_named(&mut self, database: &str, names: Vec<(String, String)>) {
+        self.named.insert(database.to_string(), names.into_iter().collect());
     }
 
     /// Start fetching a console's listing to its file.

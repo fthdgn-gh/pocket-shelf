@@ -219,6 +219,11 @@ pub enum Event {
     /// home screen's database after [`Event::Titles`] at each start (they
     /// change with every launch, so a saved list does not keep them).
     Dates(Vec<(String, crate::library::played::SystemDates)>),
+    /// [`Host::identify`] is reading a console's games: done of the total.
+    Identifying { database: String, done: u32, total: u32 },
+    /// A console's games named by its database table, `(title id, name)`;
+    /// `None` when there is no table built after the time asked for.
+    Identified(String, Option<Vec<(String, String)>>),
 }
 
 /// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP
@@ -368,6 +373,18 @@ pub trait Host {
     /// [`Listing::parse`](crate::online::libretro::Listing::parse) off the
     /// frame; answered with [`Event::Listing`] under `folder`.
     fn listing(&mut self, _folder: &str) {}
+    /// Name the RetroArch games of a database (a console) from its table,
+    /// `gamedb/<database>.tsv` ([`gamedb`](crate::online::gamedb)), off the
+    /// frame: reading their files for a CRC can take a minute on the first
+    /// run. Answered with [`Event::Identifying`] while it runs, then
+    /// [`Event::Identified`]; a table built before `newer_than_ms` counts as
+    /// missing and is answered at once. False when this host cannot.
+    fn identify(&mut self, _database: &str, _newer_than_ms: u64) -> bool {
+        false
+    }
+    /// Stop a running [`identify`](Host::identify); it answers with what it
+    /// found so far.
+    fn identify_stop(&mut self) {}
 
     /// What the last title scan found, as `Label=value` pairs separated by
     /// commas (PSM, PSP and PS1, disc images, RetroArch); "" when this start

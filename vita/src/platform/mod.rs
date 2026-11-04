@@ -12,6 +12,7 @@ pub mod appdb;
 pub mod art;
 pub mod backdrop;
 pub mod dds;
+pub mod gamedb;
 pub mod http;
 pub mod ime;
 pub mod installed;

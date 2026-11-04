@@ -82,8 +82,9 @@ titles over 40), with the same cases tested.
 those with a round-trip test (`settings.json`, `categories.json`,
 `recent.json`, `titles.cache.json`, `titles/<id>.json`), `status-bar.json`,
 `text-size.json`, `emulators.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
-`vita/host.rs`), pictures in `art/` and `backdrops/`, and downloads to
-`libretro/` and `update/`; it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
+`vita/host.rs`), pictures in `art/` and `backdrops/`, downloads to
+`libretro/`, `gamedb/` and `update/`, and the game files' CRCs in
+`gamedb/crcs.tsv` (written by the thread that reads them); it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
 order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
 in the frame took 24–30 ms, so every view change was a missed refresh.
 `Host::flush` waits for them before a launch ends the process. **The log**
@@ -152,7 +153,13 @@ the frame.
 
 **Fetch artwork** (`online/fetch.rs`, `shelf/artwork.rs`) runs the same
 lookups over a category, one request at a time, saving straight to the
-card; busy replies are waited out five times, other failures halt the run,
+card. Before a RetroArch console's first title it names the console's
+games from libretro's game database (`online/gamedb.rs`): the `.rdb` is
+downloaded into memory and written as a table on the download thread
+(`gamedb/<database>.tsv`), and the host names the games on its own thread
+(`Host::identify`, `Event::Identifying`, `Event::Identified`), reading a
+file for its CRC once (`gamedb/crcs.tsv`); a database name is matched
+before the label; busy replies are waited out five times, other failures halt the run,
 and title changes are written every 20 pictures. **Clean up artwork**
 deletes unused files or all of them. **Updates** (`updates.rs`,
 `shelf/update.rs`, `vita/src/platform/update.rs`): the GitHub check, the
@@ -267,7 +274,8 @@ page, `80`–`82` saved data, `90` test titles, `91` launching, `92`–`93` the
 Adrenaline drawer, `100`–`105` the SELECT menu, `110`–`115` the keyboard and
 search, `120`–`134` the editor, pickers and category manager, `140`–`152`
 rescan and Diagnostics, `160`–`164` the status items' layout, `170`–`177`
-Find artwork, `180`–`186` Fetch and Clean up artwork, `190`–`196` updates, `270`–`276` Emu4Vita++ (its tab, the Favorites tab, Open with, the menu row),
+Find artwork, `180`–`187` Fetch and Clean up artwork (`187` the game
+database download, `184` naming a console's games), `190`–`196` updates, `270`–`276` Emu4Vita++ (its tab, the Favorites tab, Open with, the menu row),
 `64`–`66` Turkish and German.
 
 ## Timing

@@ -537,6 +537,19 @@ unsafe fn titles() -> &'static [Title] {
     CACHE.as_deref().unwrap_or(&[])
 }
 
+/// The listed RetroArch games of a database (a console), for
+/// `gamedb::identify`.
+pub unsafe fn retro_roms(database: &str) -> Vec<shelf_core::online::gamedb::Rom> {
+    use shelf_core::online::gamedb::{database_name, Rom};
+    titles()
+        .iter()
+        .filter_map(|item| {
+            let retro = item.retro.as_ref()?;
+            (database_name(&retro.console) == database).then(|| Rom { id: item.title_id.clone(), label: item.title.clone(), path: retro.path.clone() })
+        })
+        .collect()
+}
+
 /// Whether the title list is in memory, reading the list file when it is
 /// not. False when there is no usable list file: the guest then starts a
 /// scan (`scan_start`) and shows its progress before it asks for the table.

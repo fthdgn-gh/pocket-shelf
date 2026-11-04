@@ -176,6 +176,16 @@ impl App {
                         shelf.listing(host, folder, listing);
                     }
                 }
+                Event::Identifying { database, done, total } => {
+                    if let Some(shelf) = &mut self.shelf {
+                        shelf.identifying(&database, done, total);
+                    }
+                }
+                Event::Identified(database, names) => {
+                    if let Some(shelf) = &mut self.shelf {
+                        shelf.identified(host, &database, names);
+                    }
+                }
             }
         }
         self.events = events;

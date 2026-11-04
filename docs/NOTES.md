@@ -257,6 +257,33 @@ stick at each launch when it differs.
   fitted into 128 px by the host (25–35 KB instead of 450–700 KB); the
   backdrop the screenshot (else the title screen). Files
   `<title id>-lr-box.png`, `-lr-title.png`, `-lr-snap.png`.
+- **libretro's game databases** (`online/gamedb.rs`): libretro-database's
+  `rdb/<database>.rdb` on GitHub (raw.githubusercontent.com), one per
+  console, named as RetroArch names the console; 148 files, 151 MB in all,
+  Game Boy 1.0 MB, NES 6.3 MB, PlayStation 7.7 MB (2026-11-04). The file is
+  libretrodb: `RARCHDB\0`, a big-endian u64 metadata offset, then one
+  MessagePack map per record up to a nil. **Records of one game are
+  merged by CRC** (several dat files are merged into each database: NES
+  has 29,646 records, 4,328 sharing a CRC). The download thread turns the
+  `.rdb` into `gamedb/<database>.tsv` (crc, serial, arcade set, name,
+  year, genre, developer, publisher, players), and the `.rdb` is never
+  written: NES 6.1 MB becomes 1.5 MB in 25 ms on the Mac. Fetch artwork
+  downloads a console's table when it is missing or over 90 days old.
+  **NES records hold the CRC of the file with its 16-byte header**; a
+  GoodTools dump with another header does not match and goes by label.
+- **Identifying RetroArch games** (`platform/gamedb.rs`, a host thread):
+  the label when it is a database name (RetroArch's scanner wrote it), an
+  arcade set by its zip's name, then the CRC: a zip's directory holds each
+  file's CRC (two reads of the file's end), a loose file up to 64 MB is
+  read whole, with a second CRC after 512 bytes for a SNES copier header;
+  disc images are not read. **The user's playlists carry no CRC** (every
+  `crc32` is `00000000|crc`, a manual scan): 1,212 zips, 3,489 `.nes` and
+  947 `.bin` files. CRCs are kept in `gamedb/crcs.tsv` by path, so a file
+  is read on the first run only. Fetch artwork matches the database name
+  before the label; Find artwork searches it when this run of the app has
+  one. **Not yet confirmed on hardware**: the download and the table on
+  the download thread, the time the first run's file reads take, and how
+  many of the user's games are named.
 - **The scraper is the user's choice** (`scraper` in `settings.json`): Auto
   (libretro for RetroArch games, SteamGridDB for the rest), SteamGridDB, or
   libretro.
