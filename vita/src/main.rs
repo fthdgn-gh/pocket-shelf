@@ -24,7 +24,7 @@ pub static sceUserMainThreadStackSize: u32 = 1024 * 1024;
 /// segment 1; resizing this by a few KiB moves segment 1 (as `LINK_PAD` in
 /// the PocketJS host did).
 #[used]
-static LINK_PAD: [u8; 8192] = [0x5a; 8192];
+static LINK_PAD: [u8; 12288] = [0x5a; 12288];
 
 /// A frame longer than this is logged with where its time went: it missed
 /// a display refresh (a missed one makes a frame 33 ms). The "over 20 ms"

@@ -10,7 +10,7 @@ reads and writes that app's saved data unchanged.
 | `desktop/` | A software rasterizer for the same draw commands, a fake `Host` with a sample library, a fake SteamGridDB, libretro, GitHub and updater, and scripted screenshots. |
 | `vita/` | `Host` on the Vita (title scan, picture decoding, file writes, downloads and the log on worker threads), the vita2d backend, the frame loop, the platform modules (`vita/src/platform/`), and the VPK's other files (`vita/package/`). |
 | `platform-tests/` | The Vita platform modules with no system calls (`accent`, `adrenaline_config`, `dds`, `emu4vita`, `iso`, `retroarch`, `seplugins`), included by path so their tests run on the desktop. |
-| `tools/` | `make art` draws the LiveArea pictures (`tiny-skia`, `fontdue`, a 256-color quantizer); `make updater` lays out the updater's package and its `head.bin`. |
+| `tools/` | `make art` draws the LiveArea pictures (`tiny-skia`, `fontdue`, a 256-color quantizer); `make updater` lays out the updater's package and its `head.bin`; `make wikidata` builds the game details tables (`ureq`, the core's table format). |
 
 ## Drawing
 
@@ -49,6 +49,7 @@ glyph changed.
 | `make art` | Redraw the LiveArea pictures and `template.xml` in `vita/package/sce_sys/` |
 | `make updater` | Build the updater app into `vita/package/updater/` (VitaSDK) |
 | `make plugin` | Build the Adrenaline plugin into `vita/package/psp/` (pspdev) |
+| `make wikidata` | Build the game details tables from Wikidata into `.build/wikidata/` (`TABLES="nes snes"` for some) and print the sample playlists' match rates; `.github/workflows/gamedb-data.yml` runs the build weekly and puts the tables on the `gamedb-data` release |
 
 **The SELF must not be "safe".** cargo-vita signs with `vita-make-fself -s`;
 on hardware a safe app cannot open `ux0:app`, and the first hardware run

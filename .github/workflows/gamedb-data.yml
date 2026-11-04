@@ -1,0 +1,52 @@
+name: Game data
+
+# Builds the game details tables from Wikidata (`shelf-tools wikidata`, CC0
+# data) and puts them on the `gamedb-data` release, which the Vita downloads
+# them from: one `<console>.tsv` per console, `labels.tsv` and `index.tsv`.
+# The files are replaced in place (`--clobber`); the release and its tag stay,
+# so a download never finds them missing. Installed copies' update check reads
+# only `shelf-v<version>` tags, so this release is never offered as an update.
+#
+# Weekly on Mondays; "Run workflow" builds it at once.
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write # creating the release once, then replacing its files
+
+concurrency:
+  group: gamedb-data
+  cancel-in-progress: false
+
+jobs:
+  tables:
+    runs-on: ubuntu-24.04
+    # The query service rations query time per client: the larger consoles
+    # (PlayStation, DOS, Commodore 64) wait out 120 s replies. A full build
+    # took about two hours from a desktop.
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools
+
+      - name: Build the tables
+        run: cargo run --release --quiet --manifest-path tools/Cargo.toml -- wikidata out
+
+      - name: Publish them
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view gamedb-data --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create gamedb-data \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Game data" \
+              --notes "Game details tables for Pocket Shelf, rebuilt weekly from Wikidata (data under CC0). Not an app release: Pocket Shelf downloads these files itself." \
+              --latest=false
+          fi
+          gh release upload gamedb-data out/*.tsv --repo "$GITHUB_REPOSITORY" --clobber

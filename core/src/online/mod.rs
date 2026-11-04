@@ -8,6 +8,7 @@ pub mod flow;
 pub mod gamedb;
 pub mod libretro;
 pub mod steamgriddb;
+pub mod wikidata;
 
 use crate::library::catalog::Game;
 use crate::library::settings::ScrapeSource;

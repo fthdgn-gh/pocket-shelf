@@ -3,14 +3,17 @@ name = "shelf-tools"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Pocket Shelf's build tools: the LiveArea artwork and the updater's package."
+description = "Pocket Shelf's build tools: the LiveArea artwork, the updater's package and the game data tables."
 
 [dependencies]
 fontdue = "0.9"
 miniz_oxide = "0.8"
 serde_json = "1"
 sha1 = "0.10"
+shelf-core = { path = "../core" }
 tiny-skia = "0.11"
+# The Wikidata tables' queries (`wikidata`); not linked into the VPK.
+ureq = { version = "2", features = ["json"] }
 
 [profile.release]
 opt-level = 3

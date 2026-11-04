@@ -308,6 +308,38 @@ stick at each launch when it differs.
   the Carousel and the Grid; with the panel off, the line under the title
   carries the year and genre. SELECT ▸ Sort has Newest and Oldest release;
   titles with no year go last.
+- **Wikidata's game details** (`online/wikidata.rs`, `tools/src/wikidata.rs`):
+  CC0 data, so Pocket Shelf publishes it: `make wikidata` (weekly in
+  `gamedb-data.yml`) builds one table per console, named as the app's tab
+  for the console (`nes.tsv`, `arcade.tsv`, `psp.tsv`; Vita titles
+  `vita.tsv`), with each game's item, English (else multilingual) name,
+  aliases, earliest release year, genre and mode items, developers,
+  publishers, series and Wikipedia article titles (en, tr, de, fr, es, ja);
+  `labels.tsv` names the genres and modes in the app's five languages.
+  **The tables are release files, not committed**: the `gamedb-data`
+  release, files replaced in place (`gh release upload --clobber`). The
+  update check reads only `shelf-v` tags, so the release is never offered
+  as an update. **No checksums**: a game is found by name
+  (`wikidata::name_key`, the article moved and brackets dropped as
+  `short_name` does, compared as `base_name` compares), among its names and
+  aliases. Each console is a set of small queries (names, dates, aliases,
+  genres, modes, developers, publishers, series, articles): a query joining
+  them timed out (the query service cuts a reply off at 60 s), as did one
+  grouping names with dates for the NES. One second between queries;
+  busy and cut-off replies are waited out. **A full build** (2026-11-04,
+  from the desktop): 62 tables, 31,805 games, 4.4 MB, 576 queries in about
+  70 minutes; the larger consoles (PlayStation, DOS, Commodore 64) got
+  120 s waits, so the workflow allows 4 hours. **Matches**
+  (`make wikidata`): the sample playlists' labels 90% on GBA, 89% SNES,
+  82% Game Boy, 80% Game Gear, 75% Game Boy Color, 68% Mega-CD, 66% Mega
+  Drive, 54% Neo Geo, 47% NES. The NES misses are mostly the GoodNES set's
+  hacks, public-domain programs, translations, unlicensed carts and bad
+  dumps; the Mega Drive ones retitled releases (`Escape From Mars Starring
+  Taz` is *Taz in Escape from Mars*) and European and Japanese games
+  Wikidata lacks. Of Wikidata's own games, libretro's regular names reach
+  1,040 of 1,211 on the NES, 1,108 of 1,427 on the SNES, 1,859 of 2,239 on
+  the PlayStation. **Not in the app yet**: the Vita does not download these
+  tables.
 - **The scraper is the user's choice** (`scraper` in `settings.json`): Auto
   (libretro for RetroArch games, SteamGridDB for the rest), SteamGridDB, or
   libretro.

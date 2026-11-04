@@ -165,7 +165,10 @@ pub fn base_name(name: &str) -> String {
     let mut text = cut.to_string();
     for article in ["The", "A", "An"] {
         let suffix = format!(", {article}");
-        if text.len() > suffix.len() && text[text.len() - suffix.len()..].eq_ignore_ascii_case(&suffix) {
+        // The suffix is ASCII: a name ending in other characters (Japanese)
+        // has no character boundary there and cannot end with it.
+        let at = text.len().saturating_sub(suffix.len());
+        if text.len() > suffix.len() && text.is_char_boundary(at) && text[at..].eq_ignore_ascii_case(&suffix) {
             let head = text[..text.len() - suffix.len()].to_string();
             let found = text[text.len() - article.len()..].to_string();
             text = format!("{found} {head}");
@@ -358,6 +361,13 @@ mod tests {
         assert_eq!(libretro_folder(None, Platform::Psp).as_deref(), Some("Sony - PlayStation Portable"));
         assert_eq!(libretro_folder(None, Platform::Vita), None);
         assert_eq!(libretro_folder(Some("MAME 2003-Plus"), Platform::Retro).as_deref(), Some("MAME"));
+    }
+
+    #[test]
+    fn base_names_of_names_ending_in_other_scripts() {
+        assert_eq!(base_name("ゼルダの伝説"), "");
+        assert_eq!(base_name("Dragon Quest ジ"), "dragonquest");
+        assert_eq!(base_name("Zelda, The"), "thezelda");
     }
 
     #[test]

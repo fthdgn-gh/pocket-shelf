@@ -14,6 +14,9 @@ use crate::i18n::{fill, upper};
 use crate::online::gamedb;
 use crate::text::Role;
 
+/// The source of the game databases, as their license (CC BY-SA 4.0) asks.
+const CREDIT: &str = "libretro-database, CC BY-SA 4.0";
+
 /// The Game database drawer asks for tables at most this old.
 pub const UPDATE_AGE_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 
@@ -221,7 +224,9 @@ impl Shelf {
             drawer.row(gfx, t.database_consoles, Some(&consoles.to_string()), None, true, Step::Right);
             drawer.row(gfx, t.database_identified, Some(&identified), None, false, Step::None);
             let text = if status.is_empty() { t.database_help.to_string() } else { status };
-            drawer.note(gfx, &text, 1);
+            drawer.note(gfx, &text, 2);
+            // The databases' license asks for their source to be named.
+            drawer.note(gfx, CREDIT, 1);
             drawer.hints(gfx, &[(Button::confirm(self.settings.confirm), t.update_database), (Button::cancel(self.settings.confirm), t.back)]);
         }
     }

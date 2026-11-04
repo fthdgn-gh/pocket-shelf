@@ -10,12 +10,15 @@
 #   make plugin    rebuild the Adrenaline plugin into vita/package/psp/
 #   make notices   rewrite vita/package/THIRD_PARTY_NOTICES.txt after a
 #                  dependency changes
+#   make wikidata  build the game details tables into .build/wikidata/
+#                  (TABLES="nes snes" for some) and report the sample
+#                  playlists' match rates
 
 VITASDK ?= $(HOME)/vitasdk
 PSPDEV ?= $(HOME)/pspdev
 TOOLS = cargo run --release --quiet --manifest-path tools/Cargo.toml --
 
-.PHONY: test shots build art updater plugin notices
+.PHONY: test shots build art updater plugin notices wikidata
 
 test:
 	cd core && cargo test
@@ -33,6 +36,10 @@ art:
 
 notices:
 	$(TOOLS) notices
+
+wikidata:
+	$(TOOLS) wikidata .build/wikidata $(TABLES)
+	$(TOOLS) wikidata-match .build/wikidata
 
 updater:
 	PATH="$(VITASDK)/bin:$$PATH" VITASDK="$(VITASDK)" $(MAKE) -C updater
