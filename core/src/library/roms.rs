@@ -493,15 +493,16 @@ fn detect(files: &mut dyn Files, dir: &str, name: &str, hint: Option<&'static st
     found.or_else(|| console_of_extension(&ext)).or(hint)
 }
 
-/// Every game under `root` and its subfolders. `step` is called once per
-/// folder read; a file `skip` takes (by its path) is not opened or listed
-/// (a playlist lists it).
-pub fn walk(files: &mut dyn Files, root: &str, skip: &mut dyn FnMut(&str) -> bool, step: &mut dyn FnMut()) -> Walk {
+/// Every game under `root` and its subfolders. `console` is the root's
+/// console when it is known (an emulator's own folder for one console),
+/// else its name says. `step` is called once per folder read; a file `skip`
+/// takes (by its path) is not opened or listed (a playlist lists it).
+pub fn walk(files: &mut dyn Files, root: &str, console: Option<&'static str>, skip: &mut dyn FnMut(&str) -> bool, step: &mut dyn FnMut()) -> Walk {
     let mut walk = Walk::default();
     let mut seen = 0usize;
     // Folders to read: path, depth, its folders' console.
     let root = canonical(root);
-    let hint = root.trim_end_matches('/').rsplit(['/', ':']).find(|p| !p.is_empty()).and_then(console_of_folder);
+    let hint = console.or_else(|| root.trim_end_matches('/').rsplit(['/', ':']).find(|p| !p.is_empty()).and_then(console_of_folder));
     let mut stack: Vec<(String, usize, Option<&'static str>)> = vec![(root, 0, hint)];
     while let Some((dir, depth, hint)) = stack.pop() {
         step();
@@ -666,7 +667,7 @@ pub(crate) mod tests {
         });
         let mut folders = 0;
         let mut skipped = Vec::new();
-        let walk = walk(&mut files, "ux0:roms/", &mut |path| {
+        let walk = walk(&mut files, "ux0:roms/", None, &mut |path| {
             skipped.push(path.to_string());
             path == "ux0:/roms/Listed.sfc"
         }, &mut || folders += 1);
@@ -701,8 +702,15 @@ pub(crate) mod tests {
         files.add("ux0:/data/FF7/FF7 (Disc 1).bin", &ps1_bin());
         files.add("ux0:/data/FF7/FF7 (Disc 2).cue", b"FILE \"FF7 (Disc 2).bin\" BINARY\n");
         files.add("ux0:/data/FF7/FF7 (Disc 2).bin", &ps1_bin());
-        let walk = walk(&mut files, "ux0:/data", &mut |_| false, &mut || {});
+        let walk = walk(&mut files, "ux0:/data", None, &mut |_| false, &mut || {});
         assert_eq!(walk.roms[0].title, "Sonic Adventure (USA)");
+        // An emulator's own folder for one console names a file nothing
+        // else names.
+        let mut own = Memory::default();
+        own.add("ux0:/data/pcsx-awo/roms/Quiet Orbit (Europe).chd", b"");
+        assert!(super::walk(&mut own, "ux0:/data/pcsx-awo/roms", None, &mut |_| false, &mut || {}).roms.is_empty());
+        let found = super::walk(&mut own, "ux0:/data/pcsx-awo/roms", Some(PS1), &mut |_| false, &mut || {});
+        assert_eq!(found.roms.iter().map(|r| r.console).collect::<Vec<_>>(), [PS1]);
         assert_eq!(
             consoles(&walk),
             [

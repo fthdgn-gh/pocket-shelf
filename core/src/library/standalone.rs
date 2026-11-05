@@ -13,6 +13,10 @@
 //!   folders, a folder holding `;` or starting with `"` in quotes, `""` for a
 //!   quote (`core/cfg/option.h`).
 //! - NooDS keeps none: its file browser starts at `ux0:` each time.
+//! - PCSX AwO (`frontend/vita/paths.h`, `rom_paths.h`, 0.5.1) lists
+//!   `ux0:data/pcsx-awo/roms` and up to 16 folders in
+//!   `ux0:data/pcsx-awo/rom_folders.txt`, one a line, `#` for a comment, at
+//!   most 240 characters, no `..`.
 //! - ScummVM's games are the ones added to it, in
 //!   `ux0:data/scummvm/scummvm.ini` (`OSystem_PSP2::getDefaultConfigFileName`):
 //!   a section per game, named by its target, with its `path`, `gameid` and
@@ -30,6 +34,16 @@ pub enum Config {
     DaedalusPath(&'static str),
     /// Flycast's `emu.cfg`.
     FlycastCfg(&'static str),
+    /// PCSX AwO's `rom_folders.txt`.
+    PcsxFolders(&'static str),
+}
+
+impl Config {
+    pub fn file(self) -> &'static str {
+        match self {
+            Config::DaedalusPath(f) | Config::FlycastCfg(f) | Config::PcsxFolders(f) => f,
+        }
+    }
 }
 
 /// An emulator's fixed folders, and the file that names more.
@@ -46,6 +60,7 @@ pub fn folders(app: Emulator) -> (&'static [&'static str], Option<Config>) {
         ),
         Emulator::DsVita => (&["ux0:/data/dsvita"], None),
         Emulator::Flycast => (&[], Some(Config::FlycastCfg("ux0:/data/flycast/emu.cfg"))),
+        Emulator::PcsxAwo => (&["ux0:/data/pcsx-awo/roms"], Some(Config::PcsxFolders("ux0:/data/pcsx-awo/rom_folders.txt"))),
         _ => (&[], None),
     }
 }
@@ -62,7 +77,44 @@ pub fn config_folders(config: Config, bytes: &[u8]) -> Vec<String> {
             if path.len() > 1 { vec![path] } else { Vec::new() }
         }
         Config::FlycastCfg(_) => flycast_content_paths(&String::from_utf8_lossy(bytes)),
+        // As PCSX AwO reads it (`rom_paths.h`).
+        Config::PcsxFolders(_) => String::from_utf8_lossy(bytes)
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#') && l.len() <= 240 && !l.contains(".."))
+            .take(16)
+            .map(String::from)
+            .collect(),
     }
+}
+
+/// Whether an emulator opens a file: PCSX AwO takes `.cue .chd .pbp .m3u
+/// .iso .img .bin .exe` only, and no file named `eboot.bin`
+/// (`is_game_path` in `frontend/vita/standalone.c`); the others take what
+/// their console's games come in.
+pub fn accepts(app: Emulator, path: &str) -> bool {
+    if app != Emulator::PcsxAwo {
+        return true;
+    }
+    let name = path.rsplit(['/', ':']).next().unwrap_or(path).to_ascii_lowercase();
+    let ext = name.rsplit_once('.').map_or("", |(_, e)| e);
+    name != "eboot.bin" && ["cue", "chd", "pbp", "m3u", "iso", "img", "bin", "exe"].contains(&ext)
+}
+
+/// The URI that starts a game in PCSX AwO: it decodes `%XX` and `+` in the
+/// parameter and ends it at `&` (`VitaLiveArea_ParseGamePath`), so those
+/// are encoded.
+pub fn pcsx_uri(path: &str) -> String {
+    let mut out = String::from("psgm:play?titleid=PCSXR0001&param=");
+    for c in path.chars() {
+        match c {
+            '%' => out.push_str("%25"),
+            '&' => out.push_str("%26"),
+            '+' => out.push_str("%2B"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// `Dreamcast.ContentPath` in a Flycast `emu.cfg` text, as Flycast splits it.
@@ -210,5 +262,18 @@ mod tests {
         assert_eq!(scummvm_uri(&games[0].path, "monkey"), "psgm:play?titleid=VSCU00001&path=ux0:/data/scummvm/games/monkey&game_id=monkey");
         assert_eq!(Emulator::ScummVm.title_id(), Some("VSCU00001"));
         assert_eq!(folders(Emulator::ScummVm), (&[][..], None));
+    }
+
+    #[test]
+    fn pcsx_awo_reads_its_folder_list_and_takes_its_formats() {
+        let config = folders(Emulator::PcsxAwo).1.unwrap();
+        let text = b"# my games\nux0:/psx\n\n  uma0:/ps1  \nux0:/../x\n";
+        assert_eq!(config_folders(config, text), ["ux0:/psx", "uma0:/ps1"]);
+        assert!(accepts(Emulator::PcsxAwo, "ux0:/psx/Crash/EBOOT.PBP"));
+        assert!(accepts(Emulator::PcsxAwo, "ux0:/psx/Crash (USA).CHD"));
+        assert!(!accepts(Emulator::PcsxAwo, "ux0:/psx/Crash (USA).zip"));
+        assert!(!accepts(Emulator::PcsxAwo, "ux0:/psx/eboot.bin"));
+        assert!(accepts(Emulator::DsVita, "ux0:/nds/a.zip"));
+        assert_eq!(pcsx_uri("ux0:/psx/R&D 100%+.cue"), "psgm:play?titleid=PCSXR0001&param=ux0:/psx/R%26D 100%25%2B.cue");
     }
 }

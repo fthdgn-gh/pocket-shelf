@@ -112,10 +112,7 @@ pub fn emulator_roots(installed: u8) -> Vec<Root> {
         let (fixed, config) = standalone::folders(*app);
         let mut paths: Vec<String> = fixed.iter().map(|p| String::from(*p)).collect();
         if let Some(config) = config {
-            let file = match config {
-                standalone::Config::DaedalusPath(f) | standalone::Config::FlycastCfg(f) => f,
-            };
-            if let Ok(bytes) = fs::read(file) {
+            if let Ok(bytes) = fs::read(config.file()) {
                 paths.extend(standalone::config_folders(config, &bytes));
             }
         }
@@ -154,7 +151,9 @@ pub fn games(
     let mut other_console = 0u32;
     for folder in folders {
         // A file a playlist lists is not opened.
-        let walk = roms::walk(&mut Card, &folder.path, &mut |path| {
+        // An emulator's folder for one console is that console's.
+        let console = folder.consoles.filter(|c| c.len() == 1).map(|c| c[0]);
+        let walk = roms::walk(&mut Card, &folder.path, console, &mut |path| {
             let known = known.contains(&roms::path_key(path));
             listed += u32::from(known);
             known

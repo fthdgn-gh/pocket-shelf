@@ -227,6 +227,7 @@ emulators, when installed:
 | [NooDS](https://github.com/Hydr8gon/NooDS) | `NOODSVITA` | Nintendo DS, Game Boy Advance |
 | [Flycast](https://github.com/Rinnegatamante/flycast-vita) | `FLYCASTDC` | Dreamcast |
 | [ScummVM](https://www.scummvm.org) | `VSCU00001` | Adventure games added to ScummVM |
+| [PCSX AwO](https://github.com/Rinnegatamante/PCSX_AwO) | `PCSXR0001` | PlayStation (`.cue`/`.bin`, `.chd`, `.pbp`, `.m3u`, `.iso`, `.img`, `.exe`) |
 
 **ScummVM's games are the ones you added in ScummVM** (its
 `ux0:data/scummvm/scummvm.ini`): they get a ScummVM tab with ScummVM's
@@ -238,8 +239,12 @@ then Rescan this tab on the ScummVM tab.
 console tabs (N64, Nintendo DS, Dreamcast) as playlist games do: DaedalusX64's
 `Roms` folders (`ux0:data/DaedalusX64/Roms` and the others it lists) and the
 folder set in its menu, DSVita's `ux0:data/dsvita`, and the content folders
-set in Flycast (`Dreamcast.ContentPath` in `ux0:data/flycast/emu.cfg`). Each
-folder keeps its own emulator's consoles' games. NooDS keeps no folder of its
+set in Flycast (`Dreamcast.ContentPath` in `ux0:data/flycast/emu.cfg`), and
+PCSX AwO's `ux0:data/pcsx-awo/roms` with the folders listed in its
+`rom_folders.txt`. Each folder keeps its own emulator's consoles' games.
+PCSX AwO is also offered in Open with for the PlayStation games in
+RetroArch's playlists, in the formats it opens; PS1 games Adrenaline
+starts stay with Adrenaline. NooDS keeps no folder of its
 own: put its games in a folder category.
 
 Pocket Shelf starts the emulator with the game's file, as each one's own

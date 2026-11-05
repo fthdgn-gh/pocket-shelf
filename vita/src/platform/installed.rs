@@ -1184,10 +1184,10 @@ pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>, c
                     return false;
                 }
                 close = standalone_name(app);
-                let uri = if app == Emulator::ScummVm {
-                    shelf_core::library::standalone::scummvm_uri(&retro.path, &retro.target)
-                } else {
-                    standalone_uri(id, &retro.path)
+                let uri = match app {
+                    Emulator::ScummVm => shelf_core::library::standalone::scummvm_uri(&retro.path, &retro.target),
+                    Emulator::PcsxAwo => shelf_core::library::standalone::pcsx_uri(&retro.path),
+                    _ => standalone_uri(id, &retro.path),
                 };
                 (uri, LAUNCH_FLAGS, true)
             }
@@ -1242,9 +1242,11 @@ pub fn standalone_installed() -> u8 {
 pub fn standalone_for(console: &str, installed: u8, path: &str) -> u8 {
     shelf_core::library::settings::Emulator::standalone_for(console)
         .filter(|app| installed & app.bit() != 0)
+        .filter(|app| shelf_core::library::standalone::accepts(*app, path))
         .filter(|app| match app {
             // ScummVM takes a folder of up to 255 bytes (and the target).
             shelf_core::host::Emulator::ScummVm => path.len() <= shelf_core::library::standalone::SCUMMVM_PATH_MAX,
+            shelf_core::host::Emulator::PcsxAwo => shelf_core::library::standalone::pcsx_uri(path).len() <= crate::platform::retroarch::URI_MAX,
             _ => app.title_id().is_some_and(|id| standalone_uri(id, path).len() <= crate::platform::retroarch::URI_MAX),
         })
         .fold(0, |bits, app| bits | app.bit())
@@ -1266,6 +1268,7 @@ fn standalone_name(app: shelf_core::host::Emulator) -> Option<&'static core::ffi
         Emulator::NooDs => Some(c"NOODSVITA"),
         Emulator::Flycast => Some(c"FLYCASTDC"),
         Emulator::ScummVm => Some(c"VSCU00001"),
+        Emulator::PcsxAwo => Some(c"PCSXR0001"),
         _ => None,
     }
 }

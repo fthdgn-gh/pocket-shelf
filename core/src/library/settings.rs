@@ -224,6 +224,7 @@ keyed!(
         NooDs = "noods",
         Flycast = "flycast",
         ScummVm = "scummvm",
+        PcsxAwo = "pcsxawo",
     }
 );
 
@@ -257,6 +258,10 @@ pub const STANDALONE: &[(Emulator, &str, &[&str])] = &[
     // Its games come from its own list (`standalone::scummvm_games`) and
     // start with `&path=<folder>&game_id=<game>` instead.
     (Emulator::ScummVm, "VSCU00001", &["ScummVM"]),
+    // Decodes `%XX` in the parameter and ends it at `&`
+    // (`standalone::pcsx_uri`), and opens some formats only
+    // (`standalone::accepts`).
+    (Emulator::PcsxAwo, "PCSXR0001", &["Sony - PlayStation"]),
 ];
 
 impl Emulator {
@@ -274,6 +279,7 @@ impl Emulator {
             Emulator::NooDs => "NooDS",
             Emulator::Flycast => "Flycast",
             Emulator::ScummVm => "ScummVM",
+            Emulator::PcsxAwo => "PCSX AwO",
         }
     }
 

@@ -533,6 +533,16 @@ stick at each launch when it differs.
   `backends/platform/sdl/psp2/psp2-main.cpp` turns into `-p <folder>
   <target>`, copying into 256- and 64-byte buffers without a bound, so
   longer folders and targets are left out. **Not yet run on hardware.**
+- **PCSX AwO** (`PCSXR0001`, 2026-11-06, from its source at 0.5.1):
+  `VitaLiveArea_ParseGamePath` reads `&param=` up to the next `&`, decodes
+  `%XX` and `+`, and refuses a path over 1023 bytes or with control
+  characters; `is_game_path` takes `.cue .chd .pbp .m3u .iso .img .bin
+  .exe` and no file named `eboot.bin` (`standalone::accepts`, so a `.zip`
+  PS1 game does not offer it). `pcsx_uri` encodes `%`, `&`, `+`. Its
+  folders: `ux0:data/pcsx-awo/roms` and `rom_folders.txt`. An emulator
+  folder for one console names its files' console (`walk`'s `console`),
+  so a `.chd` there is a PS1 game. Playlist PS1 games get it in Open with
+  (`infos()` works out the standalone apps for every RetroArch game).
 - **Rescan this tab** (SELECT, above Language, 2026-11-06): `Host::rescan_some`
   with the scan phases that fill the tab (`Shelf::tab_sources`);
   `installed::rescan` keeps the saved list's other titles (`Parts::holds`:
