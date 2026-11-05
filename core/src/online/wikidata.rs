@@ -201,6 +201,18 @@ fn published() -> &'static [String] {
     FILES.get_or_init(|| tables().into_iter().map(|(f, _)| f).collect())
 }
 
+/// Whether a download for the file named `file` (`labels.tsv`, `nes.tsv`)
+/// reads as one, so an error page never replaces a good file: a table by
+/// its first line, the labels by theirs (an item and five names).
+pub fn download_reads(file: &str, text: &str) -> bool {
+    let first = text.split('\n').next().unwrap_or("");
+    if file == LABELS_FILE {
+        first.starts_with('Q') && first.split('\t').count() == 6
+    } else {
+        table_built(first).is_some()
+    }
+}
+
 /// The release's `index.tsv`: each table's build time by file.
 pub fn parse_index(text: &str) -> HashMap<String, u64> {
     text.lines()
@@ -626,6 +638,10 @@ mod tests {
         assert!(!again.wants("a", "nes", 6), "a match is kept");
         assert_eq!(table_built("#pocket-shelf-wikidata 1 42 nes"), Some(42));
         assert_eq!(table_built("<!DOCTYPE html>"), None);
+        assert!(download_reads("labels.tsv", "Q1004\tcomic\tçizgi roman\tComic\tbande dessinée\thistorieta\nQ2\t"));
+        assert!(download_reads("nes.tsv", &text));
+        assert!(!download_reads("labels.tsv", &text) && !download_reads("nes.tsv", "Q1004\tcomic\t\t\t\t\n"));
+        assert!(!download_reads("nes.tsv", "<!DOCTYPE html>"));
         assert_eq!(parse_index("nes\t1211\t42\nvita\t928\t43\n\n").get("vita"), Some(&43));
     }
 

@@ -140,7 +140,10 @@ impl Shelf {
     /// Confirm starts; back closes, or stops a run (what was found stays).
     pub(super) fn database_input(&mut self, host: &mut dyn Host, confirm: bool, cancel: bool) {
         let t = self.t();
-        let tasks = tasks(self);
+        // This runs every frame the drawer is open: walking the titles here
+        // took 15 ms of each frame on the Vita (6,011 titles).
+        let starting = confirm && self.database.as_ref().is_some_and(|r| !r.running);
+        let tasks = if starting { tasks(self) } else { Vec::new() };
         let Some(run) = &mut self.database else { return };
         if run.running {
             if cancel {

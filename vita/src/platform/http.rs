@@ -486,12 +486,9 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &
     }
     if let (Kind::Wikidata, Some(path)) = (kind, saving) {
         let body = with_slot(id, |slot| core::mem::take(&mut slot.body)).unwrap_or_default();
-        let text = String::from_utf8_lossy(&body);
-        let first = text.split('\n').next().unwrap_or("");
-        let table = shelf_core::online::wikidata::table_built(first).is_some();
-        // The labels have no first line of their own: an item and five names.
-        let labels = path == shelf_core::online::wikidata::LABELS_PATH && first.starts_with('Q') && first.split('\t').count() == 6;
-        if !table && !labels {
+        // `path` is in the data folder (`ux0:data/PocketShelf/wikidata/…`).
+        let file = path.rsplit('/').next().unwrap_or("");
+        if !shelf_core::online::wikidata::download_reads(file, &String::from_utf8_lossy(&body)) {
             return Err(String::from("not a game details table"));
         }
         write_atomic(path, &body)?;
