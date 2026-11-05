@@ -540,13 +540,11 @@ impl Matches {
         }
     }
 
-    /// Each title's game from this file, named with `labels` (the host does
-    /// this on its thread before
-    /// [`load_catalog`](crate::library::catalog::load_catalog)).
-    pub fn apply(&self, infos: &mut [crate::host::TitleInfo], labels: &HashMap<String, Names>) {
-        for info in infos {
-            info.wiki = self.get(&info.id).map(|game| Arc::new(Found::new(game.clone(), labels)));
-        }
+    /// Each title found and its game, named with `labels`: the host sends
+    /// them after the title list, read on its thread (5,942 titles took
+    /// 592 ms on the Vita, which the list waited for when they came with it).
+    pub fn all(&self, labels: &HashMap<String, Names>) -> Vec<(String, Arc<Found>)> {
+        self.entries.iter().filter_map(|(id, (_, _, game))| Some((id.clone(), Arc::new(Found::new(game.clone()?, labels))))).collect()
     }
 }
 
@@ -632,6 +630,8 @@ mod tests {
         assert_eq!(again.len(), 3);
         assert_eq!(again.get("a"), Some(&Game { aliases: Vec::new(), ..zelda() }));
         assert_eq!(again.get("c"), None);
+        let all = again.all(&HashMap::new());
+        assert_eq!(all.len(), 2, "the two found, not the miss");
         // A miss is looked up again in a newer table only; another table
         // always.
         assert!(!again.wants("c", "nes", 5) && again.wants("c", "nes", 6) && again.wants("a", "snes", 0) && again.wants("d", "nes", 0));

@@ -9,7 +9,7 @@ use std::io::Read;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
-use shelf_core::host::{Event, TitleInfo};
+use shelf_core::host::Event;
 use shelf_core::online::wikidata::{self, Found, Index, Matches, Names, Title};
 
 use crate::host::{log_line, now_us, DATA};
@@ -40,14 +40,15 @@ fn labels() -> Option<HashMap<String, Names>> {
     read_text(wikidata::LABELS_PATH).map(|text| wikidata::shared_labels(&text)).filter(|labels| !labels.is_empty())
 }
 
-/// Each title's game from `found.tsv`, for the title list (on the scan
-/// thread).
-pub fn apply(infos: &mut [TitleInfo]) {
+/// Each title's game from `found.tsv`, sent after the title list (on the
+/// scan thread).
+pub fn send_saved(sender: &Sender<Event>) {
     let started = now_us();
     let Some(text) = read_text(wikidata::FOUND_PATH) else { return };
     let matches = Matches::parse(&text);
-    matches.apply(infos, &labels().unwrap_or_default());
-    log_line(&format!("wikidata: {} titles looked up, read in {} ms", matches.len(), (now_us() - started) / 1000));
+    let found = matches.all(&labels().unwrap_or_default());
+    log_line(&format!("wikidata: {} titles looked up, {} found, read in {} ms", matches.len(), found.len(), (now_us() - started) / 1000));
+    let _ = sender.send(Event::WikidataMatched(wikidata::FOUND_PATH.into(), Some(found)));
 }
 
 /// The titles a run asked for (`Host::match_wikidata`): every title of the

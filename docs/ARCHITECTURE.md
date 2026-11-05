@@ -261,9 +261,9 @@ sorted by that rank. Search and Last Played keep their own order.
 title's details come with the title list (`TitleInfo::details`, from
 `gamedb/known.tsv` on the host's thread) or from `Event::Identified`
 (`Library::set_details`, one rebuild for a database's results). Wikidata's
-game for a title comes the same way (`TitleInfo::wiki` from
-`wikidata/found.tsv`, `Host::match_wikidata`, `Event::WikidataMatched`,
-`Library::set_wiki`); the panel takes a field from libretro's details
+game for a title comes in `Event::WikidataMatched` (`wikidata/found.tsv`,
+sent after the title list; `Host::match_wikidata`), taken by
+`Library::set_wiki`; the panel takes a field from libretro's details
 first, from Wikidata's game when libretro's is empty. The
 details panel (Appearance ▸ Game details) is drawn by the views
 (`views.rs`): a column of symbol and text rows right of the title in Home

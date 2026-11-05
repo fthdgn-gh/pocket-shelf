@@ -45,7 +45,8 @@ pub struct TitleInfo {
     pub emu_favorite: bool,
     /// What the game database says about it (`gamedb/known.tsv`).
     pub details: Option<crate::online::gamedb::Details>,
-    /// Its game in Wikidata's tables (`wikidata/found.tsv`).
+    /// Its game in Wikidata's tables. The Vita sends `wikidata/found.tsv`
+    /// after the list instead ([`Event::WikidataMatched`]).
     pub wiki: Option<std::sync::Arc<crate::online::wikidata::Found>>,
 }
 

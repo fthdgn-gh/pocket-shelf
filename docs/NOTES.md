@@ -355,7 +355,8 @@ stick at each launch when it differs.
   name the one released in libretro's year. **What each title was found to
   be is kept in `wikidata/found.tsv`** (id, table, the table's build time,
   the game's line without its aliases; a miss is looked up again in a newer
-  table only), read with `known.tsv` before the title list, and at each
+  table only), sent after the title list (5,942 titles read in 592 ms on
+  the Vita, which the list waited for when they came with it), and at each
   start the new titles are matched in the tables on the card (no network).
   The details panel takes each field from libretro first, Wikidata second:
   year, the first genre in the app's language, developers, publishers, and
@@ -371,8 +372,7 @@ stick at each launch when it differs.
   PlayStation's 2,239 games in 1.3 s), a match takes 1.6–2.9 s with the
   reads of `known.tsv` and `found.tsv`, and the frame that takes a
   console's results spends about 90 ms in the library's rebuild, as
-  libretro's results do. **Not yet confirmed**: the start's read of
-  `found.tsv` (its time is in the log).
+  libretro's results do.
 - **The scraper is the user's choice** (`scraper` in `settings.json`): Auto
   (libretro for RetroArch games, SteamGridDB for the rest), SteamGridDB, or
   libretro.

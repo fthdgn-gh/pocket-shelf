@@ -421,10 +421,12 @@ impl Host for VitaHost {
             let mut infos = installed::infos();
             let known = crate::platform::gamedb::known();
             known.apply(&mut infos);
-            crate::platform::wikidata::apply(&mut infos);
             let titles = shelf_core::library::catalog::load_catalog(&infos);
             log_line(&format!("gamedb: {} titles known", known.len()));
             let _ = sender.send(Event::Titles(titles, ((now_us() - started) / 1000) as u32));
+            // Wikidata's games after the list: reading them before it made
+            // the list wait 592 ms on the Vita.
+            crate::platform::wikidata::send_saved(&sender);
             // The system's last-launch and install dates, for the sort orders.
             let read = now_us();
             let dates = crate::platform::appdb::dates().unwrap_or_default();
