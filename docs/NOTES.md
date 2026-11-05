@@ -363,9 +363,16 @@ stick at each launch when it differs.
   player for single-player only); region is libretro's only. On the Mac
   the PlayStation table (2,239 games) parses in 7 ms and matches in 4 ms,
   about 350 and 200 ms on the Vita's worker thread by the usual ratio.
-  **Not yet confirmed on hardware**: the downloads from the release (a
-  redirect to GitHub's file host), how many of the user's Vita titles
-  match, and the start's read of `found.tsv` (its time is in the log).
+  **On the user's Vita** (2026-11-05, build 7eee69a5): the downloads
+  through the release's redirect work; a run over 13 consoles took 76 s
+  and matched 1,745 of 3,489 NES titles, 726 of 947 Mega Drive, 703 of
+  777 SNES, 137 of 150 GBA, 124 of 150 Game Boy, 42 of 53 PSP and 43 of
+  53 Vita games. A table reads in 100–350 ms on the worker thread (the
+  PlayStation's 2,239 games in 1.3 s), a match takes 1.6–2.9 s with the
+  reads of `known.tsv` and `found.tsv`, and the frame that takes a
+  console's results spends about 90 ms in the library's rebuild, as
+  libretro's results do. **Not yet confirmed**: the start's read of
+  `found.tsv` (its time is in the log).
 - **The scraper is the user's choice** (`scraper` in `settings.json`): Auto
   (libretro for RetroArch games, SteamGridDB for the rest), SteamGridDB, or
   libretro.
