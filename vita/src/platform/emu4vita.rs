@@ -241,6 +241,12 @@ impl Install {
     }
 }
 
+/// The cores Emu4Vita++ runs a console with, its preferred one first (its
+/// names are libretro's: RetroArch's `snes9x_libretro.self` is `snes9x`).
+pub fn console_cores(console: &str) -> &'static [&'static str] {
+    DATABASES.iter().find(|(database, _)| *database == console).map_or(&[], |(_, cores)| cores)
+}
+
 /// A core's name from a RetroArch playlist's core path
 /// (`app0:/snes9x_libretro.self`, `ux0:/app/RETROVITA/snes9x_libretro.self`);
 /// None for `DETECT` or an empty path.

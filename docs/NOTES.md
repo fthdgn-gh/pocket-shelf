@@ -187,8 +187,10 @@ taiHEN plugins (Console start), and NEON results (below).
   that app whatever the choice.
 - **Which core** (the editor's Core row, `cores.json`, `CoreChoice`): per
   title and per app. `Host::cores` reads the lists on a thread: RetroArch's
-  installed cores whose `info/<core>.info` `database` names the game's
-  console, the playlist's core first; Emu4Vita++'s installed cores for the
+  installed cores that run the game's console, the playlist's core first: by
+  `info/<core>.info`'s `database`, by another game of the console in the
+  playlists using it, or by Emu4Vita++'s table naming it (Vita3K's
+  RetroArch had info files for 2 of its 8 cores); Emu4Vita++'s installed cores for the
   console from its table (`emu4vita::DATABASES`). At launch the chosen core
   is checked with one file stat (`<core>_libretro.self` in RetroArch's app
   folder, `eboot_<core>.self` in Emu4Vita++'s) and the default used when it

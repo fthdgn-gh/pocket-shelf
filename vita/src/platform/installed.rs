@@ -826,9 +826,23 @@ pub unsafe fn core_lists(title_id: &str) -> Vec<shelf_core::host::CoreList> {
     let mut lists = Vec::new();
     let roots = crate::platform::retroarch::Roots::vita();
     if !retro.core.is_empty() && roots.installed() {
+        // A core runs the console when its info file says so, when another
+        // game of the console in the playlists uses it, or when Emu4Vita++
+        // runs the console with a core of that name: RetroArch for the Vita
+        // can lack info files (Vita3K's had 2 for 8 cores).
+        let used: Vec<&str> = titles()
+            .iter()
+            .filter_map(|item| item.retro.as_ref())
+            .filter(|other| other.console == retro.console && !other.core.is_empty())
+            .map(|other| other.core.as_str())
+            .collect();
+        let named = crate::platform::emu4vita::console_cores(&retro.console);
         let mut cores: Vec<String> = crate::platform::retroarch::installed_cores(&roots)
             .into_iter()
-            .filter(|core| core.databases.iter().any(|d| *d == retro.console))
+            .filter(|core| {
+                let name = core.file.trim_end_matches(".self").trim_end_matches("_libretro");
+                core.databases.iter().any(|d| *d == retro.console) || used.contains(&core.file.as_str()) || named.contains(&name)
+            })
             .map(|core| core.file)
             .collect();
         if !cores.contains(&retro.core) {
