@@ -59,6 +59,9 @@ struct Retro {
     art: String,
     /// Found in a folder category's folder (`folders.rs`), not a playlist.
     in_folder: bool,
+    /// Found in a standalone emulator's own folder (`folders::emulator_roots`):
+    /// listed in its console's tab as a playlist game is.
+    in_emulator: bool,
 }
 
 /// A platform name from the list file, as the `'static` the table uses.
@@ -248,6 +251,46 @@ fn scan() -> Vec<Title> {
     scan_parts(Vec::new(), Parts::ALL)
 }
 
+/// The standalone emulators' own folders' games (`folders::emulator_roots`),
+/// after the playlists' and before the folder categories': each listed in
+/// its console's tab. One step per folder read.
+fn add_emulator_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4vita::Install>) {
+    let installed = standalone_installed();
+    let roots = crate::platform::folders::emulator_roots(installed);
+    if roots.is_empty() {
+        unsafe {
+            EMULATOR_REPORT = String::new();
+        }
+        return;
+    }
+    let known: std::collections::HashSet<String> =
+        titles.iter().filter_map(|item| item.retro.as_ref()).map(|retro| shelf_core::library::roms::path_key(&retro.path)).collect();
+    let mut ids: std::collections::HashSet<String> = titles.iter().map(|item| item.title_id.clone()).collect();
+    let (games, report) = crate::platform::folders::games("Emulators", &roots, &known, &mut ids, emu, installed, &mut scan_step);
+    unsafe {
+        EMULATOR_REPORT = report;
+    }
+    for game in games {
+        titles.push(Title {
+            title_id: game.id,
+            title: game.title,
+            platform: "retro",
+            adrenaline: false,
+            image: None,
+            retro: Some(Retro {
+                console: game.console,
+                core: game.core,
+                emu: game.emu,
+                path: game.path,
+                favourite: false,
+                art: String::new(),
+                in_folder: false,
+                in_emulator: true,
+            }),
+        });
+    }
+}
+
 /// The saved list with some parts read again and the rest as they were; a
 /// full scan when there is no saved list.
 fn rescan(parts: Parts) -> Vec<Title> {
@@ -267,7 +310,10 @@ fn scan_parts(mut titles: Vec<Title>, parts: Parts) -> Vec<Title> {
         count(parts.apps, &|| entry_count(APP_ROOT) + entry_count(SYSTEM_ROOT))
             + count(parts.psm, &|| 1)
             + count(parts.psp, &crate::platform::pspemu::item_count)
-            + count(parts.retro, &|| crate::platform::retroarch::item_count(&crate::platform::retroarch::Roots::vita(), emu.as_ref()))
+            + count(parts.retro, &|| {
+                crate::platform::retroarch::item_count(&crate::platform::retroarch::Roots::vita(), emu.as_ref())
+                    + crate::platform::folders::emulator_roots(standalone_installed()).len() as u32
+            })
             + count(parts.folders, &|| crate::platform::folders::get().len() as u32),
         Ordering::Relaxed,
     );
@@ -331,9 +377,15 @@ fn scan_parts(mut titles: Vec<Title>, parts: Parts) -> Vec<Title> {
                     favourite: false,
                     art: String::new(),
                     in_folder: false,
+                    in_emulator: false,
                 }),
             });
         }
+    }
+    // The standalone emulators' folders follow the playlists, as part of
+    // them (their games join the console tabs).
+    if parts.retro {
+        add_emulator_games(&mut titles, emu.as_ref());
     }
     if parts.folders {
         add_folder_games(&mut titles, emu.as_ref());
@@ -358,7 +410,8 @@ fn add_folder_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4v
     let known: std::collections::HashSet<String> =
         titles.iter().filter_map(|item| item.retro.as_ref()).map(|retro| shelf_core::library::roms::path_key(&retro.path)).collect();
     let mut ids: std::collections::HashSet<String> = titles.iter().map(|item| item.title_id.clone()).collect();
-    let (games, report) = crate::platform::folders::games(&folders, &known, &mut ids, emu, standalone_installed(), &mut scan_step);
+    let roots: Vec<crate::platform::folders::Root> = folders.into_iter().map(crate::platform::folders::Root::any).collect();
+    let (games, report) = crate::platform::folders::games("Folders", &roots, &known, &mut ids, emu, standalone_installed(), &mut scan_step);
     unsafe {
         FOLDER_REPORT = report;
     }
@@ -377,6 +430,7 @@ fn add_folder_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4v
                 favourite: false,
                 art: String::new(),
                 in_folder: true,
+                in_emulator: false,
             }),
         });
     }
@@ -437,13 +491,15 @@ fn is_system(title_id: &str) -> bool {
 static mut RETRO_REPORT: String = String::new();
 /// The folder categories' part of the last scan (`folders::games`).
 static mut FOLDER_REPORT: String = String::new();
+/// The standalone emulators' folders' part.
+static mut EMULATOR_REPORT: String = String::new();
 /// What this start found of Emu4Vita++ and its favourites.
 static mut EMU_REPORT: String = String::new();
 
 /// What the last scan found in the playlists (`retroarch::scan`), and this
 /// start's Emu4Vita++ favourites (`emu4vita::favourites`).
 pub unsafe fn retro_report() -> String {
-    [RETRO_REPORT.clone(), EMU_REPORT.clone(), FOLDER_REPORT.clone()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(",")
+    [RETRO_REPORT.clone(), EMU_REPORT.clone(), EMULATOR_REPORT.clone(), FOLDER_REPORT.clone()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(",")
 }
 
 /// `titles` with Emu4Vita++'s favourites: a listed game's file is marked,
@@ -509,6 +565,7 @@ fn with_favourites(mut titles: Vec<Title>) -> Vec<Title> {
                 favourite: true,
                 art: favourite.art,
                 in_folder: false,
+                in_emulator: false,
             }),
         };
         // In the scan's order: by lowercase name, then id.
@@ -574,7 +631,7 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
         let (adrenaline, image, retro) = match launch {
             "uri" => (false, path, None),
             "adrenaline" => (true, path, None),
-            "retroarch" | "folder" => {
+            "retroarch" | "folder" | "emulator" => {
                 let path = path?;
                 // A folder game may have neither core: a standalone
                 // emulator starts it.
@@ -589,6 +646,7 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
                     favourite: false,
                     art: String::new(),
                     in_folder: launch == "folder",
+                    in_emulator: launch == "emulator",
                 };
                 (false, None, Some(retro))
             }
@@ -618,7 +676,15 @@ fn save_list(titles: &[Title]) {
         text.push_str(item.platform);
         text.push('\t');
         let (launch, path, console, core, emu) = match (&item.retro, item.adrenaline) {
-            (Some(retro), _) => (if retro.in_folder { "folder" } else { "retroarch" }, retro.path.as_str(), retro.console.as_str(), retro.core.as_str(), retro.emu.as_str()),
+            (Some(retro), _) => (
+                if retro.in_folder {
+                    "folder"
+                } else if retro.in_emulator {
+                    "emulator"
+                } else {
+                    "retroarch"
+                },
+                retro.path.as_str(), retro.console.as_str(), retro.core.as_str(), retro.emu.as_str()),
             (None, true) => ("adrenaline", item.image.as_deref().unwrap_or(""), "", "", ""),
             (None, false) => ("uri", item.image.as_deref().unwrap_or(""), "", "", ""),
         };

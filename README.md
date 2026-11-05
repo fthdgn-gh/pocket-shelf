@@ -227,13 +227,23 @@ emulators, when installed:
 | [NooDS](https://github.com/Hydr8gon/NooDS) | `NOODSVITA` | Nintendo DS, Game Boy Advance |
 | [Flycast](https://github.com/Rinnegatamante/flycast-vita) | `FLYCASTDC` | Dreamcast |
 
+**Their own game folders are read at each scan**, and their games join the
+console tabs (N64, Nintendo DS, Dreamcast) as playlist games do: DaedalusX64's
+`Roms` folders (`ux0:data/DaedalusX64/Roms` and the others it lists) and the
+folder set in its menu, DSVita's `ux0:data/dsvita`, and the content folders
+set in Flycast (`Dreamcast.ContentPath` in `ux0:data/flycast/emu.cfg`). Each
+folder keeps its own emulator's consoles' games. NooDS keeps no folder of its
+own: put its games in a folder category.
+
 Pocket Shelf starts the emulator with the game's file, as each one's own
 launcher does (`psgm:play?titleid=<id>&param=<file>`), so it opens the game
 without its file browser. A game only one of them opens starts there; when
 several apps open it (DSVita and NooDS, or RetroArch and NooDS for GBA),
 the editor's **Open with** chooses, the first one listed by default.
 SELECT ▸ Games ▸ Open games with stays a choice between RetroArch and
-Emu4Vita++. Install or remove one, then use SELECT ▸ Rescan this tab on the folder's tab: a game no other app opens is listed once its emulator is there.
+Emu4Vita++. After installing one, or adding games to its folder, use
+SELECT ▸ Rescan this tab on its console's tab (or on a folder category's
+tab for games there).
 
 ### Folder categories
 

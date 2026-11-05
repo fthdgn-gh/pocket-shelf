@@ -18,6 +18,7 @@ pub mod roms;
 mod round_trip;
 pub mod search;
 pub mod settings;
+pub mod standalone;
 
 use std::sync::Arc;
 

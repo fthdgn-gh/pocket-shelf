@@ -90,12 +90,53 @@ fn retroarch_core(cores: &[retroarch::CoreInfo], console: &str) -> Option<String
         .or_else(|| emu4vita::console_cores(console).iter().map(|name| format!("{name}_libretro.self")).find(|file| installed(file)))
 }
 
+/// A folder to read: a folder category's, or a standalone emulator's,
+/// which keeps the games of its own consoles alone.
+pub struct Root {
+    pub path: String,
+    pub consoles: Option<&'static [&'static str]>,
+}
+
+impl Root {
+    pub fn any(path: String) -> Root {
+        Root { path, consoles: None }
+    }
+}
+
+/// The folders the installed standalone emulators keep games in
+/// (`shelf_core::library::standalone`), those that exist, each once.
+pub fn emulator_roots(installed: u8) -> Vec<Root> {
+    use shelf_core::library::{settings::STANDALONE, standalone};
+    let mut roots: Vec<Root> = Vec::new();
+    for (app, _, consoles) in STANDALONE.iter().filter(|(app, _, _)| installed & app.bit() != 0) {
+        let (fixed, config) = standalone::folders(*app);
+        let mut paths: Vec<String> = fixed.iter().map(|p| String::from(*p)).collect();
+        if let Some(config) = config {
+            let file = match config {
+                standalone::Config::DaedalusPath(f) | standalone::Config::FlycastCfg(f) => f,
+            };
+            if let Ok(bytes) = fs::read(file) {
+                paths.extend(standalone::config_folders(config, &bytes));
+            }
+        }
+        for path in paths {
+            let key = roms::path_key(&path);
+            let here = fs::metadata(&path).is_ok_and(|m| m.is_dir());
+            if here && !roots.iter().any(|r| roms::path_key(&r.path) == key) {
+                roots.push(Root { path, consoles: Some(consoles) });
+            }
+        }
+    }
+    roots
+}
+
 /// Every game in the folders that an installed app can start, leaving out
 /// files whose path key is in `known` (a playlist lists them) and ids in
 /// `ids`. `step` is called once per folder read. Returns the games and a
-/// report for the diagnostics screen.
+/// report for the diagnostics screen, its entries named after `label`.
 pub fn games(
-    folders: &[String],
+    label: &str,
+    folders: &[Root],
     known: &HashSet<String>,
     ids: &mut HashSet<String>,
     emu: Option<&emu4vita::Install>,
@@ -110,9 +151,10 @@ pub fn games(
     let (mut found, mut unknown, mut no_app, mut listed) = (Vec::new(), 0u32, 0u32, 0u32);
     let mut unknown_names: Vec<String> = Vec::new();
     let mut read = 0u32;
+    let mut other_console = 0u32;
     for folder in folders {
         // A file a playlist lists is not opened.
-        let walk = roms::walk(&mut Card, folder, &mut |path| {
+        let walk = roms::walk(&mut Card, &folder.path, &mut |path| {
             let known = known.contains(&roms::path_key(path));
             listed += u32::from(known);
             known
@@ -121,6 +163,11 @@ pub fn games(
         unknown += walk.unknown;
         unknown_names.extend(walk.unknown_names);
         for rom in walk.roms {
+            // An emulator's folder keeps its own consoles' games.
+            if folder.consoles.is_some_and(|consoles| !consoles.contains(&rom.console)) {
+                other_console += 1;
+                continue;
+            }
             let (core, emu_core) = by_console
                 .entry(rom.console)
                 .or_insert_with(|| {
@@ -148,12 +195,15 @@ pub fn games(
         }
     }
     let mut report = format!(
-        "Folders categories={},Folders read={read},Folders titles={},Folders inPlaylists={listed},Folders noApp={no_app},Folders unknown={unknown}",
+        "{label} roots={},{label} read={read},{label} titles={},{label} inPlaylists={listed},{label} noApp={no_app},{label} unknown={unknown}",
         folders.len(),
         found.len()
     );
+    if other_console > 0 {
+        report.push_str(&format!(",{label} otherConsole={other_console}"));
+    }
     for name in unknown_names.iter().take(6) {
-        report.push_str(&format!(",Folders unknownFile={}", name.replace([',', '='], "_")));
+        report.push_str(&format!(",{label} unknownFile={}", name.replace([',', '='], "_")));
     }
     (found, report)
 }

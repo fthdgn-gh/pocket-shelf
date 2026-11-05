@@ -516,8 +516,14 @@ stick at each launch when it differs.
   RetroArch or Emu4Vita++ core is kept when one is installed (a `folder`
   line with both core columns empty). Playlist entries without a core are
   still left out. Open with lists every app that opens the game; Open games
-  with stays RetroArch/Emu4Vita++ (`Emulator::FOR_ALL`). **Not yet run on
-  hardware**: none of the four launches.
+  with stays RetroArch/Emu4Vita++ (`Emulator::FOR_ALL`). Their own game
+  folders (`library/standalone.rs`, read from each one's source:
+  DaedalusX64's four `Roms/` and `Configs/path.ini`, DSVita's
+  `ux0:data/dsvita`, Flycast's `Dreamcast.ContentPath`; NooDS has none) are
+  read in the playlists' part of a scan (`add_emulator_games`, `emulator`
+  lines in `titles.tsv`), keep only their emulator's consoles, and list
+  their games in the console tabs. **Not yet run on hardware**: none of the
+  four launches, nor their folders.
 - **Rescan this tab** (SELECT, above Language, 2026-11-06): `Host::rescan_some`
   with the scan phases that fill the tab (`Shelf::tab_sources`);
   `installed::rescan` keeps the saved list's other titles (`Parts::holds`:
