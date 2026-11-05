@@ -230,9 +230,12 @@ cannot be driven. Evidence comes from the log and from files under
   at console start writes AutoBoot's `boot.cfg` instead, and Pocket Shelf's
   plugin does not open the app at start (`boot=0`). An installed plugin
   older than the app's is replaced when the drawer opens.
-- **Not yet run on hardware**: the plugin's load, its timing, what
-  `sceAppMgrGetRunningAppIdListForShell` lists on the home screen and while
-  a game runs, and whether the app may write `ur0:tai`.
+- **On the user's Vita** (2026-11-05, build c3546cd0): the drawer installed
+  the plugin (so the app may write `ur0:tai` and the tai config), Pocket
+  Shelf opened at console start, and it opened again when a game it started
+  closed; closing Pocket Shelf itself left the home screen, as designed.
+  What `sceAppMgrGetRunningAppIdListForShell` lists is in
+  `boot-plugin.log` (not yet read).
 
 ## Adrenaline (`psp-boot/`, `seplugins.rs`, `pspemu.rs`)
 
