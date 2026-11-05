@@ -30,10 +30,22 @@ pub const START: &str = "ux0:";
 /// A folder's path with `name` in it: `ux0:` and `pictures` make
 /// `ux0:pictures`, `ux0:pictures` and `a.png` make `ux0:pictures/a.png`.
 pub fn join(dir: &str, name: &str) -> String {
-    if dir.ends_with(':') || dir.ends_with('/') {
+    // On the list of devices the name is the whole path (`ux0:`).
+    if dir.is_empty() || dir.ends_with(':') || dir.ends_with('/') {
         format!("{dir}{name}")
     } else {
         format!("{dir}/{name}")
+    }
+}
+
+/// A saved folder as Browse opens it: a device's path has no slash before
+/// it (0.5.2's development builds saved `/ux0:pictures` from the list of
+/// devices).
+pub fn clean(dir: &str) -> String {
+    let dir = dir.trim();
+    match dir.find(':') {
+        Some(at) if dir[..at].starts_with('/') => dir.trim_start_matches('/').to_string(),
+        _ => dir.to_string(),
     }
 }
 
@@ -118,7 +130,8 @@ impl Shelf {
     pub(super) fn open_browser(&mut self, host: &mut dyn Host, backdrop: bool) {
         let folders = &self.settings.folders;
         let dir = if backdrop { &folders.backdrops } else { &folders.art };
-        let dir = if dir.is_empty() { START.to_string() } else { dir.clone() };
+        let dir = clean(dir);
+        let dir = if dir.is_empty() { START.to_string() } else { dir };
         self.browser = Some(Browser { backdrop, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
         self.browse_to(host, dir, None, "");
     }
@@ -424,6 +437,12 @@ mod tests {
         assert_eq!(join("ux0:", "pictures"), "ux0:pictures");
         assert_eq!(join("ux0:pictures", "a.png"), "ux0:pictures/a.png");
         assert_eq!(join("ux0:/", "data"), "ux0:/data");
+        // From the list of devices: the device itself, no slash before it.
+        assert_eq!(join("", "ux0:"), "ux0:");
+        assert_eq!(join(&join("", "ux0:"), "picture"), "ux0:picture");
+        assert_eq!(clean("/ux0:picture/Box art"), "ux0:picture/Box art");
+        assert_eq!(clean("ux0:picture"), "ux0:picture");
+        assert_eq!(clean(""), "");
         assert_eq!(parent("ux0:pictures/covers"), "ux0:pictures");
         assert_eq!(parent("ux0:pictures"), "ux0:");
         assert_eq!(parent("ux0:/pictures"), "ux0:");
