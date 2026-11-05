@@ -16,16 +16,16 @@ its saved data.
 - Version 0.5.0
 
 <p align="center">
-  <img src="./screenshots/home.png" width="720" alt="Pocket Shelf's Home view on the Games tab in the Dynamic theme: the selected title's icon large at the left in a white ring, the next titles smaller after it, the title's name, platform and category, and a Launch button, over the title's backdrop." />
+  <img src="./screenshots/home.png" width="720" alt="Pocket Shelf's Home view on the Games tab in the Dynamic theme: the selected title's icon large at the left in a white ring, the next titles smaller after it, the title's name, platform and category, a Launch button, and the game's release year, genre, developer, publisher and players from Wikidata, over the title's backdrop." />
 </p>
 
 | Carousel | Cascade | Grid |
 | --- | --- | --- |
-| ![The carousel view: the selected title's icon enlarged in the middle of a row, its name below.](./screenshots/carousel.png) | ![The cascade view: the selected title's icon large at the left, the next titles shrinking and darkening to the right, its name below.](./screenshots/cascade.png) | ![The grid view: two rows of five title icons with the selected one in a white ring, its name below.](./screenshots/grid.png) |
+| ![The carousel view: the selected title's icon enlarged in a row, its name and a line of its details below.](./screenshots/carousel.png) | ![The cascade view: the selected title's icon large at the left, the next titles shrinking and darkening to the right, its name below and its details beside it.](./screenshots/cascade.png) | ![The grid view: two rows of five title icons with the selected one in a white ring, its name and a line of its details below.](./screenshots/grid.png) |
 
 | List | RetroArch | Menu |
 | --- | --- | --- |
-| ![The list view: title rows with small icons, the selected row highlighted.](./screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist, its console in the detail line.](./screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, details, backdrop, icon box and status bar.](./screenshots/menu.png) |
+| ![The list view: title rows with small icons, the selected row highlighted.](./screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist with its year, genre, developer, publisher, players and region from libretro's database.](./screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, details, text size, backdrop, icon box and game names.](./screenshots/menu.png) |
 
 The screens are rendered on the desktop by `make shots` with sample titles;
 the colored tiles with initials stand in for game icons.
