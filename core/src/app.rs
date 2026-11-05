@@ -224,6 +224,8 @@ impl App {
             self.theme = theme_by_id(settings.theme);
             self.language = settings.language;
             let library = Library::load(host);
+            // The folder categories' folders, which a scan reads too.
+            host.rom_folders(library.config.rom_folders(), false);
             self.loaded_ms = (host.time_us() - now) / 1000;
             self.first_frame_at = now;
             host.log(&format!("library loaded in {} ms", self.loaded_ms));

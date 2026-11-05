@@ -55,6 +55,7 @@ pub fn scan_phase(t: &Messages, phase: ScanPhase) -> &'static str {
         ScanPhase::Psp => p.psp,
         ScanPhase::Images => p.images,
         ScanPhase::Retro => p.retro,
+        ScanPhase::Folders => p.folders,
     }
 }
 

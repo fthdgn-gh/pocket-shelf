@@ -31,15 +31,30 @@ pub struct Category {
     pub smart: bool,
     /// A console's category of RetroArch games (`consoles.rs`).
     pub console: bool,
+    /// A folder category's folder ([`roms::canonical`]): it lists the games
+    /// in the folder and its subfolders (`rom-folders.json`).
+    ///
+    /// [`roms::canonical`]: crate::library::roms::canonical
+    pub folder: Option<String>,
 }
 
 impl Category {
     fn named(id: &str, label: &str, name: CategoryName, smart: bool) -> Category {
-        Category { id: id.into(), label: label.into(), name: Some(name), custom: false, smart, console: false }
+        Category { id: id.into(), label: label.into(), name: Some(name), custom: false, smart, console: false, folder: None }
     }
 
     pub fn custom(id: &str, label: &str) -> Category {
-        Category { id: id.into(), label: label.into(), name: None, custom: true, smart: false, console: false }
+        Category { id: id.into(), label: label.into(), name: None, custom: true, smart: false, console: false, folder: None }
+    }
+
+    /// A folder category: the user's, renamed and deleted as theirs.
+    pub fn folder(id: &str, label: &str, folder: &str) -> Category {
+        Category { folder: Some(crate::library::roms::canonical(folder)), ..Category::custom(id, label) }
+    }
+
+    /// A title cannot be moved into it: the launcher fills it.
+    pub fn filled(&self) -> bool {
+        self.smart || self.folder.is_some()
     }
 }
 
@@ -227,11 +242,21 @@ pub(crate) fn cut(text: &str, max: usize) -> String {
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct CategoryConfig {
     pub custom: Vec<Category>,
+    /// The folder categories, kept in a file of their own
+    /// ([`ROM_FOLDERS_FILE`]) so a release before them leaves them be.
+    pub folders: Vec<Category>,
     pub order: Vec<String>,
     pub hidden: Vec<String>,
 }
 
 pub const CATEGORIES_FILE: &str = "categories.json";
+
+/// The folder categories: `{"folders": [{"id": "n64", "label": "N64",
+/// "folder": "ux0:/roms/n64"}]}`.
+pub const ROM_FOLDERS_FILE: &str = "rom-folders.json";
+
+/// The most folder categories kept.
+pub const ROM_FOLDERS_MAX: usize = 16;
 
 /// Valid ids, each once.
 fn ids(value: Option<&Value>) -> Vec<String> {
@@ -264,6 +289,50 @@ impl CategoryConfig {
         config.order = ids(object.get("order"));
         config.hidden = ids(object.get("hidden"));
         config
+    }
+
+    /// `rom-folders.json`'s categories, read after `categories.json`: an
+    /// id another category has, an empty label or folder is left out.
+    pub fn parse_folders(&mut self, bytes: &[u8]) {
+        self.folders.clear();
+        let Ok(object) = crate::library::read_json(bytes) else { return };
+        let mut seen: Vec<String> = std::iter::once(search_category())
+            .chain(smart_categories())
+            .chain(builtin_categories())
+            .chain(self.custom.iter().cloned())
+            .map(|c| c.id)
+            .collect();
+        for value in object.get("folders").and_then(Value::as_array).into_iter().flatten() {
+            let text = |key: &str| value.get(key).and_then(Value::as_str).map(str::trim).unwrap_or_default();
+            let (id, folder) = (text("id"), text("folder"));
+            let label = cut(text("label"), CATEGORY_LABEL_MAX);
+            if !valid_category_id(id) || seen.iter().any(|s| s == id) || label.is_empty() || folder.is_empty() || folder.len() > 255 {
+                continue;
+            }
+            if self.folders.len() == ROM_FOLDERS_MAX {
+                break;
+            }
+            seen.push(id.into());
+            self.folders.push(Category::folder(id, &label, folder));
+        }
+    }
+
+    /// `rom-folders.json`: two-space JSON and a newline.
+    pub fn render_folders(&self) -> String {
+        let folders: Vec<Value> =
+            self.folders.iter().map(|c| json!({ "id": c.id, "label": c.label, "folder": c.folder.as_deref().unwrap_or_default() })).collect();
+        serde_json::to_string_pretty(&json!({ "folders": folders })).expect("json") + "\n"
+    }
+
+    /// The folders the host walks for the folder categories, each once.
+    pub fn rom_folders(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for folder in self.folders.iter().filter_map(|c| c.folder.clone()) {
+            if !out.iter().any(|f| f.eq_ignore_ascii_case(&folder)) {
+                out.push(folder);
+            }
+        }
+        out
     }
 
     /// The file as Pocket Shelf 0.1 wrote it: two-space JSON and a newline.
@@ -326,5 +395,21 @@ mod tests {
         assert!(config.hidden.is_empty());
         assert_eq!(CategoryConfig::parse(b"not json"), CategoryConfig::default());
         assert_eq!(CategoryConfig::parse(b"null"), CategoryConfig::default());
+    }
+
+    #[test]
+    fn folder_categories_have_a_file_of_their_own() {
+        let mut config = CategoryConfig::parse(br#"{"custom":[{"id":"picks","label":"Picks"}],"order":[],"hidden":[]}"#);
+        config.parse_folders(
+            br#"{"folders":[{"id":"n64","label":"N64","folder":"ux0:roms//n64/"},{"id":"picks","label":"Taken","folder":"ux0:a"},
+            {"id":"empty","label":"Empty","folder":" "},{"id":"snes","label":"SNES","folder":"UX0:/ROMS/N64"}]}"#,
+        );
+        assert_eq!(config.folders, vec![Category::folder("n64", "N64", "ux0:/roms/n64"), Category::folder("snes", "SNES", "UX0:/ROMS/N64")]);
+        assert_eq!(config.rom_folders(), ["ux0:/roms/n64"], "the same folder once");
+        assert!(!config.render().contains("n64"), "categories.json keeps its own");
+        let mut again = CategoryConfig::default();
+        again.parse_folders(config.render_folders().as_bytes());
+        assert_eq!(again.folders, config.folders);
+        assert!(config.folders[0].filled() && config.folders[0].custom);
     }
 }

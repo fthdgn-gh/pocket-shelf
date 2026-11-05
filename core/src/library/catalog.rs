@@ -74,6 +74,13 @@ pub struct Game {
     /// Its game in Wikidata's tables, for the details libretro's database
     /// leaves out (and for Vita titles, which it does not list).
     pub wiki: Option<Arc<crate::online::wikidata::Found>>,
+    /// A RetroArch game's file as a key ([`roms::path_key`]), which folder
+    /// categories go by.
+    ///
+    /// [`roms::path_key`]: crate::library::roms::path_key
+    pub path: Option<Arc<str>>,
+    /// Found in a folder category's folder only ([`TitleInfo::in_folder`]).
+    pub in_folder: bool,
 }
 
 impl Game {
@@ -226,6 +233,8 @@ pub fn load_catalog(infos: &[TitleInfo]) -> Vec<Game> {
                 details: None,
                 db_names: None,
                 wiki: info.wiki.clone(),
+                path: info.path.as_deref().map(|p| crate::library::roms::path_key(p).into()),
+                in_folder: info.in_folder,
             };
             game.with_details(info.details.clone().map(Arc::new));
             game

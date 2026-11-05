@@ -68,6 +68,9 @@ const BROWSE_ROW: usize = 2;
 const PREVIEW_DELAY: u32 = 8;
 /// Category manager rows shown at once.
 const CATEGORY_ROWS: usize = 4;
+/// The category manager's rows before the categories: New category, New
+/// folder category.
+pub(super) const CATEGORY_FIXED: usize = 2;
 
 pub struct Editor {
     pub id: String,
@@ -310,15 +313,16 @@ impl Shelf {
     fn change_game_category(&mut self, host: &mut dyn Host, delta: i32) {
         let Some(game) = self.editor_game() else { return };
         let hidden = &self.library.config.hidden;
+        let own = self.library.base_game(&game.id).map(|g| self.library.own_category(g).to_string());
+        // Not a smart or folder category, except the title's own.
         let choices: Vec<String> = self
             .library
             .all_categories()
             .iter()
-            .filter(|c| !c.smart && (!hidden.contains(&c.id) || *c.id == *game.category))
+            .filter(|c| *c.id == *game.category || Some(&c.id) == own.as_ref() || (!c.filled() && !hidden.contains(&c.id)))
             .map(|c| c.id.clone())
             .collect();
         let next = crate::library::categories::cycle_category(&choices, &game.category, delta).to_string();
-        let own = self.library.base_game(&game.id).map(|g| g.category.to_string());
         self.library.patch(&game.id, |c| c.category = (Some(&next) != own.as_ref()).then_some(next.clone()));
         self.save_overrides(host);
         self.after_change();
@@ -771,15 +775,23 @@ impl Shelf {
         self.drawer.set(1.0, self.now);
     }
 
-    /// The category on the highlighted row (row 0 is "New category").
+    /// The category on the highlighted row (rows 0 and 1 are "New
+    /// category" and "New folder category").
     fn category_at(&self, row: usize) -> Option<crate::library::categories::Category> {
-        row.checked_sub(1).and_then(|i| self.library.all_categories().get(i)).cloned()
+        row.checked_sub(CATEGORY_FIXED).and_then(|i| self.library.all_categories().get(i)).cloned()
+    }
+
+    /// Save the folder categories and have the host read their folders
+    /// again (an added one's games, a deleted one's gone).
+    fn save_folders(&mut self, host: &mut dyn Host) {
+        host.write(crate::library::categories::ROM_FOLDERS_FILE, self.library.config.render_folders().as_bytes());
+        host.rom_folders(self.library.config.rom_folders(), true);
     }
 
     #[allow(clippy::too_many_arguments)]
     pub(super) fn categories_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool, triangle: bool, square: bool, start: bool, shoulder: i32) {
         use super::navigation::{Direction, Step as Nav};
-        let count = self.library.all_categories().len() + 1;
+        let count = self.library.all_categories().len() + CATEGORY_FIXED;
         let Some(manager) = &mut self.categories else { return };
         let dy = match step {
             Some(Nav::Press(Direction::Up)) | Some(Nav::Repeat(Direction::Up, _)) => -1,
@@ -796,6 +808,7 @@ impl Shelf {
         let t = self.t();
         if confirm {
             match &item {
+                None if row == 1 => self.open_folder_browser(host),
                 None => self.open_keyboard(keyboard::Target::NewCategory, ""),
                 Some(c) if c.custom => self.open_keyboard(keyboard::Target::Category(c.id.clone()), &c.label.clone()),
                 Some(_) => self.set_category_note(t.builtin_keep_names),
@@ -838,7 +851,9 @@ impl Shelf {
             return;
         }
         let id = item.id.clone();
+        let folder = item.folder.is_some();
         self.library.config.custom.retain(|c| c.id != id);
+        self.library.config.folders.retain(|c| c.id != id);
         self.library.config.hidden.retain(|h| *h != id);
         let placed: Vec<String> = self.library.overrides.titles.iter().filter(|(_, c)| c.category.as_deref() == Some(&id)).map(|(t, _)| t.clone()).collect();
         for title in placed {
@@ -847,7 +862,10 @@ impl Shelf {
         self.library.rebuild();
         self.save_overrides(host);
         self.save_categories(host);
-        let count = self.library.all_categories().len();
+        if folder {
+            self.save_folders(host);
+        }
+        let count = self.library.all_categories().len() + CATEGORY_FIXED - 1;
         if let Some(manager) = &mut self.categories {
             manager.armed = None;
             manager.note = t.deleted.to_string();
@@ -886,7 +904,7 @@ impl Shelf {
     /// Move the highlighted category earlier or later in the tab order.
     fn reorder_category(&mut self, host: &mut dyn Host, delta: i32) {
         let Some(manager) = &self.categories else { return };
-        let Some(index) = manager.row.checked_sub(1) else { return };
+        let Some(index) = manager.row.checked_sub(CATEGORY_FIXED) else { return };
         let mut order: Vec<String> = self.library.all_categories().iter().map(|c| c.id.clone()).collect();
         let target = index as i32 + delta;
         if target < 0 || target as usize >= order.len() {
@@ -897,7 +915,7 @@ impl Shelf {
         self.library.rebuild();
         self.save_categories(host);
         if let Some(manager) = &mut self.categories {
-            manager.row = target as usize + 1;
+            manager.row = target as usize + CATEGORY_FIXED;
             manager.armed = None;
             manager.note.clear();
         }
@@ -918,14 +936,20 @@ impl Shelf {
             self.set_category_note(t.name_taken);
             return;
         }
+        let mut folders_changed = false;
         match target {
-            keyboard::Target::NewCategory => {
+            keyboard::Target::NewCategory | keyboard::Target::NewFolderCategory(_) => {
                 let ids: Vec<String> = std::iter::once(SEARCH_ID.to_string()).chain(self.library.all_categories().iter().map(|c| c.id.clone())).collect();
                 let id = make_category_id(text, &|candidate| ids.iter().any(|i| i == candidate));
                 debug_assert!(valid_category_id(&id));
-                self.library.config.custom.push(crate::library::categories::Category::custom(&id, text));
+                if let keyboard::Target::NewFolderCategory(folder) = target {
+                    self.library.config.folders.push(crate::library::categories::Category::folder(&id, text, folder));
+                    folders_changed = true;
+                } else {
+                    self.library.config.custom.push(crate::library::categories::Category::custom(&id, text));
+                }
                 self.library.rebuild();
-                let row = self.library.all_categories().iter().position(|c| c.id == id).map_or(0, |i| i + 1);
+                let row = self.library.all_categories().iter().position(|c| c.id == id).map_or(0, |i| i + CATEGORY_FIXED);
                 if let Some(manager) = &mut self.categories {
                     manager.row = row;
                     manager.note.clear();
@@ -935,12 +959,19 @@ impl Shelf {
                 if let Some(c) = self.library.config.custom.iter_mut().find(|c| c.id == *id) {
                     c.label = text.to_string();
                 }
+                if let Some(c) = self.library.config.folders.iter_mut().find(|c| c.id == *id) {
+                    c.label = text.to_string();
+                    host.write(crate::library::categories::ROM_FOLDERS_FILE, self.library.config.render_folders().as_bytes());
+                }
                 self.library.rebuild();
                 self.set_category_note("");
             }
             _ => return,
         }
         self.save_categories(host);
+        if folders_changed {
+            self.save_folders(host);
+        }
         self.after_change();
     }
 
@@ -953,17 +984,22 @@ impl Shelf {
         let hidden = self.library.config.hidden.clone();
         let slide = self.drawer.at(self.now);
         let mut drawer = Drawer::open(gfx, &theme, &upper(t.categories_row, self.settings.language), panel::Size::Wide, slide);
-        let count = categories.len() + 1;
+        let count = categories.len() + CATEGORY_FIXED;
         let first = row.saturating_sub(CATEGORY_ROWS / 2).min(count.saturating_sub(CATEGORY_ROWS));
         drawer.index = first;
         drawer.selectable = true;
         for i in first..(first + CATEGORY_ROWS).min(count) {
             if i == 0 {
                 drawer.row(gfx, t.new_category, None, Some(Button::Plus), i == row, Step::None);
+            } else if i == 1 {
+                drawer.row(gfx, t.new_folder_category, None, Some(Button::Plus), i == row, Step::None);
             } else {
-                let c = &categories[i - 1];
+                let c = &categories[i - CATEGORY_FIXED];
                 let label = crate::i18n::category_label(t, c);
-                let value = hidden.contains(&c.id).then_some(t.hidden);
+                // A folder category's number of games, which its folder
+                // reading found.
+                let count = c.folder.as_ref().map(|_| self.library.count(&c.id).to_string());
+                let value = if hidden.contains(&c.id) { Some(t.hidden) } else { count.as_deref() };
                 drawer.row(gfx, &label, value, None, i == row, Step::None);
             }
         }
@@ -987,6 +1023,10 @@ impl Shelf {
             chrome::text_with_button(gfx, &theme, &text, Button::Face(Symbol::Square), drawer.x, drawer.bottom - 16.0);
         } else if !note.is_empty() {
             drawer.note(gfx, &note, 0);
+        } else if let Some(folder) = self.category_at(row).and_then(|c| c.folder) {
+            // A folder category's folder.
+            let folder = gfx.fit(crate::text::Role::Small, &folder, 540.0);
+            drawer.note(gfx, &folder, 0);
         }
     }
 }

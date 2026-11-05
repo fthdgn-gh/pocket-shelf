@@ -22,6 +22,7 @@ pub mod net;
 pub mod psm;
 pub mod pspemu;
 pub mod emu4vita;
+pub mod folders;
 pub mod retroarch;
 pub mod seplugins;
 pub mod update;

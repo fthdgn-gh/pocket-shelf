@@ -41,8 +41,8 @@ struct Title {
     retro: Option<Retro>,
 }
 
-/// A game from a playlist or Emu4Vita++'s favourites, and how RetroArch
-/// and Emu4Vita++ start it.
+/// A game from a playlist, Emu4Vita++'s favourites or a folder category's
+/// folder, and how RetroArch and Emu4Vita++ start it.
 struct Retro {
     /// The console's database name, which the guest groups games by.
     console: String,
@@ -57,6 +57,8 @@ struct Retro {
     favourite: bool,
     /// The box art Emu4Vita++ downloaded for a favourite; empty when none.
     art: String,
+    /// Found in a folder category's folder (`folders.rs`), not a playlist.
+    in_folder: bool,
 }
 
 /// A platform name from the list file, as the `'static` the table uses.
@@ -184,7 +186,7 @@ static SCAN_DONE: AtomicU32 = AtomicU32::new(0);
 static SCAN_TOTAL: AtomicU32 = AtomicU32::new(0);
 static SCAN_PHASE: AtomicU32 = AtomicU32::new(0);
 /// What the scan is reading, as `scan_state` names it.
-const SCAN_PHASES: [&str; 6] = ["apps", "system", "psm", "psp", "images", "retro"];
+const SCAN_PHASES: [&str; 7] = ["apps", "system", "psm", "psp", "images", "retro", "folders"];
 
 /// One item of the scan is read.
 pub(crate) fn scan_step() {
@@ -210,7 +212,8 @@ fn scan() -> Vec<Title> {
             + entry_count(SYSTEM_ROOT)
             + 1
             + crate::platform::pspemu::item_count()
-            + crate::platform::retroarch::item_count(&crate::platform::retroarch::Roots::vita(), emu.as_ref()),
+            + crate::platform::retroarch::item_count(&crate::platform::retroarch::Roots::vita(), emu.as_ref())
+            + crate::platform::folders::get().len() as u32,
         Ordering::Relaxed,
     );
     let mut titles = Vec::new();
@@ -263,9 +266,64 @@ fn scan() -> Vec<Title> {
                 path: game.path,
                 favourite: false,
                 art: String::new(),
+                in_folder: false,
             }),
         });
     }
+    add_folder_games(&mut titles, emu.as_ref());
+    titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
+    titles
+}
+
+/// The folder categories' games (`folders.rs`), after the playlists': a
+/// file a playlist lists is left to it. The scan's total counts one step per
+/// folder category; the steps here are one per folder read, so the bar
+/// runs ahead of its total while the folders are read.
+fn add_folder_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4vita::Install>) {
+    let folders = crate::platform::folders::get();
+    if folders.is_empty() {
+        unsafe {
+            FOLDER_REPORT = String::new();
+        }
+        return;
+    }
+    scan_phase("folders");
+    let known: std::collections::HashSet<String> =
+        titles.iter().filter_map(|item| item.retro.as_ref()).map(|retro| shelf_core::library::roms::path_key(&retro.path)).collect();
+    let mut ids: std::collections::HashSet<String> = titles.iter().map(|item| item.title_id.clone()).collect();
+    let (games, report) = crate::platform::folders::games(&folders, &known, &mut ids, emu, &mut scan_step);
+    unsafe {
+        FOLDER_REPORT = report;
+    }
+    for game in games {
+        titles.push(Title {
+            title_id: game.id,
+            title: game.title,
+            platform: "retro",
+            adrenaline: false,
+            image: None,
+            retro: Some(Retro {
+                console: game.console,
+                core: game.core,
+                emu: game.emu,
+                path: game.path,
+                favourite: false,
+                art: String::new(),
+                in_folder: true,
+            }),
+        });
+    }
+}
+
+/// The saved list with the folder categories' games read again: the rest
+/// of the list as it was. A full scan when there is no saved list.
+fn rescan_folders() -> Vec<Title> {
+    let Some(mut titles) = load_list() else { return scan() };
+    titles.retain(|item| !item.retro.as_ref().is_some_and(|retro| retro.in_folder));
+    SCAN_DONE.store(0, Ordering::Relaxed);
+    SCAN_TOTAL.store(crate::platform::folders::get().len() as u32, Ordering::Relaxed);
+    let emu = crate::platform::emu4vita::Install::find(crate::platform::emu4vita::Roots::vita());
+    add_folder_games(&mut titles, emu.as_ref());
     titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
     titles
 }
@@ -323,13 +381,15 @@ fn is_system(title_id: &str) -> bool {
 
 /// What the last scan found in RetroArch's playlists; empty before a scan.
 static mut RETRO_REPORT: String = String::new();
+/// The folder categories' part of the last scan (`folders::games`).
+static mut FOLDER_REPORT: String = String::new();
 /// What this start found of Emu4Vita++ and its favourites.
 static mut EMU_REPORT: String = String::new();
 
 /// What the last scan found in the playlists (`retroarch::scan`), and this
 /// start's Emu4Vita++ favourites (`emu4vita::favourites`).
 pub unsafe fn retro_report() -> String {
-    [RETRO_REPORT.clone(), EMU_REPORT.clone()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(",")
+    [RETRO_REPORT.clone(), EMU_REPORT.clone(), FOLDER_REPORT.clone()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(",")
 }
 
 /// `titles` with Emu4Vita++'s favourites: a listed game's file is marked,
@@ -394,6 +454,7 @@ fn with_favourites(mut titles: Vec<Title>) -> Vec<Title> {
                 path: favourite.path,
                 favourite: true,
                 art: favourite.art,
+                in_folder: false,
             }),
         };
         // In the scan's order: by lowercase name, then id.
@@ -415,7 +476,9 @@ fn with_favourites(mut titles: Vec<Title>) -> Vec<Title> {
 /// Version 2 added PSM titles, version 3 PSP and PS1 titles and the platform
 /// column, version 4 the launch column, version 5 the image column, version 6
 /// RetroArch games (the `retroarch` launch and the console and core columns),
-/// version 7 the Emu4Vita++ core column; an older list is scanned over.
+/// version 7 the Emu4Vita++ core column; an older list is scanned over. A
+/// folder category's game has the launch `folder` and a playlist game's
+/// columns; a release before folder categories scans over a list with one.
 #[cfg(feature = "data-fs")]
 const LIST_HEADER: &str = "pocket-shelf titles 7";
 
@@ -457,7 +520,7 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
         let (adrenaline, image, retro) = match launch {
             "uri" => (false, path, None),
             "adrenaline" => (true, path, None),
-            "retroarch" => {
+            "retroarch" | "folder" => {
                 let path = path?;
                 if console.is_empty() || (core.is_empty() && emu.is_empty()) {
                     return None;
@@ -469,6 +532,7 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
                     path,
                     favourite: false,
                     art: String::new(),
+                    in_folder: launch == "folder",
                 };
                 (false, None, Some(retro))
             }
@@ -498,7 +562,7 @@ fn save_list(titles: &[Title]) {
         text.push_str(item.platform);
         text.push('\t');
         let (launch, path, console, core, emu) = match (&item.retro, item.adrenaline) {
-            (Some(retro), _) => ("retroarch", retro.path.as_str(), retro.console.as_str(), retro.core.as_str(), retro.emu.as_str()),
+            (Some(retro), _) => (if retro.in_folder { "folder" } else { "retroarch" }, retro.path.as_str(), retro.console.as_str(), retro.core.as_str(), retro.emu.as_str()),
             (None, true) => ("adrenaline", item.image.as_deref().unwrap_or(""), "", "", ""),
             (None, false) => ("uri", item.image.as_deref().unwrap_or(""), "", "", ""),
         };
@@ -625,9 +689,10 @@ static SCAN_JOB: std::sync::Mutex<ScanJob> = std::sync::Mutex::new(ScanJob::Idle
 const SCAN_STACK: usize = 256 * 1024;
 
 /// Scan the installed titles on a worker thread and save the list; the guest
-/// follows it with `scan_state`. Does nothing while a scan runs. Returns
-/// false when the thread could not be started.
-pub fn scan_start() -> bool {
+/// follows it with `scan_state`. With `folders_only`, only the folder
+/// categories' folders are read again (`rescan_folders`). Does nothing while
+/// a scan runs. Returns false when the thread could not be started.
+pub fn scan_start(folders_only: bool) -> bool {
     let Ok(mut job) = SCAN_JOB.lock() else {
         return false;
     };
@@ -642,9 +707,9 @@ pub fn scan_start() -> bool {
     let spawned = std::thread::Builder::new()
         .name(String::from("pocket-scan"))
         .stack_size(SCAN_STACK)
-        .spawn(|| {
+        .spawn(move || {
             let started = unsafe { vitasdk_sys::sceKernelGetProcessTimeWide() };
-            let found = scan();
+            let found = if folders_only { rescan_folders() } else { scan() };
             save_list(&found);
             let ms = ((unsafe { vitasdk_sys::sceKernelGetProcessTimeWide() } - started) / 1000) as u32;
             if let Ok(mut job) = SCAN_JOB.lock() {
@@ -792,6 +857,8 @@ pub unsafe fn infos() -> Vec<shelf_core::host::TitleInfo> {
             emu_favorite: item.retro.as_ref().is_some_and(|retro| retro.favourite),
             details: None,
             wiki: None,
+            path: item.retro.as_ref().map(|retro| retro.path.clone()),
+            in_folder: item.retro.as_ref().is_some_and(|retro| retro.in_folder),
         })
         .collect()
 }

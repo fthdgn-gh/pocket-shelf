@@ -151,6 +151,8 @@ pub enum Target {
     /// The edited title's name.
     Title,
     NewCategory,
+    /// A new folder category's name; the folder it lists.
+    NewFolderCategory(String),
     /// A category's new name.
     Category(String),
     /// SteamGridDB's search term.
@@ -239,7 +241,7 @@ impl Keyboard {
         match self.target {
             Target::ApiKey => KEY_MAX,
             Target::Title | Target::Search | Target::Library => crate::library::overrides::TITLE_MAX,
-            Target::NewCategory | Target::Category(_) => crate::library::categories::CATEGORY_LABEL_MAX,
+            Target::NewCategory | Target::NewFolderCategory(_) | Target::Category(_) => crate::library::categories::CATEGORY_LABEL_MAX,
         }
     }
 

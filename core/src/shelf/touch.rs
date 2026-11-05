@@ -261,7 +261,7 @@ impl Shelf {
             return Some((editor.row, self.editor_row_list().len().max(1)));
         }
         if let Some(manager) = &self.categories {
-            return Some((manager.row, self.library.all_categories().len() + 1));
+            return Some((manager.row, self.library.all_categories().len() + super::editor::CATEGORY_FIXED));
         }
         if self.adrenaline.is_some() {
             return None;
@@ -324,7 +324,7 @@ impl Shelf {
             return;
         }
         if self.categories.is_some() {
-            let count = self.library.all_categories().len() + 1;
+            let count = self.library.all_categories().len() + super::editor::CATEGORY_FIXED;
             if let Some(manager) = &mut self.categories {
                 if manager.row != row {
                     manager.row = row.min(count - 1);

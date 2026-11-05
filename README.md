@@ -215,6 +215,33 @@ Emu4Vita++ has it, else with Emu4Vita++'s preferred core for the console.
 - The core-only VPKs in Emu4Vita++'s `StandAlones.7z` cannot be started with a
   game and are not used.
 
+### Folder categories
+
+SELECT ▸ Games ▸ Categories ▸ **New folder category** makes a tab of the
+games in a folder of your choice and its subfolders, with no playlist
+needed. Browse opens on the memory card's folders; pick one with **Use this
+folder**, then name the tab (the folder's name to start with). Pocket Shelf
+reads the folder on the spot and again at each Rescan titles.
+
+Each file's console is found from:
+- its extension, when one console uses it (`.sfc`, `.gba`, `.nes`, `.md`
+  with a Mega Drive header, `.gdi`);
+- the files a `.zip` holds (`Tetris.zip` holding `Tetris.gb` is a Game Boy
+  game);
+- a disc image's header (PlayStation, Saturn, Mega-CD), through a `.cue` or
+  `.m3u` when there is one; a PS1 `EBOOT.PBP`;
+- the names of the folders it is in, nearest first: `snes`, `gba`, `psx`,
+  `Mega Drive`, `arcade` and so on, or RetroArch's own names
+  (`Nintendo - Game Boy`).
+
+The tracks a `.cue`, `.gdi` or `.m3u` names are not listed on their own. A
+game starts in RetroArch with the console's recommended core when it is
+installed (else another core for the console), or in Emu4Vita++; Open with
+and Core in its editor work as for playlist games. A file neither app can
+start is left out, and a file a playlist already lists keeps the playlist's
+entry and shows in the folder's tab too. Diagnostics reports how many files
+each reading found, left out, or could not place.
+
 ### SteamGridDB API key
 
 Create a key in your SteamGridDB profile's preferences. You can type it in the
@@ -340,8 +367,9 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `libretro/` | libretro's name lists, one per console, fetched once |
 | `gamedb/` | libretro's game databases as tables, the games' checksums, and what each title was identified as |
 | `wikidata/` | Wikidata's game details tables, one per console, the genre and mode names, and what each title was matched to |
-| `folders.json` | The folders Browse last took a box art and a backdrop from |
+| `folders.json` | The folders Browse last took a box art and a backdrop from, and the last folder category's |
 | `cores.json` | The core each game starts with, per app, where you chose one |
+| `rom-folders.json` | Your folder categories: each tab's name and folder |
 | `autostart.txt`, `return.txt`, `boot-plugin.log` | The Console start settings the plugin reads, the mark a launch leaves for Return after a game, and the plugin's log of this console start |
 | `steamgriddb.txt` | Your SteamGridDB API key |
 | `update.json`, `update/` | The last update check; a downloaded update |

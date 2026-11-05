@@ -48,6 +48,11 @@ pub struct TitleInfo {
     /// Its game in Wikidata's tables. The Vita sends `wikidata/found.tsv`
     /// after the list instead ([`Event::WikidataMatched`]).
     pub wiki: Option<std::sync::Arc<crate::online::wikidata::Found>>,
+    /// A RetroArch game's file, which folder categories go by.
+    pub path: Option<String>,
+    /// Found in a folder category's folder, not in a playlist: it is listed
+    /// in that category and in no console's.
+    pub in_folder: bool,
 }
 
 /// An RGBA picture.
@@ -185,7 +190,7 @@ pub struct FolderEntry {
 
 /// What a running scan is reading (`installed.rs`): one step per app
 /// folder, one for the database and PSM, one per PSP folder or disc image,
-/// one per RetroArch playlist.
+/// one per RetroArch playlist, one per folder of a folder category.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ScanPhase {
     Apps,
@@ -194,6 +199,8 @@ pub enum ScanPhase {
     Psp,
     Images,
     Retro,
+    /// The folder categories' folders: one step per folder read.
+    Folders,
 }
 
 impl ScanPhase {
@@ -205,6 +212,7 @@ impl ScanPhase {
             "psp" => ScanPhase::Psp,
             "images" => ScanPhase::Images,
             "retro" => ScanPhase::Retro,
+            "folders" => ScanPhase::Folders,
             _ => ScanPhase::Apps,
         }
     }
@@ -346,6 +354,7 @@ pub const SAVED_FILES: &[&str] = &[
     crate::library::settings::FOLDERS_FILE,
     crate::library::settings::CORES_FILE,
     crate::autostart::RETURN_FILE,
+    crate::library::categories::ROM_FOLDERS_FILE,
 ];
 
 /// Whether the app writes this path of the data folder: one of
@@ -485,6 +494,14 @@ pub trait Host {
     /// The cores a RetroArch or Emu4Vita++ game can start with, off the
     /// frame (RetroArch's cores are read from their info files); answered
     /// with [`Event::Cores`]. False when this host cannot.
+    /// The folders of the folder categories ([`roms::walk`]), set before
+    /// [`Host::scan`]: a scan lists their games too. With `walk`, the host
+    /// reads them again now, keeping the rest of the list, and answers with
+    /// [`Event::Scan`] and [`Event::Titles`] as a scan does.
+    ///
+    /// [`roms::walk`]: crate::library::roms::walk
+    fn rom_folders(&mut self, _folders: Vec<String>, _walk: bool) {}
+
     fn cores(&mut self, _id: &str) -> bool {
         false
     }

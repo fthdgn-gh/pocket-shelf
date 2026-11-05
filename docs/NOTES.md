@@ -477,6 +477,28 @@ stick at each launch when it differs.
   folders kept; it showed a device opened from the list of devices as
   `/ux0:`, fixed. **Not yet run on hardware**: the device roots and listing
   times on the card.
+- **Folder categories** (SELECT ▸ Games ▸ Categories ▸ New folder
+  category, 2026-11-06): Browse in folder mode picks the folder, kept as
+  `ux0:/…` (`roms::canonical`) in `rom-folders.json`, a file of its own so
+  `categories.json` stays as 0.5 writes it. `Host::rom_folders` hands the
+  folders to the host before the first scan; adding or deleting one reads
+  them again on the scan thread (`installed::rescan_folders`: the saved list
+  without its folder games, the folders walked, saved), not a full scan.
+  `library/roms.rs` walks and names consoles (extension, zip central
+  directory, disc headers, folder names; tested with files in memory);
+  `vita/src/platform/folders.rs` gives each game RetroArch's recommended core
+  when installed, else one whose info file names the console, else one
+  Emu4Vita++ runs it with, and Emu4Vita++'s preferred core. Folder games are
+  `folder` lines in `titles.tsv` with a playlist game's columns; a release
+  before them meets an unknown launch and scans over the list. Their ids are
+  `retroarch::game_id` of the path, the same a playlist entry for the file
+  gets; a file a playlist lists is left to the playlist. The library lists
+  in a folder tab every game whose path is under the folder (`Game::path`, a
+  `path_key`); a game found only in a folder takes the folder tab as its own
+  category and adds no console tab. Limits: 8 folders deep, 60,000 entries,
+  20,000 games per reading; a zip64 or `.7z`/`.chd` goes by its folders.
+  **Not yet run on hardware**: walking times on the card, and launches of
+  folder games.
 - **Fetch artwork** (SELECT ▸ Games ▸ Artwork): one request at a time over a
   category or all titles but the system apps (whose names match unrelated
   games); busy replies (429) waited out five times, other failures halt the

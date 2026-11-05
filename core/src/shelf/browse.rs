@@ -7,6 +7,9 @@
 //! moved or deleted later leaves the title on its default picture. The
 //! decoded preview goes to the tile at once.
 //!
+//! The category manager's New folder category opens it on folders only, with
+//! a "Use this folder" row: the folder chosen is a folder category's.
+//!
 //! [`is_path`]: crate::library::overrides::is_path
 
 use std::collections::HashMap;
@@ -78,6 +81,8 @@ pub fn sorted(entries: Vec<FolderEntry>) -> Vec<FolderEntry> {
 
 pub struct Browser {
     pub backdrop: bool,
+    /// Picking a folder (a folder category's), not a picture.
+    pub folder: bool,
     /// The folder shown; `""` lists the devices.
     pub dir: String,
     /// None while the host reads the folder.
@@ -102,13 +107,28 @@ impl Browser {
         !self.dir.is_empty()
     }
 
-    pub(super) fn count(&self) -> usize {
-        usize::from(self.up_row()) + self.entries.as_ref().map_or(0, Vec::len)
+    /// "Use this folder", after "Up one folder", when picking a folder.
+    fn use_row(&self) -> bool {
+        self.folder && !self.dir.is_empty()
     }
 
-    /// The entry on a row; None for "Up one folder".
+    /// The rows before the entries.
+    fn fixed(&self) -> usize {
+        usize::from(self.up_row()) + usize::from(self.use_row())
+    }
+
+    pub(super) fn count(&self) -> usize {
+        self.fixed() + self.entries.as_ref().map_or(0, Vec::len)
+    }
+
+    /// Whether a row is "Use this folder".
+    fn on_use_row(&self, row: usize) -> bool {
+        self.use_row() && row + 1 == self.fixed()
+    }
+
+    /// The entry on a row; None for "Up one folder" and "Use this folder".
     fn entry(&self, row: usize) -> Option<&FolderEntry> {
-        let index = row.checked_sub(usize::from(self.up_row()))?;
+        let index = row.checked_sub(self.fixed())?;
         self.entries.as_ref()?.get(index)
     }
 
@@ -135,8 +155,27 @@ impl Shelf {
             }
         };
         let dir = if dir.is_empty() { START.to_string() } else { dir };
-        self.browser = Some(Browser { backdrop, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
+        self.browser = Some(Browser { backdrop, folder: false, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
         self.browse_to(host, dir, select, "");
+    }
+
+    /// Open Browse for a folder category's folder, on the folder the last
+    /// one was picked in.
+    pub(super) fn open_folder_browser(&mut self, host: &mut dyn Host) {
+        let dir = clean(&self.settings.folders.roms);
+        let dir = if dir.is_empty() { START.to_string() } else { dir };
+        self.browser = Some(Browser { backdrop: false, folder: true, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
+        self.browse_to(host, dir, None, "");
+    }
+
+    /// The folder picked: Browse closes and the keyboard asks for the
+    /// category's name, the folder's own to start with.
+    fn browser_pick_folder(&mut self, host: &mut dyn Host, dir: String) {
+        self.settings.folders.roms = dir.clone();
+        host.write(FOLDERS_FILE, self.settings.folders.render().as_bytes());
+        self.close_browser();
+        let name: String = dir.trim_end_matches('/').rsplit(['/', ':']).find(|s| !s.is_empty()).unwrap_or("").chars().take(crate::library::categories::CATEGORY_LABEL_MAX).collect();
+        self.open_keyboard(super::keyboard::Target::NewFolderCategory(dir), name.trim());
     }
 
     /// Show a folder; `select` is the entry to highlight in it (the folder
@@ -189,11 +228,15 @@ impl Shelf {
             return;
         };
         let select = browser.select.take();
-        let up = usize::from(browser.up_row());
+        // Picking a folder, the folders only.
+        let entries: Vec<FolderEntry> = if browser.folder { entries.into_iter().filter(|e| e.folder).collect() } else { entries };
+        let fixed = browser.fixed();
         let at = select.and_then(|name| entries.iter().position(|e| e.name == name));
         browser.entries = Some(entries);
-        // The folder just left, else the first entry.
-        browser.row = at.map_or(if browser.count() > up { up } else { 0 }, |i| i + up);
+        // The folder just left, else the first entry; in a folder with no
+        // folders, "Use this folder".
+        let first = if browser.count() > fixed { fixed } else { fixed.saturating_sub(1) };
+        browser.row = at.map_or(first, |i| i + fixed);
         self.browser_moved(false);
     }
 
@@ -229,6 +272,11 @@ impl Shelf {
             return;
         }
         if !confirm {
+            return;
+        }
+        if browser.on_use_row(browser.row) {
+            let dir = browser.dir.clone();
+            self.browser_pick_folder(host, dir);
             return;
         }
         let Some(entry) = browser.entry(browser.row).cloned() else { return };
@@ -365,7 +413,13 @@ impl Shelf {
         let t = self.t();
         let theme = self.theme;
         let slide = self.drawer.at(self.now);
-        let title = if browser.backdrop { t.backdrop } else { t.box_art };
+        let title = if browser.folder {
+            t.new_folder_category
+        } else if browser.backdrop {
+            t.backdrop
+        } else {
+            t.box_art
+        };
         let mut drawer = Drawer::open(gfx, &theme, &upper(title, self.settings.language), panel::Size::Wide, slide);
         if let Some((_, Some((tex, ..)))) = &browser.preview {
             if gfx.textures.ready(*tex) {
@@ -384,6 +438,7 @@ impl Shelf {
         drawer.selectable = true;
         for i in first..(first + ROWS).min(count) {
             let label = match browser.entry(i) {
+                None if browser.on_use_row(i) => t.browse_use_folder.to_string(),
                 None => t.browse_up.to_string(),
                 // A device is named as it is (`ux0:`), a folder with a `/`.
                 Some(e) if e.folder && !e.name.ends_with(':') => format!("{}/", e.name),
@@ -398,7 +453,7 @@ impl Shelf {
             t.browse_reading.to_string()
         } else if !browser.note.is_empty() {
             browser.note.clone()
-        } else if browser.entries.as_ref().is_some_and(Vec::is_empty) {
+        } else if browser.entries.as_ref().is_some_and(Vec::is_empty) && !browser.folder {
             t.browse_empty.to_string()
         } else {
             String::new()
@@ -408,7 +463,7 @@ impl Shelf {
         drawer.note(gfx, &text, 1);
         let confirm = Button::confirm(self.settings.confirm);
         let cancel = Button::cancel(self.settings.confirm);
-        let on_file = browser.entry(browser.row).is_some_and(|e| !e.folder);
+        let on_file = browser.entry(browser.row).is_some_and(|e| !e.folder) || browser.on_use_row(browser.row);
         let action = if on_file { t.r#use } else { t.browse_open };
         let mut hints = vec![(confirm, action)];
         if browser.up_row() {
@@ -549,7 +604,7 @@ mod tests {
         assert!(host.files.0.keys().all(|k| !k.starts_with("art/")), "nothing copied");
         assert!(shelf.browser.is_none() && shelf.picker.is_none());
         let saved = Folders::parse(&host.read(FOLDERS_FILE).unwrap());
-        assert_eq!(saved, Folders { art: "ux0:pictures".into(), backdrops: String::new() });
+        assert_eq!(saved, Folders { art: "ux0:pictures".into(), ..Default::default() });
 
         // Next time it opens on that file; up goes back to the root with
         // the folder highlighted, and a folder that does not read goes up.

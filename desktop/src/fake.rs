@@ -67,6 +67,7 @@ fn sample_titles() -> Vec<TitleInfo> {
             // As `gamedb/known.tsv` would give them.
             details: fake_database(id),
             wiki: None,
+            ..Default::default()
         })
         .collect();
     // As `wikidata/found.tsv` would give them.
@@ -296,6 +297,8 @@ pub struct FakeHost {
     /// AutoBoot's `boot.cfg`, for SELECT > System > Console start.
     pub tai_config: Option<String>,
     pub autoboot_cfg: Option<String>,
+    /// The folder categories' folders (`Host::rom_folders`).
+    rom_folders: Vec<String>,
 }
 
 /// Frames the fake takes to name a database's games.
@@ -507,6 +510,7 @@ impl FakeHost {
             identifying: None,
             tai_config: Some("# taiHEN config\n*KERNEL\nur0:tai/henkaku.skprx\n*main\nur0:tai/henkaku.suprx\n*NPXS10015\nur0:tai/henkaku.suprx\n".into()),
             autoboot_cfg: None,
+            rom_folders: Vec::new(),
             launched: Vec::new(),
             log: Vec::new(),
             installable: false,
@@ -653,6 +657,47 @@ impl FakeHost {
     fn index(&self, id: &str) -> Option<usize> {
         self.titles.iter().position(|t| t.id == id)
     }
+
+    /// A folder category named ROMs on `ux0:/data/roms`, its tab open.
+    pub fn with_rom_folder(mut self) -> Self {
+        let files: &[(&str, &str)] = &[
+            ("rom-folders.json", "{\n  \"folders\": [\n    {\n      \"id\": \"roms\",\n      \"label\": \"ROMs\",\n      \"folder\": \"ux0:/data/roms\"\n    }\n  ]\n}\n"),
+            ("settings.json", r#"{"category":"roms"}"#),
+        ];
+        for (path, text) in files {
+            self.files.insert(path.to_string(), text.as_bytes().to_vec());
+        }
+        self
+    }
+
+    /// The titles with the folder categories' games, as a Vita scan finds
+    /// them: a few games of different consoles in each folder.
+    fn listed(&self) -> Vec<TitleInfo> {
+        let mut titles = self.titles.clone();
+        let games = [
+            ("SNES/Comet Courier (USA).sfc", "Nintendo - Super Nintendo Entertainment System"),
+            ("SNES/Moss Knight (Europe).zip", "Nintendo - Super Nintendo Entertainment System"),
+            ("Game Boy/Tiny Lighthouse (World).gb", "Nintendo - Game Boy"),
+            ("Mega Drive/Harbor Blitz (USA).md", "Sega - Mega Drive - Genesis"),
+            ("PS1/Quiet Orbit (Europe).cue", "Sony - PlayStation"),
+        ];
+        for (n, folder) in self.rom_folders.iter().enumerate() {
+            for (i, (file, console)) in games.iter().enumerate() {
+                let name = file.rsplit('/').next().unwrap_or(file);
+                titles.push(TitleInfo {
+                    id: format!("rf{n}{i:06}"),
+                    title: name.rsplit_once('.').map_or(name, |(stem, _)| stem).into(),
+                    platform: "retro".into(),
+                    console: Some((*console).into()),
+                    opens: shelf_core::host::Emulators { retroarch: true, emu4vita: false },
+                    path: Some(format!("{folder}/{file}")),
+                    in_folder: true,
+                    ..Default::default()
+                });
+            }
+        }
+        titles
+    }
 }
 
 impl Host for FakeHost {
@@ -692,7 +737,7 @@ impl Host for FakeHost {
         if self.first_start || force {
             self.scanning = Some(self.frame);
         } else {
-            self.later.push(Event::Titles(load_catalog(&self.titles), 120));
+            self.later.push(Event::Titles(load_catalog(&self.listed()), 120));
             self.later.push(Event::Dates(self.dates()));
         }
     }
@@ -832,6 +877,13 @@ impl Host for FakeHost {
     }
 
     /// Browse's memory card: a few folders with PNG files and others.
+    fn rom_folders(&mut self, folders: Vec<String>, walk: bool) {
+        self.rom_folders = folders;
+        if walk {
+            self.later.push(Event::Titles(load_catalog(&self.listed()), 300));
+        }
+    }
+
     fn list_folder(&mut self, dir: &str) -> bool {
         use shelf_core::host::FolderEntry;
         let entry = |name: &str| FolderEntry { name: name.into(), folder: !name.contains('.') };
@@ -841,7 +893,9 @@ impl Host for FakeHost {
             "ux0:pictures" => Some(&["Box art", "Wallpapers", "screenshot.jpg", "Star Harbor.png"]),
             "ux0:pictures/Box art" => Some(&["Gravity Daze.png", "Neon Drift.png", "Pixel Quest.png", "broken.png", "readme.txt"]),
             "ux0:pictures/Wallpapers" => Some(&["Aurora.png", "Coast.png", "Night city.png"]),
-            "ux0:data" | "ux0:app" | "ux0:tai" | "ur0:" | "uma0:" => Some(&[]),
+            "ux0:data" => Some(&["roms"]),
+            "ux0:data/roms" => Some(&["Game Boy", "Mega Drive", "PS1", "SNES", "readme.txt"]),
+            "ux0:app" | "ux0:tai" | "ur0:" | "uma0:" => Some(&[]),
             _ => None,
         };
         // The devices in the Vita host's order, the rest sorted as it does.
@@ -919,7 +973,7 @@ impl Host for FakeHost {
             let elapsed = self.frame - start;
             if elapsed >= SCAN_FRAMES {
                 self.scanning = None;
-                self.later.push(Event::Titles(load_catalog(&self.titles), 2800));
+                self.later.push(Event::Titles(load_catalog(&self.listed()), 2800));
                 self.later.push(Event::Dates(self.dates()));
             } else {
                 let done = (elapsed as u32 * total) / SCAN_FRAMES as u32;

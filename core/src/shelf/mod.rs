@@ -745,7 +745,7 @@ impl Shelf {
         let k = &self.t().keyboard_for;
         match target {
             Target::Title => k.title,
-            Target::NewCategory => k.new_category,
+            Target::NewCategory | Target::NewFolderCategory(_) => k.new_category,
             Target::Category(_) => k.category,
             Target::Library => k.library,
             Target::Search => k.search,
@@ -760,7 +760,9 @@ impl Shelf {
         match &keyboard.target {
             keyboard::Target::Library => self.apply_search(&text),
             keyboard::Target::Title => self.commit_title(host, &text),
-            keyboard::Target::NewCategory | keyboard::Target::Category(_) => self.commit_category(host, &keyboard.target, &text),
+            keyboard::Target::NewCategory | keyboard::Target::NewFolderCategory(_) | keyboard::Target::Category(_) => {
+                self.commit_category(host, &keyboard.target, &text)
+            }
             keyboard::Target::Search => self.commit_online(host, false, &text),
             keyboard::Target::ApiKey => {
                 if !self.commit_fetch_key(host, &text) {
@@ -1847,6 +1849,8 @@ mod tests {
         launched_cores: Vec<Option<String>>,
         backdrops: Vec<PictureKey>,
         ahead: Vec<PictureKey>,
+        listed: Vec<String>,
+        rom_folders: Vec<(Vec<String>, bool)>,
     }
 
     impl Host for TestHost {
@@ -1892,10 +1896,17 @@ mod tests {
             self.plugin = PluginState::On;
             true
         }
+        fn list_folder(&mut self, dir: &str) -> bool {
+            self.listed.push(dir.into());
+            true
+        }
+        fn rom_folders(&mut self, folders: Vec<String>, walk: bool) {
+            self.rom_folders.push((folders, walk));
+        }
     }
 
     fn setup(accept: bool, plugin: PluginState) -> (Shelf, TestHost) {
-        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), launched_with: Vec::new(), launched_cores: Vec::new(), backdrops: Vec::new(), ahead: Vec::new() };
+        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), launched_with: Vec::new(), launched_cores: Vec::new(), backdrops: Vec::new(), ahead: Vec::new(), listed: Vec::new(), rom_folders: Vec::new() };
         host.files.0.insert(RECENT_FILE.into(), b"[\"VITASHELL\"]\n".to_vec());
         let library = Library::load(&mut host);
         let mut shelf = Shelf::new(Settings::defaults(UpdateChannel::Off), library, Status::default());
@@ -2470,13 +2481,73 @@ mod tests {
         assert!(shelf.library.config.custom.is_empty());
         assert_eq!(&*shelf.library.game("PCSA00069").unwrap().category, "games");
         // Hide a built-in one, and show it again.
-        let row = 1 + shelf.library.all_categories().iter().position(|c| c.id == "homebrew").unwrap();
+        let row = super::editor::CATEGORY_FIXED + shelf.library.all_categories().iter().position(|c| c.id == "homebrew").unwrap();
         shelf.categories.as_mut().unwrap().row = row;
         press(&mut shelf, &mut host, START);
         assert!(shelf.library.config.hidden.contains(&"homebrew".to_string()));
         assert!(shelf.tabs.iter().all(|c| c.id != "homebrew"));
         press(&mut shelf, &mut host, START);
         assert!(shelf.library.config.hidden.is_empty());
+    }
+
+    /// New folder category: Browse picks a folder, the keyboard names it;
+    /// the tab lists the games under the folder, and a game found there
+    /// only joins no console's tab.
+    #[test]
+    fn a_folder_category_lists_the_games_in_its_folder() {
+        use crate::host::{Emulators, FolderEntry};
+        use crate::library::categories::{Category, ROM_FOLDERS_FILE};
+        use crate::library::settings::{Folders, FOLDERS_FILE};
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let entry = |name: &str, folder| FolderEntry { name: name.into(), folder };
+        shelf.open_categories();
+        press(&mut shelf, &mut host, DOWN);
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(host.listed, ["ux0:"]);
+        // Folders only; the first one is highlighted, after Up and Use.
+        shelf.folder_listed(&mut host, "ux0:", Some(vec![entry("cover.png", false), entry("roms", true)]));
+        assert_eq!(shelf.browser.as_ref().map(|b| (b.entries.as_ref().map(Vec::len), b.row)), Some((Some(1), 2)));
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(host.listed.last().map(String::as_str), Some("ux0:roms"));
+        shelf.folder_listed(&mut host, "ux0:roms", Some(vec![]));
+        // No folders in it: "Use this folder" is highlighted.
+        assert_eq!(shelf.browser.as_ref().map(|b| b.row), Some(1));
+        press(&mut shelf, &mut host, CIRCLE);
+        assert!(shelf.browser.is_none());
+        assert_eq!(shelf.keyboard.as_ref().map(|k| k.text().to_string()).as_deref(), Some("roms"));
+        type_text(&mut shelf, &mut host, "My ROMs");
+        assert_eq!(shelf.library.config.folders, [Category::folder("my-roms", "My ROMs", "ux0:roms")]);
+        assert_eq!(host.rom_folders.last(), Some(&(vec!["ux0:/roms".to_string()], true)));
+        assert!(String::from_utf8(host.files.0[ROM_FOLDERS_FILE].clone()).unwrap().contains("\"ux0:/roms\""));
+        assert!(!String::from_utf8(host.files.0[CATEGORIES_FILE].clone()).unwrap().contains("ux0:/roms"));
+        assert_eq!(Folders::parse(&host.files.0[FOLDERS_FILE]).roms, "ux0:roms");
+
+        // The host's list: a game found in the folder, a playlist game in
+        // it, and one elsewhere.
+        let snes = "Nintendo - Super Nintendo Entertainment System";
+        let game = |id: &str, path: &str, in_folder| TitleInfo {
+            id: id.into(),
+            title: format!("Game {id}"),
+            platform: "retro".into(),
+            console: Some(snes.into()),
+            opens: Emulators { retroarch: true, emu4vita: false },
+            path: Some(path.into()),
+            in_folder,
+            ..Default::default()
+        };
+        let infos = [game("ra0000001", "ux0:/roms/snes/a.sfc", true), game("ra0000002", "UX0:roms/b.sfc", false), game("ra0000003", "ux0:/data/c.sfc", false)];
+        shelf.set_titles(load_catalog(&infos), true);
+        let listed = |shelf: &Shelf, tab: &str| -> Vec<String> { shelf.library.titles_of(tab).iter().map(|&i| shelf.library.games()[i].id.to_string()).collect() };
+        assert_eq!(listed(&shelf, "my-roms"), ["ra0000001", "ra0000002"]);
+        assert_eq!(listed(&shelf, "retro-snes"), ["ra0000002", "ra0000003"]);
+        assert_eq!(&*shelf.library.game("ra0000001").unwrap().category, "my-roms");
+
+        // Deleted: the folders are read again without it.
+        shelf.categories.as_mut().unwrap().row = super::editor::CATEGORY_FIXED + shelf.library.all_categories().iter().position(|c| c.id == "my-roms").unwrap();
+        press(&mut shelf, &mut host, SQUARE);
+        press(&mut shelf, &mut host, SQUARE);
+        assert!(shelf.library.config.folders.is_empty());
+        assert_eq!(host.rom_folders.last(), Some(&(vec![], true)));
     }
 
     #[test]

@@ -352,6 +352,8 @@ impl CoreChoice {
 pub struct Folders {
     pub art: String,
     pub backdrops: String,
+    /// Where the last folder category's folder was picked.
+    pub roms: String,
 }
 
 pub const FOLDERS_FILE: &str = "folders.json";
@@ -360,7 +362,7 @@ impl Folders {
     pub fn parse(bytes: &[u8]) -> Folders {
         let Ok(raw) = crate::library::read_json(bytes) else { return Folders::default() };
         let get = |key: &str| raw.get(key).and_then(Value::as_str).unwrap_or("").to_string();
-        Folders { art: get("art"), backdrops: get("backdrops") }
+        Folders { art: get("art"), backdrops: get("backdrops"), roms: get("roms") }
     }
 
     /// Two-space JSON and a newline, as the app's other files.
@@ -368,6 +370,7 @@ impl Folders {
         let mut map = Map::new();
         map.insert("art".into(), self.art.clone().into());
         map.insert("backdrops".into(), self.backdrops.clone().into());
+        map.insert("roms".into(), self.roms.clone().into());
         serde_json::to_string_pretty(&Value::Object(map)).expect("json") + "\n"
     }
 }

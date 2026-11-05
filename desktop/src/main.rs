@@ -129,6 +129,10 @@ fn system_keyboard() -> fake::FakeHost {
     fake::FakeHost::new().with_system_keyboard("st")
 }
 
+fn rom_folder() -> fake::FakeHost {
+    fake::FakeHost::new().with_rom_folder()
+}
+
 fn saved() -> fake::FakeHost {
     fake::FakeHost::new().with_saved_data()
 }
@@ -207,10 +211,18 @@ const SHOTS: &[Shot] = &[
     shot("132-editor-core", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (TRIANGLE, TAP), (0, TAP), (0, 6), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     shot("127-title-keyboard", &[(0, 4), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
     shot("130-categories", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
-    shot("131-categories-hidden", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (START, TAP), (0, TAP), (0, SETTLE)]),
+    shot("131-categories-hidden", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (START, TAP), (0, TAP), (0, SETTLE)]),
     shot("132-categories-new", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (TRIANGLE, TAP), (0, TAP), (0, SETTLE)]),
     Shot { name: "133-categories-delete-armed", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (0, SETTLE)], setup: saved },
-    shot("134-categories-builtin-note", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (0, SETTLE)]),
+    shot("134-categories-builtin-note", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (0, SETTLE)]),
+    // New folder category: Browse lists folders only, with "Use this
+    // folder"; then the keyboard names the tab after the folder.
+    shot("135-categories-folder-browse", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, 6), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, 6), (CIRCLE, TAP), (0, TAP), (0, 6), (0, SETTLE)]),
+    shot("136-categories-folder-name", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, 6), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, 6), (CIRCLE, TAP), (0, TAP), (0, 6), (UP, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    // A folder category: its tab lists the folder's games, and the manager
+    // shows its folder.
+    Shot { name: "137-folder-tab", script: &[(0, 4), (0, SETTLE)], setup: rom_folder },
+    Shot { name: "138-categories-folder", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (0, SETTLE)], setup: rom_folder },
     // Rescan titles (Library, fourth row) before, during and after its
     // scan; Diagnostics (last row of the main page).
     shot("140-rescan", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),

@@ -13,6 +13,7 @@ pub mod overrides;
 pub mod played;
 pub mod recent;
 pub mod recommended;
+pub mod roms;
 #[cfg(test)]
 mod round_trip;
 pub mod search;
@@ -121,6 +122,9 @@ pub struct Library {
     /// Each title's place in name order, when names from the game database
     /// change the host's order; empty when they do not.
     name_rank: Vec<u32>,
+    /// Each folder category's id and its folder as a key, longest folder
+    /// first (a title in nested folders belongs to the nearer one).
+    folder_keys: Vec<(Arc<str>, String)>,
 }
 
 impl Library {
@@ -129,7 +133,10 @@ impl Library {
     pub fn load(host: &mut dyn Host) -> Library {
         let overrides = OverrideStore::load(host);
         let art = art_index(host);
-        let config = host.read(CATEGORIES_FILE).map(|b| CategoryConfig::parse(&b)).unwrap_or_default();
+        let mut config = host.read(CATEGORIES_FILE).map(|b| CategoryConfig::parse(&b)).unwrap_or_default();
+        if let Some(bytes) = host.read(categories::ROM_FOLDERS_FILE) {
+            config.parse_folders(&bytes);
+        }
         let recent = host.read(recent::RECENT_FILE).map(|b| recent::parse(&b)).unwrap_or_default();
         let plays = host.read(PLAYS_FILE).map(|b| played::parse(&b)).unwrap_or_default().into_iter().collect();
         let orders = host.read(SORT_FILE).map(|b| SortOrders::parse(&b)).unwrap_or_default();
@@ -149,6 +156,7 @@ impl Library {
             by_category: FxHashMap::default(),
             index: FxHashMap::default(),
             name_rank: Vec::new(),
+            folder_keys: Vec::new(),
         };
         library.rebuild();
         library
@@ -209,14 +217,33 @@ impl Library {
 
     /// Recompute the categories and titles after a change.
     pub fn rebuild(&mut self) {
-        // A console's category, unless the user made one with the same id.
         // Each console once, in the order of its first game.
+        self.folder_keys = self
+            .config
+            .folders
+            .iter()
+            .filter_map(|c| Some((Arc::from(c.id.as_str()), roms::path_key(c.folder.as_deref()?))))
+            .collect();
+        self.folder_keys.sort_by_key(|(_, key)| std::cmp::Reverse(key.len()));
+        // A console's category, unless the user made one with the same id;
+        // a game found in a folder category's folder only goes to that one.
         let mut seen = std::collections::HashSet::with_hasher(fxhash::FxBuild::default());
-        let names = self.base.iter().filter_map(|g| g.console.as_deref()).filter(|name| seen.insert(*name));
+        let names = self
+            .base
+            .iter()
+            .filter(|g| self.folder_of(g).is_none())
+            .filter_map(|g| g.console.as_deref())
+            .filter(|name| seen.insert(*name));
         let consoles = console_categories(names);
-        let retro = consoles.into_iter().filter(|c| !self.config.custom.iter().any(|own| own.id == c.id));
-        let items: Vec<Category> =
-            smart_categories().into_iter().chain(builtin_categories()).chain(retro).chain(self.config.custom.iter().cloned()).collect();
+        let taken = |id: &str| self.config.custom.iter().chain(&self.config.folders).any(|own| own.id == id);
+        let retro = consoles.into_iter().filter(|c| !taken(&c.id));
+        let items: Vec<Category> = smart_categories()
+            .into_iter()
+            .chain(builtin_categories())
+            .chain(retro)
+            .chain(self.config.custom.iter().cloned())
+            .chain(self.config.folders.iter().cloned())
+            .collect();
         self.categories = order_categories(&items, &self.config.order);
 
         let mut key = String::new();
@@ -226,6 +253,15 @@ impl Library {
         for (index, game) in self.games.iter().enumerate() {
             self.index.insert(game.id.clone(), index);
             self.by_category.entry(game.category.clone()).or_default().push(index);
+            // A folder category lists every game in its folder, playlist
+            // games too.
+            if let Some(path) = game.path.as_deref() {
+                for (id, folder) in &self.folder_keys {
+                    if *id != game.category && roms::is_under(path, folder) {
+                        self.by_category.entry(id.clone()).or_default().push(index);
+                    }
+                }
+            }
         }
         // The host lists titles by their own names; with names from the
         // database, name order is worked out here once.
@@ -251,6 +287,22 @@ impl Library {
         }
     }
 
+    /// The folder category a game found in a folder belongs to: the one
+    /// with the nearest folder above its file.
+    fn folder_of(&self, game: &Game) -> Option<&Arc<str>> {
+        if !game.in_folder {
+            return None;
+        }
+        let path = game.path.as_deref()?;
+        self.folder_keys.iter().find(|(_, folder)| roms::is_under(path, folder)).map(|(id, _)| id)
+    }
+
+    /// A title's category before the user moves it: its folder category's,
+    /// else the host's.
+    pub fn own_category(&self, game: &Game) -> Arc<str> {
+        self.folder_of(game).cloned().unwrap_or_else(|| game.category.clone())
+    }
+
     /// A host title with the user's changes and its art file. `key` is a
     /// buffer for the art lookups.
     fn with_changes(&self, game: &Game, key: &mut String) -> Game {
@@ -270,13 +322,14 @@ impl Library {
         let chosen = change.and_then(|c| c.art.clone());
         let force_icon = chosen.as_deref() == Some(USE_ICON);
         let art = if force_icon { None } else { chosen.clone().or_else(|| find_art([&game.id, &game.title, &title])) };
-        let Some(change) = change else { return Game { art_auto: art.is_some(), art, title, ..game.clone() } };
+        let own = self.own_category(game);
+        let Some(change) = change else { return Game { art_auto: art.is_some(), art, title, category: own, ..game.clone() } };
         // A category that was deleted falls back to the title's own.
         let category = change
             .category
             .as_deref()
             .filter(|wanted| self.categories.iter().any(|c| c.id == *wanted))
-            .map_or_else(|| game.category.clone(), Arc::from);
+            .map_or(own, Arc::from);
         Game {
             title,
             category,
@@ -300,13 +353,20 @@ impl Library {
         let game = self.with_changes(&self.base[index], &mut key);
         let old = std::mem::replace(&mut self.games[index], game);
         if old.category != self.games[index].category {
-            if let Some(list) = self.by_category.get_mut(&old.category) {
+            // A folder category keeps the games in its folder.
+            let in_folder = |category: &str| {
+                let path = self.games[index].path.as_deref();
+                self.folder_keys.iter().any(|(id, folder)| **id == *category && path.is_some_and(|p| roms::is_under(p, folder)))
+            };
+            let keep = in_folder(&old.category);
+            if let Some(list) = self.by_category.get_mut(&old.category).filter(|_| !keep) {
                 list.retain(|&i| i != index);
             }
             // Kept in the host's order.
             let list = self.by_category.entry(self.games[index].category.clone()).or_default();
-            let at = list.partition_point(|&i| i < index);
-            list.insert(at, index);
+            if let Err(at) = list.binary_search(&index) {
+                list.insert(at, index);
+            }
         }
     }
 
@@ -432,7 +492,7 @@ impl Library {
         played::record(&plays, id, now)
     }
 
-    fn count(&self, id: &str) -> usize {
+    pub fn count(&self, id: &str) -> usize {
         match id {
             SEARCH_ID | RECENT_ID | FAVORITES_ID => self.titles_of(id).len(),
             _ => self.by_category.get(id).map_or(0, Vec::len),
@@ -459,6 +519,7 @@ impl Library {
     pub fn category_config(&self) -> CategoryConfig {
         CategoryConfig {
             custom: self.config.custom.clone(),
+            folders: self.config.folders.clone(),
             order: self.categories.iter().map(|c| c.id.clone()).collect(),
             hidden: self.config.hidden.clone(),
         }

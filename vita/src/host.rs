@@ -298,6 +298,65 @@ impl VitaHost {
         let _ = LOG.set(Mutex::new(log));
         VitaHost { answers, answer_sender, requests, files }
     }
+
+    /// The title list: the saved one, or a scan (`force`), or the saved one
+    /// with the folder categories' folders read again (`folders_only`).
+    /// Answers with `Event::Scan` while it runs, then `Event::Titles`.
+    fn scan_titles(&mut self, force: bool, folders_only: bool) {
+        let sender = self.answer_sender.clone();
+        spawn("shelf-scan", move || unsafe {
+            let started = now_us();
+            // The saved list when there is one; else a full scan, which
+            // saves it (installed.rs).
+            if !force && installed::titles_ready() {
+                log_line("titles: read the saved list");
+            } else if !installed::scan_start(folders_only) {
+                // A rescan the user asked for says so; at a start, the saved
+                // list (if any) is used.
+                log_line("titles: the scan could not start");
+                if force {
+                    let _ = sender.send(Event::ScanFailed);
+                    return;
+                }
+            } else {
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    let state = installed::scan_state();
+                    if state.starts_with("done") {
+                        log_line(&format!("titles: scanned ({state})"));
+                        break;
+                    }
+                    // `running <done> <total> <phase>`: the scan page's bar.
+                    let mut words = state.split(' ');
+                    if words.next() == Some("running") {
+                        let done = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
+                        let total = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
+                        let phase = ScanPhase::from_key(words.next().unwrap_or(""));
+                        let _ = sender.send(Event::Scan { done, total, phase });
+                    }
+                }
+            }
+            // What the game database found for each title, saved by the
+            // runs before.
+            let mut infos = installed::infos();
+            let known = crate::platform::gamedb::known();
+            known.apply(&mut infos);
+            let titles = shelf_core::library::catalog::load_catalog(&infos);
+            log_line(&format!("gamedb: {} titles known", known.len()));
+            let _ = sender.send(Event::Titles(titles, ((now_us() - started) / 1000) as u32));
+            // Wikidata's games after the list: reading them before it made
+            // the list wait 592 ms on the Vita.
+            crate::platform::wikidata::send_saved(&sender);
+            // The system's last-launch and install dates, for the sort orders.
+            let read = now_us();
+            let dates = crate::platform::appdb::dates().unwrap_or_default();
+            log_line(&format!("dates: {} titles from app.db in {} ms", dates.len(), (now_us() - read) / 1000));
+            let _ = sender.send(Event::Dates(dates));
+            // Titles new since the last start, in the tables on the card.
+            crate::platform::gamedb::identify_new(&sender);
+            crate::platform::wikidata::match_new(&sender);
+        });
+    }
 }
 
 fn spawn(name: &str, run: impl FnOnce() + Send + 'static) {
@@ -438,59 +497,15 @@ impl Host for VitaHost {
     }
 
     fn scan(&mut self, force: bool) {
-        let sender = self.answer_sender.clone();
-        spawn("shelf-scan", move || unsafe {
-            let started = now_us();
-            // The saved list when there is one; else a full scan, which
-            // saves it (installed.rs).
-            if !force && installed::titles_ready() {
-                log_line("titles: read the saved list");
-            } else if !installed::scan_start() {
-                // A rescan the user asked for says so; at a start, the saved
-                // list (if any) is used.
-                log_line("titles: the scan could not start");
-                if force {
-                    let _ = sender.send(Event::ScanFailed);
-                    return;
-                }
-            } else {
-                loop {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                    let state = installed::scan_state();
-                    if state.starts_with("done") {
-                        log_line(&format!("titles: scanned ({state})"));
-                        break;
-                    }
-                    // `running <done> <total> <phase>`: the scan page's bar.
-                    let mut words = state.split(' ');
-                    if words.next() == Some("running") {
-                        let done = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
-                        let total = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
-                        let phase = ScanPhase::from_key(words.next().unwrap_or(""));
-                        let _ = sender.send(Event::Scan { done, total, phase });
-                    }
-                }
-            }
-            // What the game database found for each title, saved by the
-            // runs before.
-            let mut infos = installed::infos();
-            let known = crate::platform::gamedb::known();
-            known.apply(&mut infos);
-            let titles = shelf_core::library::catalog::load_catalog(&infos);
-            log_line(&format!("gamedb: {} titles known", known.len()));
-            let _ = sender.send(Event::Titles(titles, ((now_us() - started) / 1000) as u32));
-            // Wikidata's games after the list: reading them before it made
-            // the list wait 592 ms on the Vita.
-            crate::platform::wikidata::send_saved(&sender);
-            // The system's last-launch and install dates, for the sort orders.
-            let read = now_us();
-            let dates = crate::platform::appdb::dates().unwrap_or_default();
-            log_line(&format!("dates: {} titles from app.db in {} ms", dates.len(), (now_us() - read) / 1000));
-            let _ = sender.send(Event::Dates(dates));
-            // Titles new since the last start, in the tables on the card.
-            crate::platform::gamedb::identify_new(&sender);
-            crate::platform::wikidata::match_new(&sender);
-        });
+        self.scan_titles(force, false);
+    }
+
+    fn rom_folders(&mut self, folders: Vec<String>, walk: bool) {
+        log_line(&format!("folders: {} folder categories{}", folders.len(), if walk { ", reading them" } else { "" }));
+        crate::platform::folders::set(folders);
+        if walk {
+            self.scan_titles(true, true);
+        }
     }
 
     fn request(&mut self, key: PictureKey) {

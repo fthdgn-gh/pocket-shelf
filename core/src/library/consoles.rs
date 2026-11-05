@@ -125,7 +125,7 @@ pub fn console_categories<'a>(consoles: impl IntoIterator<Item = &'a str>) -> Ve
         if category.builtin || result.iter().any(|c| c.id == category.id) {
             continue;
         }
-        result.push(Category { id: category.id, label: category.label, name: None, custom: false, smart: false, console: true });
+        result.push(Category { id: category.id, label: category.label, name: None, custom: false, smart: false, console: true, folder: None });
     }
     result
 }
