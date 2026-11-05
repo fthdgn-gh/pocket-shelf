@@ -435,6 +435,11 @@ pub fn hints_centered(gfx: &mut Gfx, theme: &Theme, items: &[(Button, &str)], cx
     lines.len() as f32 * 40.0 - 8.0
 }
 
+/// The hints on each line when they are wrapped to `max_w`, as ranges.
+pub fn wrap_hints(gfx: &mut Gfx, items: &[(Button, &str)], max_w: f32) -> Vec<std::ops::Range<usize>> {
+    hint_lines(gfx, items, max_w).1
+}
+
 /// The height `hints_centered` will take, without drawing.
 pub fn hints_height(gfx: &mut Gfx, items: &[(Button, &str)], max_w: f32) -> f32 {
     hint_lines(gfx, items, max_w).1.len() as f32 * 40.0 - 8.0

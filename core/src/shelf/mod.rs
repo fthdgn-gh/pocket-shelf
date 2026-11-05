@@ -584,6 +584,7 @@ impl Shelf {
                 pressed & TRIANGLE != 0,
                 pressed & SQUARE != 0,
                 pressed & START != 0,
+                pressed & SELECT != 0,
                 shoulder,
             );
         } else if self.adrenaline.is_some() {
@@ -2567,6 +2568,14 @@ mod tests {
         type_text(&mut shelf, &mut host, "Retro");
         assert_eq!(shelf.library.config.folders, [Category::folder("my-roms", "Retro", "ux0:/roms/snes")]);
         assert_eq!(host.rom_folders.last(), Some(&(vec!["ux0:/roms/snes".to_string()], true)));
+
+        // SELECT on it reads the folders again; the titles end it.
+        let walks = host.rom_folders.len();
+        press(&mut shelf, &mut host, SELECT);
+        assert_eq!(host.rom_folders.len(), walks + 1);
+        assert!(shelf.categories.as_ref().unwrap().reading);
+        shelf.rescanned(&mut host, load_catalog(&infos), 10);
+        assert!(!shelf.categories.as_ref().unwrap().reading);
 
         // Deleted: the folders are read again without it.
         shelf.categories.as_mut().unwrap().row = super::editor::CATEGORY_FIXED + shelf.library.all_categories().iter().position(|c| c.id == "my-roms").unwrap();

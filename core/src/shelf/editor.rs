@@ -111,6 +111,8 @@ pub struct Categories {
     /// The category a first delete press armed.
     pub armed: Option<String>,
     pub note: String,
+    /// The folder categories' folders are being read.
+    pub reading: bool,
 }
 
 /// A name as part of a file name: lowercase letters without marks, digits,
@@ -770,7 +772,7 @@ impl Shelf {
     // --- Category manager ---------------------------------------------------
 
     pub(super) fn open_categories(&mut self) {
-        self.categories = Some(Categories { row: 0, armed: None, note: String::new() });
+        self.categories = Some(Categories { row: 0, armed: None, note: String::new(), reading: false });
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);
     }
@@ -785,11 +787,29 @@ impl Shelf {
     /// again (an added one's games, a deleted one's gone).
     fn save_folders(&mut self, host: &mut dyn Host) {
         host.write(crate::library::categories::ROM_FOLDERS_FILE, self.library.config.render_folders().as_bytes());
+        self.read_folders(host);
+    }
+
+    /// Read the folder categories' folders again (SELECT on one in the
+    /// category manager, or after a change): files added since show, files
+    /// gone drop out. The manager says so until the titles come back.
+    fn read_folders(&mut self, host: &mut dyn Host) {
         host.rom_folders(self.library.config.rom_folders(), true);
+        if let Some(manager) = &mut self.categories {
+            manager.reading = true;
+            manager.note.clear();
+        }
+    }
+
+    /// The folders were read: the new titles are in.
+    pub(super) fn folders_read(&mut self) {
+        if let Some(manager) = &mut self.categories {
+            manager.reading = false;
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn categories_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool, triangle: bool, square: bool, start: bool, shoulder: i32) {
+    pub(super) fn categories_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool, triangle: bool, square: bool, start: bool, select: bool, shoulder: i32) {
         use super::navigation::{Direction, Step as Nav};
         let count = self.library.all_categories().len() + CATEGORY_FIXED;
         let Some(manager) = &mut self.categories else { return };
@@ -814,6 +834,10 @@ impl Shelf {
                 Some(c) if c.folder.is_some() => self.open_folder_browser(host, Some((c.id.clone(), c.folder.clone().unwrap_or_default()))),
                 Some(c) if c.custom => self.open_keyboard(keyboard::Target::Category(c.id.clone()), &c.label.clone()),
                 Some(_) => self.set_category_note(t.builtin_keep_names),
+            }
+        } else if select {
+            if item.as_ref().is_some_and(|c| c.folder.is_some()) {
+                self.read_folders(host);
             }
         } else if triangle {
             self.open_keyboard(keyboard::Target::NewCategory, "");
@@ -994,7 +1018,7 @@ impl Shelf {
 
     pub(super) fn draw_categories(&mut self, gfx: &mut Gfx) {
         let Some(manager) = &self.categories else { return };
-        let (row, armed, note) = (manager.row, manager.armed.clone(), manager.note.clone());
+        let (row, armed, note, reading) = (manager.row, manager.armed.clone(), manager.note.clone(), manager.reading);
         let t = self.t();
         let theme = self.theme;
         let categories = self.library.all_categories().to_vec();
@@ -1002,10 +1026,28 @@ impl Shelf {
         let slide = self.drawer.at(self.now);
         let mut drawer = Drawer::open(gfx, &theme, &upper(t.categories_row, self.settings.language), panel::Size::Wide, slide);
         let count = categories.len() + CATEGORY_FIXED;
-        // As many rows as fit above a line of note and the two lines of
-        // hints, at the text size in use.
+        let toggle = match self.category_at(row) {
+            Some(c) if hidden.contains(&c.id) => t.show,
+            _ => t.hide,
+        };
+        let confirm = Button::confirm(self.settings.confirm);
+        let cancel = Button::cancel(self.settings.confirm);
+        let on_folder = self.category_at(row).is_some_and(|c| c.folder.is_some());
+        let mut first = vec![(confirm, if on_folder { t.edit } else { t.rename }), (Button::Face(Symbol::Triangle), t.create), (Button::Face(Symbol::Square), t.remove)];
+        if on_folder {
+            first.push((Button::Select, t.refresh));
+        }
+        let second = vec![(Button::Start, toggle), (Button::ShoulderLR, t.reorder), (cancel, t.back)];
+        let mut hint_lines: Vec<Vec<(Button, &str)>> = Vec::new();
+        for group in [first, second] {
+            for range in chrome::wrap_hints(gfx, &group, drawer.w) {
+                hint_lines.push(group[range].to_vec());
+            }
+        }
+        // As many rows as fit above a line of note and the hints, at the
+        // text size in use.
         let note_h = gfx.line_height(crate::text::Role::Small) + 4.0;
-        let room = drawer.bottom - 80.0 - note_h - 8.0 - drawer.y;
+        let room = drawer.bottom - 40.0 * hint_lines.len() as f32 - note_h - 8.0 - drawer.y;
         let rows = ((room + 4.0) / (panel::ROW_H + 4.0)).floor().max(CATEGORY_ROWS as f32) as usize;
         let first = row.saturating_sub(rows / 2).min(count.saturating_sub(rows));
         drawer.index = first;
@@ -1025,27 +1067,22 @@ impl Shelf {
                 drawer.row(gfx, &label, value, None, i == row, Step::None);
             }
         }
-        // Two lines of hints at the bottom, and above them the armed delete's
-        // prompt or a note.
-        let toggle = match self.category_at(row) {
-            Some(c) if hidden.contains(&c.id) => t.show,
-            _ => t.hide,
-        };
-        let confirm = Button::confirm(self.settings.confirm);
-        let cancel = Button::cancel(self.settings.confirm);
-        let on_folder = self.category_at(row).is_some_and(|c| c.folder.is_some());
-        let first_line = [(confirm, if on_folder { t.edit } else { t.rename }), (Button::Face(Symbol::Triangle), t.create), (Button::Face(Symbol::Square), t.remove)];
-        let second_line = [(Button::Start, toggle), (Button::ShoulderLR, t.reorder), (cancel, t.back)];
+        // The hints at the bottom, each group wrapped to the drawer's width
+        // (German at the larger text size needs three lines), and above
+        // them the armed delete's prompt or a note.
         let bottom = drawer.bottom;
-        chrome::hints(gfx, &theme, &second_line, drawer.x, bottom - 16.0);
-        chrome::hints(gfx, &theme, &first_line, drawer.x, bottom - 56.0);
-        drawer.bottom = bottom - 80.0;
+        for (n, line) in hint_lines.iter().rev().enumerate() {
+            chrome::hints(gfx, &theme, line, drawer.x, bottom - 16.0 - 40.0 * n as f32);
+        }
+        drawer.bottom = bottom - 40.0 * hint_lines.len() as f32;
         if let Some(id) = armed {
             let name = categories.iter().find(|c| c.id == id).map(|c| crate::i18n::category_label(t, c)).unwrap_or_default();
             let text = fill(t.delete_again, &[("name", &name)]);
             chrome::text_with_button(gfx, &theme, &text, Button::Face(Symbol::Square), drawer.x, drawer.bottom - 16.0);
         } else if !note.is_empty() {
             drawer.note(gfx, &note, 0);
+        } else if reading {
+            drawer.note(gfx, &format!("{}...", crate::i18n::scan_phase(t, crate::host::ScanPhase::Folders)), 0);
         } else if let Some(folder) = self.category_at(row).and_then(|c| c.folder) {
             // A folder category's folder.
             let folder = gfx.fit(crate::text::Role::Small, &folder, 540.0);

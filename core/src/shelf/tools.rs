@@ -61,6 +61,7 @@ impl Shelf {
     /// (one may have been edited by hand).
     pub fn rescanned(&mut self, host: &mut dyn Host, games: Vec<Game>, ms: u32) {
         self.library.overrides.reload(host);
+        self.folders_read();
         let count = games.len();
         self.set_titles(games, false);
         let t = self.t();
