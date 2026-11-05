@@ -1,4 +1,4 @@
-//! SELECT ▸ Console start: Pocket Shelf opened at console start, and again
+//! SELECT ▸ System ▸ Console start: Pocket Shelf opened at console start, and again
 //! when a game it started closes. Both are done by a taiHEN plugin in the
 //! home screen (SceShell, the tai config's `*main` section): Pocket Shelf's
 //! own (`shell-boot/`, shipped in the VPK as `tai/pocketshelf_boot.suprx`),

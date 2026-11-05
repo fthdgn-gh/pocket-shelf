@@ -1,4 +1,4 @@
-//! SELECT ▸ Library ▸ Game database, one console at a time: libretro's
+//! SELECT ▸ Games ▸ Game database, one console at a time: libretro's
 //! database for it is downloaded when its table is missing or a week old,
 //! and the host identifies its titles ([`Host::identify`]); then the
 //! console's Wikidata table is downloaded when the release's `index.tsv`

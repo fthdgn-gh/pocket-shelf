@@ -169,7 +169,7 @@ cannot be driven. Evidence comes from the log and from files under
   `finish_launch` closes a running Emu4Vita++ first. **Not yet confirmed on
   hardware**: the launch URI, the favourites and the box art Emu4Vita++
   downloads (`cache/thumbnails/<console>/<rom_name>.png`).
-- **Which app opens a game** both can open: SELECT ▸ Library ▸ Open games
+- **Which app opens a game** both can open: SELECT ▸ Games ▸ Open games
   with, and the editor's Open with per game, saved in `emulators.json`
   (`EmulatorChoice`; RetroArch when absent). A game only one app opens uses
   that app whatever the choice.
@@ -222,7 +222,7 @@ cannot be driven. Evidence comes from the log and from files under
   closing it does not bring Pocket Shelf back. Its log of each console start
   is `boot-plugin.log`; Console start copies its last 40 lines into the
   app's log.
-- **SELECT ▸ Console start** changes the tai config only after a second
+- **SELECT ▸ System ▸ Console start** changes the tai config only after a second
   press, adding one line first under `*main` (or a `*main` section) in the
   file's own line endings; the change is checked to touch no other line,
   the old file is kept as `config.txt.pocketshelf.bak`, the new one goes
@@ -326,7 +326,7 @@ stick at each launch when it differs.
   details; a miss is looked up again in a newer table only) and read on
   the scan thread with the title list. At each start, after the dates, the
   titles new since the last run are identified for each table on the card
-  (no network). SELECT ▸ Library ▸ Game database downloads every table
+  (no network). SELECT ▸ Games ▸ Game database downloads every table
   over a week old and identifies every title, a database at a time, each
   followed by its Wikidata table.
   Fetch artwork matches the database name before the label; Find artwork
@@ -337,13 +337,13 @@ stick at each launch when it differs.
   first run's file reads, how many of the user's games are identified,
   and the frame that takes a console's results (2.1 ms on the Mac for
   5,905 titles, about 100 ms on the Vita by the usual ratio).
-- **What identified titles show**: Appearance ▸ Game names (`game-info.json`):
+- **What identified titles show**: Games ▸ Game names (`game-info.json`):
   Own (the playlist label or the title's name), Database, or Short (the
   database name without brackets, a trailing ", The" moved to the front);
   a title the user renamed keeps the user's name. With database names,
   name order is worked out in the rebuild (0.3 ms more on the Mac for
   5,905 titles); the names are made once per title (`Game::with_details`).
-  Appearance ▸ Game details: the panel of year, genre, developer,
+  Games ▸ Game details: the panel of year, genre, developer,
   publisher, players and region with their symbols (`shapes::Icon`), a
   column right of the title in Home and the Cascade, one row under it in
   the Carousel and the Grid; with the panel off, the line under the title
@@ -425,7 +425,7 @@ stick at each launch when it differs.
   to the tile from the preview's texture: reading the file back while the
   file thread was still writing it cached "no picture" (the tile showed
   initials). Confirmed on hardware.
-- **Fetch artwork** (SELECT ▸ Library): one request at a time over a
+- **Fetch artwork** (SELECT ▸ Games ▸ Artwork): one request at a time over a
   category or all titles but the system apps (whose names match unrelated
   games); busy replies (429) waited out five times, other failures halt the
   run. Confirmed on hardware on 55 PSP games, libretro then SteamGridDB.
@@ -438,8 +438,8 @@ stick at each launch when it differs.
 
 ## Updates
 
-SELECT ▸ Updates: **Channel** (Stable, Beta, Nightly, Off) and **Check for
-updates**.
+SELECT ▸ System: **Updates**, the channel (Stable, Beta, Nightly, Off), and
+**Check for updates**.
 
 - **Check:** `api.github.com/repos/fthdgn-gh/pocket-shelf/releases?per_page=10`
   (no key; 60 requests an hour per address). Only tags `shelf-v<version>`

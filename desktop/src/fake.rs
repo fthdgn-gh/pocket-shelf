@@ -293,7 +293,7 @@ pub struct FakeHost {
     /// A database being identified and the frame it started on.
     identifying: Option<(String, u64)>,
     /// The fake memory card's tai config (`ux0:tai/config.txt`) and
-    /// AutoBoot's `boot.cfg`, for SELECT > Console start.
+    /// AutoBoot's `boot.cfg`, for SELECT > System > Console start.
     pub tai_config: Option<String>,
     pub autoboot_cfg: Option<String>,
 }

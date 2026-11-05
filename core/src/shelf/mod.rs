@@ -203,7 +203,7 @@ pub struct Shelf {
     /// Pictures Fetch artwork applied since the title changes were written.
     fetch_unsaved: u32,
     cleanup: Option<artwork::Cleanup>,
-    /// SELECT ▸ Console start.
+    /// SELECT ▸ System ▸ Console start.
     console_start: Option<autostart::ConsoleStart>,
     update: update::UpdateFlow,
     /// This build (the host's `build`), for the update check.
@@ -1530,8 +1530,9 @@ impl Shelf {
             Page::Main => t.menu,
             Page::Appearance => t.appearance,
             Page::Status => t.status_bar,
-            Page::Library => t.library,
-            Page::Updates => t.updates,
+            Page::Games => t.categories.games,
+            Page::Artwork => t.artwork,
+            Page::System => t.categories.system,
         };
         match item {
             Item::Open(p) => (page(p), None, None, Right),
@@ -1658,7 +1659,8 @@ impl Shelf {
                     Channel::Nightly => u.nightly,
                     Channel::Off => u.off,
                 };
-                (t.update_channel, Some(name.into()), None, Both)
+                // On the System page, the row says what the channel is for.
+                (t.updates, Some(name.into()), None, Both)
             }
             // This build's version, as `buildLabel` shows a local build's.
             Item::CheckUpdates => (t.check_updates, Some(crate::updates::build_label(&self.build)), None, Right),
@@ -2106,7 +2108,7 @@ mod tests {
         use crate::library::settings::{TextSize, TEXT_SIZE_FILE};
         let (mut shelf, mut host) = setup(true, PluginState::On);
         // SELECT, down to Appearance, down to Text size.
-        for button in [SELECT, DOWN, RIGHT, DOWN, DOWN, DOWN] {
+        for button in [SELECT, DOWN, RIGHT, DOWN, DOWN] {
             press(&mut shelf, &mut host, button);
         }
         for _ in 0..4 {
@@ -2316,8 +2318,8 @@ mod tests {
         press(&mut shelf, &mut host, CIRCLE);
         assert_eq!(host.launched_with.last(), Some(&Some(Emulator::Emu4Vita)));
         // The menu's row changes the default and saves it.
-        shelf.menu.page = menu::Page::Library;
-        shelf.menu.row = menu::items(menu::Page::Library).iter().position(|i| *i == menu::Item::Emulator).unwrap();
+        shelf.menu.page = menu::Page::Games;
+        shelf.menu.row = menu::items(menu::Page::Games).iter().position(|i| *i == menu::Item::Emulator).unwrap();
         shelf.menu_change(&mut host, 1);
         assert_eq!(EmulatorChoice::parse(&host.files.0[EMULATORS_FILE]).default, Emulator::Emu4Vita);
         // Reset takes the title's own choice away.

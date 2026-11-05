@@ -1,5 +1,5 @@
 //! Checking for a newer build of the chosen channel and installing it
-//! (SELECT > Check for updates).
+//! (SELECT > System > Check for updates).
 
 use super::chrome::Button;
 use super::panel::{self, Drawer, Step};
@@ -86,7 +86,7 @@ impl Shelf {
         }
     }
 
-    /// SELECT > Check for updates: open the drawer and check now.
+    /// SELECT > System > Check for updates: open the drawer and check now.
     pub(super) fn check_updates(&mut self, host: &mut dyn Host) {
         self.update.open = true;
         self.drawer = panel::slide();

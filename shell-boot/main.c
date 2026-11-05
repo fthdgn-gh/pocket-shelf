@@ -2,7 +2,7 @@
  * Pocket Shelf console start plugin: a taiHEN user plugin for the home
  * screen (SceShell, the `*main` section of the tai config).
  *
- * It does two things, each switched on in Pocket Shelf (SELECT > Console
+ * It does two things, each switched on in Pocket Shelf (SELECT > System > Console
  * start), which writes `ux0:data/PocketShelf/autostart.txt`:
  *   boot=1    open Pocket Shelf once at console start;
  *   return=1  open Pocket Shelf again when a game it started closes.

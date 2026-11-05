@@ -1,4 +1,4 @@
-//! SELECT ▸ Console start ([`crate::autostart`]): Open at console start,
+//! SELECT ▸ System ▸ Console start ([`crate::autostart`]): Open at console start,
 //! Return after a game, and the plugin that does them. With AutoBoot in the
 //! tai config, Open at console start sets the title AutoBoot starts (and
 //! puts back the one it had); otherwise both need Pocket Shelf's plugin,

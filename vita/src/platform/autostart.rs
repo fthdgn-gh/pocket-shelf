@@ -1,4 +1,4 @@
-//! SELECT ▸ Console start's file work (`shelf_core::autostart`) on a worker
+//! SELECT ▸ System ▸ Console start's file work (`shelf_core::autostart`) on a worker
 //! thread: the tai config in use (`ux0:tai/config.txt`, else
 //! `ur0:tai/config.txt`, as taiHEN reads them), Pocket Shelf's plugin in
 //! `ur0:tai`, and AutoBoot's `boot.cfg`.

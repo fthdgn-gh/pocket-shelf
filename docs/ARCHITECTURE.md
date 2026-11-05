@@ -189,7 +189,7 @@ copies to the memory stick.
 **The SELECT menu** (`menu.rs`) holds every setting and saves each change. **The title editor**
 (TRIANGLE, `editor.rs`): favorite, category, title (keyboard), box art and
 backdrop pickers with a preview and the decode check, the scraper choice,
-reset (the favorite stays). **The category manager** (Library ▸
+reset (the favorite stays). **The category manager** (Games ▸
 Categories): new, rename, delete (pressed twice; titles go back to their
 own category), hide and show, reorder with L and R. **Rescan titles** scans
 again with its progress in the drawer and reads the per-title files again;
@@ -225,7 +225,7 @@ per distance between two names when it starts in the top bar
 stopping at the ends. Desktop shot
 scripts put a finger down with `touch(x, y)` (shots 250–257).
 
-**Keyboards** (SELECT ▸ Keyboard, `keyboard.json`): Pocket Shelf's own
+**Keyboards** (SELECT ▸ System ▸ Keyboard, `keyboard.json`): Pocket Shelf's own
 (the default) or the system's (`sceImeDialog`, `platform/ime.rs`). Opening one is
 asked for in an input handler and done at the next frame, which has the
 host (`Host::keyboard_open`); a host without a system keyboard (the
@@ -261,7 +261,7 @@ host reads both system dates from `app.db` on the scan thread after the
 title list (`Event::Dates`), since the last launch changes with every
 launch. Newest and Oldest release sort by the year the game database
 gives (`Game::details`), titles with none last. With names from the game
-database (Appearance ▸ Game names), the host's order is no longer name
+database (Games ▸ Game names), the host's order is no longer name
 order: the rebuild ranks the titles by name once and each tab's list is
 sorted by that rank. Search and Last Played keep their own order.
 
@@ -273,7 +273,7 @@ game for a title comes in `Event::WikidataMatched` (`wikidata/found.tsv`,
 sent after the title list; `Host::match_wikidata`), taken by
 `Library::set_wiki`; the panel takes a field from libretro's details
 first, from Wikidata's game when libretro's is empty. The
-details panel (Appearance ▸ Game details) is drawn by the views
+details panel (Games ▸ Game details) is drawn by the views
 (`views.rs`): a column of symbol and text rows right of the title in Home
 and the Cascade, one centered row under the title in the Carousel and the
 Grid, nothing in the List.
@@ -303,7 +303,7 @@ search, `120`–`134` the editor, pickers and category manager, `140`–`152`
 rescan and Diagnostics, `160`–`164` the status items' layout, `170`–`177`
 Find artwork, `180`–`187` Fetch and Clean up artwork (`187` the game
 database download, `184` naming a console's games), `190`–`196` updates, `270`–`276` Emu4Vita++ (its tab, the Favorites tab, Open with, the menu row),
-`277`–`279` SELECT ▸ Library ▸ Game database, `280`–`289` the details
+`277`–`279` SELECT ▸ Games ▸ Game database, `280`–`289` the details
 panel in each view, Game names, the panel off and the release sort,
 `64`–`66` Turkish and German.
 

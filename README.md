@@ -25,7 +25,7 @@ its saved data.
 
 | List | RetroArch | Menu |
 | --- | --- | --- |
-| ![The list view: title rows with small icons, the selected row highlighted.](./screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist with its year, genre, developer, publisher, players and region from libretro's database.](./screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, details, text size, backdrop, icon box and game names.](./screenshots/menu.png) |
+| ![The list view: title rows with small icons, the selected row highlighted.](./screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist with its year, genre, developer, publisher, players and region from libretro's database.](./screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, text size, title line, backdrop, icon box and status bar.](./screenshots/menu.png) |
 
 The screens are rendered on the desktop by `make shots` with sample titles;
 the colored tiles with initials stand in for game icons.
@@ -65,7 +65,7 @@ the colored tiles with initials stand in for game icons.
   takes its colors from the selected title.
 - **Five text sizes**, from Smaller to Larger (SELECT ▸ Appearance ▸ Text size).
 - **Type with Pocket Shelf's keyboard**, laid out like the Vita's, or with
-  the Vita's own (its languages and word suggestions; SELECT ▸ Keyboard).
+  the Vita's own (its languages and word suggestions; SELECT ▸ System ▸ Keyboard).
   With the Vita's, a search runs when you press its Search button.
 - **Sort each tab** (SELECT ▸ Sort): by name, by when it was last played,
   by how often Pocket Shelf started it, or by when it was installed. The
@@ -76,7 +76,7 @@ the colored tiles with initials stand in for game icons.
 - **Diagnostics** (SELECT menu): frame timing, startup timing, what the last
   title scan found and skipped, and the last Adrenaline launches (see
   [Troubleshooting](#troubleshooting)).
-- **Console start** (SELECT ▸ Console start): Pocket Shelf opens a few
+- **Console start** (SELECT ▸ System ▸ Console start): Pocket Shelf opens a few
   seconds after the console starts, and again when a game it started closes,
   through a taiHEN plugin (see [Console start](#console-start)).
 - **Five languages:** English, Turkish, German, French and Spanish.
@@ -110,11 +110,11 @@ the colored tiles with initials stand in for game icons.
 3. Open Pocket Shelf from the home screen. On the first start it scans the
    installed titles and shows its progress. Later starts read the saved list.
 
-After you install or remove a title, run **SELECT ▸ Library ▸ Rescan titles**.
+After you install or remove a title, run **SELECT ▸ Games ▸ Rescan titles**.
 
 ### Updates
 
-**SELECT ▸ Updates** sets the channel (Stable, Beta, Nightly or Off) and checks
+**SELECT ▸ System ▸ Updates** sets the channel (Stable, Beta, Nightly or Off) and checks
 for a newer release. Pocket Shelf also checks once a day at start. To install,
 it downloads the VPK, then starts a separate app, Pocket Shelf Updater, which
 installs it, opens the new version and is removed again.
@@ -139,7 +139,7 @@ boots the game and adds a line to `boot.log` next to it.
 
 ### Console start
 
-**SELECT ▸ Console start** has two settings: **Open at console start** and
+**SELECT ▸ System ▸ Console start** has two settings: **Open at console start** and
 **Return after a game**. Both need a taiHEN plugin in the home screen (the
 `*main` section of the tai config taiHEN reads: `ux0:tai/config.txt`, else
 `ur0:tai/config.txt`).
@@ -186,7 +186,7 @@ reads names from: RetroArch's playlists on `ux0:`, its own folder
 game starts in Emu4Vita++ with the core its playlist entry names when
 Emu4Vita++ has it, else with Emu4Vita++'s preferred core for the console.
 
-- **Open games with** (SELECT ▸ Library) picks the app for games both
+- **Open games with** (SELECT ▸ Games) picks the app for games both
   RetroArch and Emu4Vita++ can open; **Open with** in a game's editor
   (TRIANGLE) picks it for that game. A game only one app can open always
   starts in that app.
@@ -247,7 +247,7 @@ Files Pocket Shelf reads:
 - File names of at most 96 characters, not starting with a dot.
 
 A file that does not decode is marked in the picker and not used.
-**SELECT ▸ Library ▸ Clean up artwork with Remove set to Unused deletes the
+**SELECT ▸ Games ▸ Artwork ▸ Clean up artwork with Remove set to Unused deletes the
 files no title uses**: a backdrop you copied but have not chosen for a title
 counts as unused, and so does box art whose name matches no title.
 
@@ -278,7 +278,7 @@ touch screen:
   second one uses it.
 - Tap keys on the on-screen keyboard; hold a letter for its accents.
 
-**Pocket Shelf's keyboard** (SELECT ▸ Keyboard ▸ Pocket Shelf) is laid out
+**Pocket Shelf's keyboard** (SELECT ▸ System ▸ Keyboard ▸ Pocket Shelf) is laid out
 like the Vita's: letters in three rows with Shift and Delete beside the
 bottom one, 123 for digits and punctuation (and #+= for other symbols),
 and a cursor in the text.
@@ -328,8 +328,8 @@ steps to `updater.log`.
 
 ## Troubleshooting
 
-- **A title is missing:** run **SELECT ▸ Library ▸ Rescan titles**, then open
-  **SELECT ▸ Diagnostics**. After the timing it lists what the scan found and
+- **A title is missing:** run **SELECT ▸ Games ▸ Rescan titles**, then open
+  **SELECT ▸ System ▸ Diagnostics**. After the timing it lists what the scan found and
   why it skipped any PSP folder, disc image or RetroArch game (for example
   `skip=<id> noEboot`). These lines appear only after a scan in the same run.
 - **A PSP or PS1 game does not start:** the end of Diagnostics shows the last

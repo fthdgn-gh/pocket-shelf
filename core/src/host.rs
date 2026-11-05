@@ -236,7 +236,7 @@ pub enum Event {
     /// or the table was built before the time asked for. The host has saved
     /// them to `wikidata/found.tsv` already.
     WikidataMatched(String, Option<Vec<(String, std::sync::Arc<crate::online::wikidata::Found>)>>),
-    /// SELECT ▸ Console start: the tai config and plugins after
+    /// SELECT ▸ System ▸ Console start: the tai config and plugins after
     /// [`Host::autostart`].
     AutoStart(crate::autostart::Setup),
 }
@@ -437,7 +437,7 @@ pub trait Host {
     fn match_wikidata(&mut self, _file: &str, _newer_than_ms: u64) -> bool {
         false
     }
-    /// SELECT ▸ Console start: read the tai config, or change it, Pocket
+    /// SELECT ▸ System ▸ Console start: read the tai config, or change it, Pocket
     /// Shelf's plugin or AutoBoot's title ([`autostart`](crate::autostart)),
     /// off the frame; answered with [`Event::AutoStart`]. False when this
     /// host cannot.
