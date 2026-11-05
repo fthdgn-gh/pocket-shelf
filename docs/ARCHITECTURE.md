@@ -10,6 +10,7 @@ reads and writes that app's saved data unchanged.
 | `desktop/` | A software rasterizer for the same draw commands, a fake `Host` with a sample library, a fake SteamGridDB, libretro, GitHub and updater, and scripted screenshots. |
 | `vita/` | `Host` on the Vita (title scan, picture decoding, file writes, downloads and the log on worker threads), the vita2d backend, the frame loop, the platform modules (`vita/src/platform/`), and the VPK's other files (`vita/package/`). |
 | `platform-tests/` | The Vita platform modules with no system calls (`accent`, `adrenaline_config`, `dds`, `emu4vita`, `iso`, `retroarch`, `seplugins`), included by path so their tests run on the desktop. |
+| `shell-boot/` | The console start plugin (C, VitaSDK), a taiHEN user plugin for the home screen; `make shell-plugin` puts it in `vita/package/tai/` (`core/src/autostart.rs`, `vita/src/platform/autostart.rs`). |
 | `tools/` | `make art` draws the LiveArea pictures (`tiny-skia`, `fontdue`, a 256-color quantizer); `make updater` lays out the updater's package and its `head.bin`; `make wikidata` builds the game details tables (`ureq`, the core's table format). |
 
 ## Drawing
@@ -49,6 +50,7 @@ glyph changed.
 | `make art` | Redraw the LiveArea pictures and `template.xml` in `vita/package/sce_sys/` |
 | `make updater` | Build the updater app into `vita/package/updater/` (VitaSDK) |
 | `make plugin` | Build the Adrenaline plugin into `vita/package/psp/` (pspdev) |
+| `make shell-plugin` | Build the console start plugin into `vita/package/tai/pocketshelf_boot.suprx` (VitaSDK) |
 | `make wikidata` | Build the game details tables from Wikidata into `.build/wikidata/` (`TABLES="nes snes"` for some) and print the sample playlists' match rates; `.github/workflows/gamedb-data.yml` runs the build weekly and puts the tables on the `gamedb-data` release |
 
 **The SELF must not be "safe".** cargo-vita signs with `vita-make-fself -s`;
@@ -90,7 +92,9 @@ desktop's fake refuse other paths as the Vita does, and
 details reset at each start), pictures in `art/` and `backdrops/`, downloads to
 `libretro/`, `gamedb/`, `wikidata/` and `update/`, and `gamedb/crcs.tsv`,
 `gamedb/known.tsv` and `wikidata/found.tsv` (written by the threads that
-identify and match titles); it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
+identify and match titles), and outside the data folder only SELECT ▸
+Console start's tai config line, `ur0:tai/pocketshelf_boot.suprx` and
+AutoBoot's `boot.cfg` (`platform/autostart.rs`); it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
 order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
 in the frame took 24–30 ms, so every view change was a missed refresh.
 `Host::flush` waits for them before a launch ends the process. **The log**

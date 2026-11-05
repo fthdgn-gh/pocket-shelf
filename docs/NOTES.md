@@ -194,6 +194,46 @@ cannot be driven. Evidence comes from the log and from files under
 - **Staying open next to a game** ("system mode", `CATEGORY=gdc`,
   `libvita2d_sys`) was looked at and not done: it is a renderer port.
 
+## Console start (`shell-boot/`, `autostart.rs`)
+
+- **No system setting starts an app at console start**; it takes a taiHEN
+  user plugin in the home screen. taiHEN loads `*main` plugins into SceShell
+  and reads `ux0:tai/config.txt`, else `ur0:tai/config.txt` (taiHEN's
+  `taihen.h`). **Holding L (or L1) while the console starts skips every
+  plugin** (`taihen.c`, `SCE_CTRL_LTRIGGER | SCE_CTRL_L1`): the way back
+  from a plugin that keeps the home screen from starting.
+- **Prior art** (2026-11-05): Rinnegatamante's AutoBoot (no license, so none
+  of its code is used) waits for NPXS10079, which the system starts with the
+  home screen, then calls `sceAppMgrLaunchAppByUri(0xFFFFF,
+  "psgm:play?titleid=…")` with the title in `ux0:data/AutoBoot/boot.cfg`.
+  VitaXMB (GPL-3.0) found **a launch 5 s into the boot crashed the system
+  four times while AutoBoot's 10.6 s did not**; VitaOS (GPL-3.0) launches
+  twice, as a first launch can stop at the title's LiveArea page.
+- **Pocket Shelf's plugin** (`shell-boot/main.c`, MIT, 7 KB): open at start
+  waits for NPXS10079 and 12 s after it loaded, opens `POCKTSHLF` when it
+  is installed and no other application runs, and again 3 s later when it
+  is not running. Return after a game: Pocket Shelf ends when it starts a
+  title, so before the request it writes `return.txt`; the plugin polls
+  every 0.5 s, waits until an application other than Pocket Shelf and the
+  system's (`NPXS…`) runs, then until none does for two polls, deletes the
+  file and opens Pocket Shelf. It deletes the file without opening anything
+  when Pocket Shelf runs again first, or when nothing started within 60 s.
+  A system app started from Pocket Shelf (Settings) does not count, so
+  closing it does not bring Pocket Shelf back. Its log of each console start
+  is `boot-plugin.log`; Console start copies its last 40 lines into the
+  app's log.
+- **SELECT ▸ Console start** changes the tai config only after a second
+  press, adding one line first under `*main` (or a `*main` section) in the
+  file's own line endings; the change is checked to touch no other line,
+  the old file is kept as `config.txt.pocketshelf.bak`, the new one goes
+  through `config.txt.part` and is read back. With AutoBoot in `*main`, Open
+  at console start writes AutoBoot's `boot.cfg` instead, and Pocket Shelf's
+  plugin does not open the app at start (`boot=0`). An installed plugin
+  older than the app's is replaced when the drawer opens.
+- **Not yet run on hardware**: the plugin's load, its timing, what
+  `sceAppMgrGetRunningAppIdListForShell` lists on the home screen and while
+  a game runs, and whether the app may write `ur0:tai`.
+
 ## Adrenaline (`psp-boot/`, `seplugins.rs`, `pspemu.rs`)
 
 Pocket Shelf boots PSP and PS1 games through its own kernel plugin,

@@ -3,6 +3,7 @@
 
 pub mod art;
 mod artwork;
+mod autostart;
 pub mod chrome;
 mod editor;
 pub mod keyboard;
@@ -202,6 +203,8 @@ pub struct Shelf {
     /// Pictures Fetch artwork applied since the title changes were written.
     fetch_unsaved: u32,
     cleanup: Option<artwork::Cleanup>,
+    /// SELECT ▸ Console start.
+    console_start: Option<autostart::ConsoleStart>,
     update: update::UpdateFlow,
     /// This build (the host's `build`), for the update check.
     pub build: crate::updates::BuildInfo,
@@ -292,6 +295,7 @@ impl Shelf {
             fetch: None,
             fetch_unsaved: 0,
             cleanup: None,
+            console_start: None,
             update: Default::default(),
             build: crate::updates::BuildInfo::local(),
             diagnostics: None,
@@ -546,6 +550,8 @@ impl Shelf {
             self.fetch_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.cleanup.is_some() {
             self.cleanup_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
+        } else if self.console_start.is_some() {
+            self.console_start_input(host, step, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.rescan.is_some() {
             self.rescan_input(host, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.database.is_some() {
@@ -967,6 +973,10 @@ impl Shelf {
                 self.open_diagnostics();
                 return;
             }
+            Item::ConsoleStart => {
+                self.open_console_start(host);
+                return;
+            }
             Item::FetchArt => {
                 self.open_fetch();
                 return;
@@ -1063,10 +1073,19 @@ impl Shelf {
         if let Some(app) = with {
             host.log(&format!("launch: with {}", app.name()));
         }
+        // Return after a game: the console start plugin watches for this
+        // file (`autostart.rs`).
+        let back = self.settings.autostart.back;
+        if back {
+            host.write(crate::autostart::RETURN_FILE, game.id.as_bytes());
+        }
         let accepted = host.launch(&game.id, with);
         host.log(&format!("launch: host took {} ms (whole step {} ms)", (host.time_us() - asked) / 1000, (host.time_us() - started) / 1000));
         if !accepted {
             host.log(&format!("Launch rejected: {}", game.id));
+            if back {
+                host.remove(crate::autostart::RETURN_FILE);
+            }
             host.write(RECENT_FILE, crate::library::recent::render(&before).as_bytes());
             let kept: Vec<(String, crate::library::played::Play)> = self.library.plays.iter().map(|(id, p)| (id.clone(), *p)).collect();
             host.write(PLAYS_FILE, played::render(&kept).as_bytes());
@@ -1319,6 +1338,9 @@ impl Shelf {
         }
         if self.cleanup.is_some() {
             self.draw_cleanup(gfx);
+        }
+        if self.console_start.is_some() {
+            self.draw_console_start(gfx);
         }
         if self.rescan.is_some() {
             self.draw_rescan(gfx);
@@ -1647,6 +1669,7 @@ impl Shelf {
                 (t.language, Some(name.into()), None, Both)
             }
             Item::Diagnostics => (t.diagnostics, None, None, Right),
+            Item::ConsoleStart => (t.console_start, None, None, Right),
         }
     }
 
@@ -1871,7 +1894,7 @@ mod tests {
     fn every_menu_setting_is_saved() {
         use menu::{items, Item, PAGES};
         let (mut shelf, mut host) = setup(true, PluginState::On);
-        let actions = [Item::FetchArt, Item::CleanArt, Item::Rescan, Item::GameDatabase, Item::CheckUpdates, Item::Diagnostics, Item::Categories];
+        let actions = [Item::FetchArt, Item::CleanArt, Item::Rescan, Item::GameDatabase, Item::CheckUpdates, Item::Diagnostics, Item::Categories, Item::ConsoleStart];
         let mut checked = 0;
         for page in PAGES {
             for (row, item) in items(page).iter().enumerate() {

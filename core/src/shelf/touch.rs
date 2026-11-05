@@ -35,6 +35,7 @@ impl Shelf {
             || self.online.is_some()
             || self.fetch.is_some()
             || self.cleanup.is_some()
+            || self.console_start.is_some()
             || self.rescan.is_some()
             || self.database.is_some()
             || self.diagnostics.is_some()
@@ -236,6 +237,9 @@ impl Shelf {
         if let Some(clean) = &self.cleanup {
             return Some((clean.row(), 2));
         }
+        if let Some(start) = &self.console_start {
+            return Some((start.row(), 3));
+        }
         if self.rescan.is_some() {
             return None;
         }
@@ -284,6 +288,10 @@ impl Shelf {
         }
         if let Some(clean) = &mut self.cleanup {
             clean.set_row(row.min(1));
+            return;
+        }
+        if let Some(start) = &mut self.console_start {
+            start.set_row(row.min(2));
             return;
         }
         if self.rescan.is_some() {

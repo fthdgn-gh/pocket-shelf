@@ -18,7 +18,7 @@ VITASDK ?= $(HOME)/vitasdk
 PSPDEV ?= $(HOME)/pspdev
 TOOLS = cargo run --release --quiet --manifest-path tools/Cargo.toml --
 
-.PHONY: test shots build art updater plugin notices wikidata
+.PHONY: test shots build art updater plugin shell-plugin notices wikidata
 
 test:
 	cd core && cargo test
@@ -48,3 +48,8 @@ updater:
 plugin:
 	PATH="$(PSPDEV)/bin:$$PATH" PSPDEV="$(PSPDEV)" $(MAKE) -C psp-boot
 	cp psp-boot/pocketshelf.prx vita/package/psp/pocketshelf.prx
+
+shell-plugin:
+	PATH="$(VITASDK)/bin:$$PATH" VITASDK="$(VITASDK)" $(MAKE) -C shell-boot
+	mkdir -p vita/package/tai
+	cp .build/shell-boot/pocketshelf_boot.suprx vita/package/tai/pocketshelf_boot.suprx

@@ -236,6 +236,9 @@ pub enum Event {
     /// or the table was built before the time asked for. The host has saved
     /// them to `wikidata/found.tsv` already.
     WikidataMatched(String, Option<Vec<(String, std::sync::Arc<crate::online::wikidata::Found>)>>),
+    /// SELECT ▸ Console start: the tai config and plugins after
+    /// [`Host::autostart`].
+    AutoStart(crate::autostart::Setup),
 }
 
 /// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP
@@ -312,6 +315,8 @@ pub const SAVED_FILES: &[&str] = &[
     crate::online::steamgriddb::KEY_FILE,
     crate::updates::RECORD_FILE,
     crate::updates::UPDATE_VERSION_FILE,
+    crate::autostart::AUTOSTART_FILE,
+    crate::autostart::RETURN_FILE,
 ];
 
 /// Whether the app writes this path of the data folder: one of
@@ -430,6 +435,13 @@ pub trait Host {
     /// before `newer_than_ms`, or missing labels, count as missing. False
     /// when this host cannot.
     fn match_wikidata(&mut self, _file: &str, _newer_than_ms: u64) -> bool {
+        false
+    }
+    /// SELECT ▸ Console start: read the tai config, or change it, Pocket
+    /// Shelf's plugin or AutoBoot's title ([`autostart`](crate::autostart)),
+    /// off the frame; answered with [`Event::AutoStart`]. False when this
+    /// host cannot.
+    fn autostart(&mut self, _change: crate::autostart::Change) -> bool {
         false
     }
 

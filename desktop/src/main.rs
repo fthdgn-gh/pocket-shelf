@@ -71,6 +71,10 @@ fn german_first_start() -> fake::FakeHost {
     host
 }
 
+fn autoboot() -> fake::FakeHost {
+    fake::FakeHost::new().with_autoboot()
+}
+
 fn keyed() -> fake::FakeHost {
     fake::FakeHost::new().with_key()
 }
@@ -173,8 +177,8 @@ const SHOTS: &[Shot] = &[
     shot("101-menu-appearance", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     shot("102-menu-status", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     shot("103-menu-view-changed", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
-    shot("104-menu-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
-    shot("105-menu-confirm-cross", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("104-menu-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
+    shot("105-menu-confirm-cross", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)]),
     // Search: square opens the keyboard; typing "st" (row 2 col 1, row 1
     // col 4) shows the count; Done shows the results tab; back closes it.
     shot("110-keyboard", &[(0, 4), (SQUARE, TAP), (0, TAP), (0, SETTLE)]),
@@ -182,7 +186,7 @@ const SHOTS: &[Shot] = &[
     shot("112-search-results", &[(0, 4), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (0, SETTLE)]),
     shot("113-search-closed", &[(0, 4), (RIGHT, TAP), (0, TAP), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (CROSS, TAP), (0, TAP), (0, SETTLE)]),
     shot("114-search-nothing", &[(0, 4), (SQUARE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (START, TAP), (0, TAP), (0, SETTLE)]),
-    shot("115-keyboard-accents-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, 40), (0, SETTLE)]),
+    shot("115-keyboard-accents-turkish", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (SQUARE, TAP), (0, SETTLE), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, 40), (0, SETTLE)]),
     // The title editor (TRIANGLE): favorite, category, box art and backdrop
     // pickers with previews, the title keyboard; the category manager.
     shot("120-editor", &[(0, 4), (TRIANGLE, TAP), (0, TAP), (0, SETTLE)]),
@@ -292,6 +296,12 @@ const SHOTS: &[Shot] = &[
     shot("280-details-home", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (0, SETTLE)]),
     shot("281-details-home-detailed", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
     // A Vita game only Wikidata knows: its details from the Wikidata table.
+    // SELECT > Console start: no plugin, the question before installing
+    // Pocket Shelf's, installed, and with AutoBoot.
+    shot("300-console-start", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    shot("301-console-start-install", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, 4), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    shot("302-console-start-installed", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, 4), (CIRCLE, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),
+    Shot { name: "303-console-start-autoboot", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)], setup: autoboot },
     shot("290-details-vita-wikidata", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
     shot("282-details-carousel", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),
     shot("283-details-grid", &[(0, 4), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (R, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (SELECT, TAP), (0, TAP), (0, SETTLE)]),

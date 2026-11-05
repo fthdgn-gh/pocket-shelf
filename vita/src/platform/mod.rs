@@ -10,6 +10,7 @@ pub mod accent;
 pub mod adrenaline_config;
 pub mod appdb;
 pub mod art;
+pub mod autostart;
 pub mod backdrop;
 pub mod dds;
 pub mod gamedb;

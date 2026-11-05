@@ -292,6 +292,10 @@ pub struct FakeHost {
     update_step: Option<(&'static str, u64)>,
     /// A database being identified and the frame it started on.
     identifying: Option<(String, u64)>,
+    /// The fake memory card's tai config (`ux0:tai/config.txt`) and
+    /// AutoBoot's `boot.cfg`, for SELECT > Console start.
+    pub tai_config: Option<String>,
+    pub autoboot_cfg: Option<String>,
 }
 
 /// Frames the fake takes to name a database's games.
@@ -501,6 +505,8 @@ impl FakeHost {
             requests: HashMap::new(),
             next_request: 1,
             identifying: None,
+            tai_config: Some("# taiHEN config\n*KERNEL\nur0:tai/henkaku.skprx\n*main\nur0:tai/henkaku.suprx\n*NPXS10015\nur0:tai/henkaku.suprx\n".into()),
+            autoboot_cfg: None,
             launched: Vec::new(),
             log: Vec::new(),
             installable: false,
@@ -536,6 +542,14 @@ impl FakeHost {
 
     /// Emu4Vita++ installed: two Game Boy Advance games, one both apps open
     /// and one only Emu4Vita++ opens, in its favourites.
+    /// AutoBoot in the tai config, starting a sample game.
+    pub fn with_autoboot(mut self) -> Self {
+        let config = self.tai_config.take().unwrap_or_default();
+        self.tai_config = Some(config.replace("*main\n", "*main\nux0:tai/AutoBoot.suprx\n"));
+        self.autoboot_cfg = Some("PCSB00245".into());
+        self
+    }
+
     pub fn with_emu4vita(mut self) -> Self {
         use shelf_core::host::Emulators;
         let gba = "Nintendo - Game Boy Advance";
@@ -784,6 +798,29 @@ impl Host for FakeHost {
 
     fn identify_stop(&mut self) {
         self.identifying = None;
+    }
+
+    /// The tai config's and AutoBoot's changes, done at once with the core's
+    /// own text functions, answered the next frame.
+    fn autostart(&mut self, change: shelf_core::autostart::Change) -> bool {
+        use shelf_core::autostart::{autoboot_title, find_plugins, with_plugin, without_plugin, Change, Setup};
+        match change {
+            Change::Check => {}
+            Change::Install => self.tai_config = self.tai_config.as_deref().map(with_plugin),
+            Change::Remove => self.tai_config = self.tai_config.as_deref().map(without_plugin),
+            Change::AutoBoot(title) => self.autoboot_cfg = (!title.is_empty()).then_some(title),
+        }
+        let setup = match &self.tai_config {
+            None => Setup::default(),
+            Some(config) => Setup {
+                config: "ux0:tai/config.txt".into(),
+                found: find_plugins(config),
+                autoboot_title: self.autoboot_cfg.as_deref().map(|t| autoboot_title(t.as_bytes())).unwrap_or_default(),
+                error: String::new(),
+            },
+        };
+        self.later.push(Event::AutoStart(setup));
+        true
     }
 
     /// A table the fake downloaded, matched at once.

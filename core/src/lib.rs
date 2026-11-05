@@ -10,6 +10,7 @@
 //! The app talks to the platform through [`host::Host`].
 
 pub mod app;
+pub mod autostart;
 pub mod gfx;
 pub mod host;
 pub mod i18n;

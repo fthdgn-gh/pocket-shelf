@@ -304,6 +304,9 @@ impl Settings {
         if let Some(bytes) = host.read(TEXT_SIZE_FILE) {
             settings.text_size = TextSize::parse(&bytes);
         }
+        if let Some(bytes) = host.read(crate::autostart::AUTOSTART_FILE) {
+            settings.autostart = crate::autostart::AutoStart::parse(&bytes);
+        }
         settings
     }
 }
@@ -337,6 +340,9 @@ pub struct Settings {
     pub emulators: EmulatorChoice,
     /// Saved in its own file, `game-info.json` (not rendered here).
     pub game_info: GameInfo,
+    /// Saved in its own file, `autostart.txt`, which the console start
+    /// plugin reads (not rendered here).
+    pub autostart: crate::autostart::AutoStart,
 }
 
 impl Settings {
@@ -363,6 +369,7 @@ impl Settings {
             keyboard: KeyboardKind::Own,
             emulators: EmulatorChoice::default(),
             game_info: GameInfo::default(),
+            autostart: crate::autostart::AutoStart::default(),
         }
     }
 

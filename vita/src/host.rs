@@ -312,6 +312,12 @@ impl Host for VitaHost {
         crate::platform::gamedb::stop();
     }
 
+    fn autostart(&mut self, change: shelf_core::autostart::Change) -> bool {
+        let sender = self.answer_sender.clone();
+        spawn("shelf-autostart", move || crate::platform::autostart::run(change, sender));
+        true
+    }
+
     fn match_wikidata(&mut self, file: &str, newer_than_ms: u64) -> bool {
         let (file, sender) = (file.to_string(), self.answer_sender.clone());
         spawn("shelf-wikidata", move || crate::platform::wikidata::run(file, newer_than_ms, sender));

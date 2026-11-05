@@ -76,6 +76,9 @@ the colored tiles with initials stand in for game icons.
 - **Diagnostics** (SELECT menu): frame timing, startup timing, what the last
   title scan found and skipped, and the last Adrenaline launches (see
   [Troubleshooting](#troubleshooting)).
+- **Console start** (SELECT ▸ Console start): Pocket Shelf opens a few
+  seconds after the console starts, and again when a game it started closes,
+  through a taiHEN plugin (see [Console start](#console-start)).
 - **Five languages:** English, Turkish, German, French and Spanish.
 - **Updates from GitHub** on the channel you pick (see [Updates](#updates)).
 
@@ -133,6 +136,33 @@ are never modified.
 A launch writes a request to `ux0:/pspemu/PocketShelf/boot.txt` (under the
 memory stick location Adrenaline uses) and starts Adrenaline; the plugin
 boots the game and adds a line to `boot.log` next to it.
+
+### Console start
+
+**SELECT ▸ Console start** has two settings: **Open at console start** and
+**Return after a game**. Both need a taiHEN plugin in the home screen (the
+`*main` section of the tai config taiHEN reads: `ux0:tai/config.txt`, else
+`ur0:tai/config.txt`).
+
+- **With [AutoBoot](https://github.com/Rinnegatamante/AutoBoot) installed**,
+  Open at console start sets the title AutoBoot starts
+  (`ux0:data/AutoBoot/boot.cfg`) to Pocket Shelf, and turning it off puts back
+  the title it had.
+- **Otherwise**, turning either setting on offers Pocket Shelf's own plugin.
+  Nothing changes until you press a second time: the plugin is then copied to
+  `ur0:tai/pocketshelf_boot.suprx` and one line is added under `*main`, with a
+  copy of the old config kept as `config.txt.pocketshelf.bak`. The Plugin row
+  removes it the same way. Return after a game always needs this plugin.
+
+The plugin opens Pocket Shelf about 12 seconds after the console starts, once
+the home screen runs and only when no other application is open. Return after
+a game: before Pocket Shelf starts a title it writes `return.txt`; the plugin
+opens Pocket Shelf again when every application has closed. A game started
+from the home screen, or closing Pocket Shelf itself, leaves you on the home
+screen. A change to the plugin takes effect at the next console start, and the
+plugin logs what it did to `boot-plugin.log`. **If the console does not reach
+the home screen, hold L while turning it on**: taiHEN then loads no plugins,
+and the line can be removed from the tai config. Not yet tested on hardware.
 
 ### RetroArch
 
@@ -287,6 +317,7 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `libretro/` | libretro's name lists, one per console, fetched once |
 | `gamedb/` | libretro's game databases as tables, the games' checksums, and what each title was identified as |
 | `wikidata/` | Wikidata's game details tables, one per console, the genre and mode names, and what each title was matched to |
+| `autostart.txt`, `return.txt`, `boot-plugin.log` | The Console start settings the plugin reads, the mark a launch leaves for Return after a game, and the plugin's log of this console start |
 | `steamgriddb.txt` | Your SteamGridDB API key |
 | `update.json`, `update/` | The last update check; a downloaded update |
 | `titles.tsv` | The scanned title list. Delete it to force a new scan |
@@ -327,14 +358,15 @@ make build     # VPK at dist/vita/pocket-shelf.vpk
 | [`vita/`](./vita/) | The Vita host, the vita2d backend and the frame loop; `vita/package/` holds the VPK's other files |
 | [`desktop/`](./desktop/) | A software renderer and a fake host with sample titles, for `make shots` |
 | [`platform-tests/`](./platform-tests/) | The Vita modules with no system calls, built for the desktop so their tests run there |
-| [`updater/`](./updater/), [`psp-boot/`](./psp-boot/) | The updater app and the Adrenaline plugin (C) |
+| [`updater/`](./updater/), [`psp-boot/`](./psp-boot/), [`shell-boot/`](./shell-boot/) | The updater app, the Adrenaline plugin and the console start plugin (C) |
 | [`tools/`](./tools/) | `make art` (the LiveArea pictures) and `make updater` (the updater's package) |
 | [`docs/`](./docs/) | [Architecture](./docs/ARCHITECTURE.md), working [notes](./docs/NOTES.md), the port's [plan](./docs/PLAN.md) |
 
 The texts in five languages are in [`core/src/locales.rs`](./core/src/locales.rs).
 The version is `version` in [`vita/Cargo.toml`](./vita/Cargo.toml). The updater
-app (`make updater`, needs VitaSDK) and the Adrenaline plugin (`make plugin`,
-needs pspdev) are committed in `vita/package/`, so a build needs neither
+app (`make updater`, needs VitaSDK), the Adrenaline plugin (`make plugin`,
+needs pspdev) and the console start plugin (`make shell-plugin`, needs
+VitaSDK) are committed in `vita/package/`, so a build needs neither
 toolchain.
 
 ### Releases

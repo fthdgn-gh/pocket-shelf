@@ -31,9 +31,11 @@ mkdir -p ../dist/vita
 # by `make art`). Adrenaline launches copy the boot plugin from the app
 # folder (pspemu::copy_plugin reads app0:psp/pocketshelf.prx). The updater
 # app (vita/package/updater, built by `make updater`) goes in as
-# updater/; platform::update installs it from app0:updater.
+# updater/; platform::update installs it from app0:updater. The console
+# start plugin (vita/package/tai, built by `make shell-plugin`) goes in as
+# tai/; platform::autostart copies it to ur0:tai when the user installs it.
 set --
-for dir in sce_sys psp updater; do
+for dir in sce_sys psp updater tai; do
   for file in $(cd package/$dir && find . -type f ! -name '.*' | sed 's|^\./||' | sort); do
     set -- "$@" -a "package/$dir/$file=$dir/$file"
   done

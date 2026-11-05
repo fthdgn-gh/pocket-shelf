@@ -50,6 +50,8 @@ pub enum Item {
     /// The system's keyboard or Pocket Shelf's.
     Keyboard,
     Diagnostics,
+    /// Open at console start and Return after a game (`autostart.rs`).
+    ConsoleStart,
 }
 
 pub const PAGES: [Page; 5] = [Page::Main, Page::Appearance, Page::Status, Page::Library, Page::Updates];
@@ -60,7 +62,7 @@ pub const VISIBLE: usize = 7;
 pub fn items(page: Page) -> &'static [Item] {
     use Item::*;
     match page {
-        Page::Main => &[Sort, Open(Page::Appearance), Open(Page::Library), Open(Page::Updates), Confirm, Keyboard, Language, Diagnostics],
+        Page::Main => &[Sort, Open(Page::Appearance), Open(Page::Library), Open(Page::Updates), ConsoleStart, Confirm, Keyboard, Language, Diagnostics],
         Page::Appearance => &[Theme, View, Details, TextSize, Backdrop, IconBox, GameNames, GameDetails, Open(Page::Status)],
         Page::Status => &[StatusBar, StatusPosition, ShowWifi, ShowBluetooth, ShowBattery, BatteryPercent, Clock],
         Page::Library => &[Categories, FetchArt, CleanArt, Rescan, Emulator, GameDatabase],
