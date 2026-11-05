@@ -522,8 +522,9 @@ stick at each launch when it differs.
   `ux0:data/dsvita`, Flycast's `Dreamcast.ContentPath`; NooDS has none) are
   read in the playlists' part of a scan (`add_emulator_games`, `emulator`
   lines in `titles.tsv`), keep only their emulator's consoles, and list
-  their games in the console tabs. **Not yet run on hardware**: none of the
-  four launches, nor their folders.
+  their games in the console tabs. **On hardware** (2026-11-06, 0.6.0-beta.1):
+  a Dreamcast game from a folder category started in Flycast. Not yet run:
+  the other launches, and the emulators' own folders.
 - **ScummVM** (`VSCU00001`, 2026-11-06): its games are `scummvm.ini`'s
   sections other than `scummvm`, `keymapper` and `cloud` that have a
   `gameid` and `path` (`standalone::scummvm_games`); listed with their
