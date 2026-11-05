@@ -6,6 +6,8 @@ name: Game data
 # The files are replaced in place (`--clobber`); the release and its tag stay,
 # so a download never finds them missing. Installed copies' update check reads
 # only `shelf-v<version>` tags, so this release is never offered as an update.
+# It is a pre-release: every app release is one too, so as a full release it
+# became the repository's Latest.
 #
 # Weekly on Mondays; "Run workflow" builds it at once.
 on:
@@ -47,6 +49,7 @@ jobs:
               --target "$GITHUB_SHA" \
               --title "Game data" \
               --notes "Game details tables for Pocket Shelf, rebuilt weekly from Wikidata (data under CC0). Not an app release: Pocket Shelf downloads these files itself." \
+              --prerelease \
               --latest=false
           fi
           gh release upload gamedb-data out/*.tsv --repo "$GITHUB_REPOSITORY" --clobber

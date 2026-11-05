@@ -319,7 +319,9 @@ stick at each launch when it differs.
   **The tables are release files, not committed**: the `gamedb-data`
   release, files replaced in place (`gh release upload --clobber`). The
   update check reads only `shelf-v` tags, so the release is never offered
-  as an update. **No checksums**: a game is found by name
+  as an update. **It is a pre-release**: the app's releases all are, so as a
+  full release it became the repository's Latest (`--latest=false` did not
+  prevent it). **No checksums**: a game is found by name
   (`wikidata::name_key`, the article moved and brackets dropped as
   `short_name` does, compared as `base_name` compares), among its names and
   aliases. Each console is a set of small queries (names, dates, aliases,
