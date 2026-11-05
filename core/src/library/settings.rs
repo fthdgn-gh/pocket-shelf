@@ -223,6 +223,7 @@ keyed!(
         DsVita = "dsvita",
         NooDs = "noods",
         Flycast = "flycast",
+        ScummVm = "scummvm",
     }
 );
 
@@ -245,14 +246,17 @@ impl Default for EmulatorChoice {
 }
 
 /// The standalone emulators: the app, its title id, and the consoles it
-/// starts, as RetroArch's databases name them. Each reads the launch
-/// parameter as DaedalusX64 does (`Source/SysVita/main.cpp`): everything
-/// after `&param=`, undecoded, as the file to open.
+/// starts, as RetroArch's databases name them. Each but ScummVM reads the
+/// launch parameter as DaedalusX64 does (`Source/SysVita/main.cpp`):
+/// everything after `&param=`, undecoded, as the file to open.
 pub const STANDALONE: &[(Emulator, &str, &[&str])] = &[
     (Emulator::DaedalusX64, "DEDALOX64", &["Nintendo - Nintendo 64"]),
     (Emulator::DsVita, "DSVITA000", &["Nintendo - Nintendo DS"]),
     (Emulator::NooDs, "NOODSVITA", &["Nintendo - Nintendo DS", "Nintendo - Game Boy Advance"]),
     (Emulator::Flycast, "FLYCASTDC", &["Sega - Dreamcast"]),
+    // Its games come from its own list (`standalone::scummvm_games`) and
+    // start with `&path=<folder>&game_id=<game>` instead.
+    (Emulator::ScummVm, "VSCU00001", &["ScummVM"]),
 ];
 
 impl Emulator {
@@ -269,6 +273,7 @@ impl Emulator {
             Emulator::DsVita => "DSVita",
             Emulator::NooDs => "NooDS",
             Emulator::Flycast => "Flycast",
+            Emulator::ScummVm => "ScummVM",
         }
     }
 

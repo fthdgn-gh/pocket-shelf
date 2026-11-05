@@ -13,6 +13,13 @@
 //!   folders, a folder holding `;` or starting with `"` in quotes, `""` for a
 //!   quote (`core/cfg/option.h`).
 //! - NooDS keeps none: its file browser starts at `ux0:` each time.
+//! - ScummVM's games are the ones added to it, in
+//!   `ux0:data/scummvm/scummvm.ini` (`OSystem_PSP2::getDefaultConfigFileName`):
+//!   a section per game, named by its target, with its `path`, `gameid` and
+//!   `description` ([`scummvm_games`]). Its Vita build starts one from
+//!   `psgm:play?titleid=VSCU00001&path=<folder>&game_id=<target>`
+//!   (`backends/platform/sdl/psp2/psp2-main.cpp`), into buffers of 256 and
+//!   64 bytes.
 
 use crate::library::settings::Emulator;
 
@@ -106,6 +113,68 @@ pub fn flycast_content_paths(text: &str) -> Vec<String> {
     out
 }
 
+/// ScummVM's list of games.
+pub const SCUMMVM_INI: &str = "ux0:/data/scummvm/scummvm.ini";
+
+/// A game added to ScummVM.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ScummGame {
+    /// The section's name, which the launch names the game by: ScummVM uses
+    /// its settings (`monkey`, `monkey-1`).
+    pub target: String,
+    pub description: String,
+    pub path: String,
+}
+
+/// The longest folder and target ScummVM's launch takes (its buffers, with
+/// the closing NUL).
+pub const SCUMMVM_PATH_MAX: usize = 255;
+pub const SCUMMVM_TARGET_MAX: usize = 63;
+
+/// The games in a `scummvm.ini` text: every section but ScummVM's own
+/// (`scummvm`, `keymapper`, `cloud`) with a `gameid` and a `path`. Targets
+/// and folders the launch could not carry are left out.
+pub fn scummvm_games(text: &str) -> Vec<ScummGame> {
+    let mut games = Vec::new();
+    let mut section: Option<(String, Vec<(String, String)>)> = None;
+    let mut finish = |section: Option<(String, Vec<(String, String)>)>, games: &mut Vec<ScummGame>| {
+        let Some((target, keys)) = section else { return };
+        let get = |key: &str| keys.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone()).unwrap_or_default();
+        let (path, gameid) = (get("path"), get("gameid"));
+        let usable = !matches!(target.as_str(), "scummvm" | "keymapper" | "cloud")
+            && !gameid.is_empty()
+            && !path.is_empty()
+            && !target.is_empty()
+            && target.len() <= SCUMMVM_TARGET_MAX
+            && path.len() <= SCUMMVM_PATH_MAX
+            && !target.contains(['&', '\t'])
+            && !path.contains(['&', '\t', '\n']);
+        if usable {
+            let description = Some(get("description")).filter(|d| !d.trim().is_empty()).unwrap_or_else(|| target.clone());
+            games.push(ScummGame { target, description: description.split_whitespace().collect::<Vec<_>>().join(" "), path });
+        }
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            finish(section.take(), &mut games);
+            section = Some((name.trim().to_string(), Vec::new()));
+        } else if let (Some((_, keys)), Some((key, value))) = (section.as_mut(), line.split_once('=')) {
+            keys.push((key.trim().to_string(), value.trim().to_string()));
+        }
+    }
+    finish(section, &mut games);
+    games
+}
+
+/// The URI that starts a ScummVM game.
+pub fn scummvm_uri(path: &str, target: &str) -> String {
+    format!("psgm:play?titleid=VSCU00001&path={path}&game_id={target}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,5 +193,22 @@ mod tests {
         assert_eq!(flycast_content_paths(cfg), ["ux0:/data/flycast/roms", "ux0:/dc;games", "say \"hi\""]);
         assert!(flycast_content_paths("[config]\nDreamcast.ContentPath = \n").is_empty());
         assert!(flycast_content_paths("").is_empty());
+    }
+
+    #[test]
+    fn scummvm_lists_the_games_added_to_it() {
+        let ini = "[scummvm]\nversioninfo=2.9.0\n\n[monkey]\ndescription=The Secret of Monkey Island (CD/DOS/English)\npath=ux0:/data/scummvm/games/monkey\ngameid=monkey\nengineid=scumm\n\n\
+                   [keymapper]\nkeymap=x\n[sky]\ngameid=sky\npath=ux0:/games/BASS\n[broken]\ngameid=x\n[cloud]\npath=y\ngameid=z\n";
+        let games = scummvm_games(ini);
+        assert_eq!(
+            games,
+            [
+                ScummGame { target: "monkey".into(), description: "The Secret of Monkey Island (CD/DOS/English)".into(), path: "ux0:/data/scummvm/games/monkey".into() },
+                ScummGame { target: "sky".into(), description: "sky".into(), path: "ux0:/games/BASS".into() },
+            ]
+        );
+        assert_eq!(scummvm_uri(&games[0].path, "monkey"), "psgm:play?titleid=VSCU00001&path=ux0:/data/scummvm/games/monkey&game_id=monkey");
+        assert_eq!(Emulator::ScummVm.title_id(), Some("VSCU00001"));
+        assert_eq!(folders(Emulator::ScummVm), (&[][..], None));
     }
 }

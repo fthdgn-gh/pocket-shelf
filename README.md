@@ -226,6 +226,13 @@ emulators, when installed:
 | [DSVita](https://github.com/Grarak/DSVita) | `DSVITA000` | Nintendo DS |
 | [NooDS](https://github.com/Hydr8gon/NooDS) | `NOODSVITA` | Nintendo DS, Game Boy Advance |
 | [Flycast](https://github.com/Rinnegatamante/flycast-vita) | `FLYCASTDC` | Dreamcast |
+| [ScummVM](https://www.scummvm.org) | `VSCU00001` | Adventure games added to ScummVM |
+
+**ScummVM's games are the ones you added in ScummVM** (its
+`ux0:data/scummvm/scummvm.ini`): they get a ScummVM tab with ScummVM's
+names for them, and start straight into the game with your ScummVM
+settings for it (`&path=<folder>&game_id=<game>`). Add a game in ScummVM,
+then Rescan this tab on the ScummVM tab.
 
 **Their own game folders are read at each scan**, and their games join the
 console tabs (N64, Nintendo DS, Dreamcast) as playlist games do: DaedalusX64's

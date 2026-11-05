@@ -62,6 +62,9 @@ struct Retro {
     /// Found in a standalone emulator's own folder (`folders::emulator_roots`):
     /// listed in its console's tab as a playlist game is.
     in_emulator: bool,
+    /// A ScummVM game's target (its section in `scummvm.ini`); `path` is its
+    /// folder. Empty for the rest.
+    target: String,
 }
 
 /// A platform name from the list file, as the `'static` the table uses.
@@ -256,6 +259,7 @@ fn scan() -> Vec<Title> {
 /// its console's tab. One step per folder read.
 fn add_emulator_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4vita::Install>) {
     let installed = standalone_installed();
+    add_scummvm_games(titles, installed);
     let roots = crate::platform::folders::emulator_roots(installed);
     if roots.is_empty() {
         unsafe {
@@ -286,8 +290,60 @@ fn add_emulator_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu
                 art: String::new(),
                 in_folder: false,
                 in_emulator: true,
+                target: String::new(),
             }),
         });
+    }
+}
+
+/// The games added to ScummVM (`scummvm.ini`), when it is installed: each
+/// listed in the ScummVM tab by ScummVM's own name for it, started by its
+/// target. Reported as `ScummVM games=<n>`.
+fn add_scummvm_games(titles: &mut Vec<Title>, installed: u8) {
+    use shelf_core::library::{settings::Emulator, standalone};
+    unsafe {
+        SCUMMVM_REPORT = String::new();
+    }
+    if installed & Emulator::ScummVm.bit() == 0 {
+        return;
+    }
+    let Ok(text) = fs::read_to_string(standalone::SCUMMVM_INI) else {
+        unsafe {
+            SCUMMVM_REPORT = String::from("ScummVM games=0,ScummVM ini=missing");
+        }
+        return;
+    };
+    let mut ids: std::collections::HashSet<String> = titles.iter().map(|item| item.title_id.clone()).collect();
+    let mut count = 0;
+    for game in standalone::scummvm_games(&text) {
+        // The same id for the same target at each scan, so the user's
+        // changes to it stay.
+        let id = crate::platform::retroarch::game_id(&format!("scummvm:{}", game.target));
+        if !ids.insert(id.clone()) {
+            continue;
+        }
+        count += 1;
+        titles.push(Title {
+            title_id: id,
+            title: game.description,
+            platform: "retro",
+            adrenaline: false,
+            image: None,
+            retro: Some(Retro {
+                console: String::from("ScummVM"),
+                core: String::new(),
+                emu: String::new(),
+                path: game.path,
+                favourite: false,
+                art: String::new(),
+                in_folder: false,
+                in_emulator: true,
+                target: game.target,
+            }),
+        });
+    }
+    unsafe {
+        SCUMMVM_REPORT = format!("ScummVM games={count}");
     }
 }
 
@@ -378,6 +434,7 @@ fn scan_parts(mut titles: Vec<Title>, parts: Parts) -> Vec<Title> {
                     art: String::new(),
                     in_folder: false,
                     in_emulator: false,
+                    target: String::new(),
                 }),
             });
         }
@@ -431,6 +488,7 @@ fn add_folder_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4v
                 art: String::new(),
                 in_folder: true,
                 in_emulator: false,
+                target: String::new(),
             }),
         });
     }
@@ -493,13 +551,15 @@ static mut RETRO_REPORT: String = String::new();
 static mut FOLDER_REPORT: String = String::new();
 /// The standalone emulators' folders' part.
 static mut EMULATOR_REPORT: String = String::new();
+/// ScummVM's list's part.
+static mut SCUMMVM_REPORT: String = String::new();
 /// What this start found of Emu4Vita++ and its favourites.
 static mut EMU_REPORT: String = String::new();
 
 /// What the last scan found in the playlists (`retroarch::scan`), and this
 /// start's Emu4Vita++ favourites (`emu4vita::favourites`).
 pub unsafe fn retro_report() -> String {
-    [RETRO_REPORT.clone(), EMU_REPORT.clone(), EMULATOR_REPORT.clone(), FOLDER_REPORT.clone()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(",")
+    [RETRO_REPORT.clone(), EMU_REPORT.clone(), EMULATOR_REPORT.clone(), SCUMMVM_REPORT.clone(), FOLDER_REPORT.clone()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(",")
 }
 
 /// `titles` with Emu4Vita++'s favourites: a listed game's file is marked,
@@ -566,6 +626,7 @@ fn with_favourites(mut titles: Vec<Title>) -> Vec<Title> {
                 art: favourite.art,
                 in_folder: false,
                 in_emulator: false,
+                target: String::new(),
             }),
         };
         // In the scan's order: by lowercase name, then id.
@@ -631,6 +692,25 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
         let (adrenaline, image, retro) = match launch {
             "uri" => (false, path, None),
             "adrenaline" => (true, path, None),
+            "scummvm" => {
+                // The core column holds the target.
+                let path = path?;
+                if core.is_empty() {
+                    return None;
+                }
+                let retro = Retro {
+                    console: String::from(console),
+                    core: String::new(),
+                    emu: String::new(),
+                    path,
+                    favourite: false,
+                    art: String::new(),
+                    in_folder: false,
+                    in_emulator: true,
+                    target: String::from(core),
+                };
+                (false, None, Some(retro))
+            }
             "retroarch" | "folder" | "emulator" => {
                 let path = path?;
                 // A folder game may have neither core: a standalone
@@ -647,6 +727,7 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
                     art: String::new(),
                     in_folder: launch == "folder",
                     in_emulator: launch == "emulator",
+                    target: String::new(),
                 };
                 (false, None, Some(retro))
             }
@@ -677,14 +758,20 @@ fn save_list(titles: &[Title]) {
         text.push('\t');
         let (launch, path, console, core, emu) = match (&item.retro, item.adrenaline) {
             (Some(retro), _) => (
-                if retro.in_folder {
+                if !retro.target.is_empty() {
+                    "scummvm"
+                } else if retro.in_folder {
                     "folder"
                 } else if retro.in_emulator {
                     "emulator"
                 } else {
                     "retroarch"
                 },
-                retro.path.as_str(), retro.console.as_str(), retro.core.as_str(), retro.emu.as_str()),
+                retro.path.as_str(),
+                retro.console.as_str(),
+                if retro.target.is_empty() { retro.core.as_str() } else { retro.target.as_str() },
+                retro.emu.as_str(),
+            ),
             (None, true) => ("adrenaline", item.image.as_deref().unwrap_or(""), "", "", ""),
             (None, false) => ("uri", item.image.as_deref().unwrap_or(""), "", "", ""),
         };
@@ -1097,7 +1184,12 @@ pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>, c
                     return false;
                 }
                 close = standalone_name(app);
-                (standalone_uri(id, &retro.path), LAUNCH_FLAGS, true)
+                let uri = if app == Emulator::ScummVm {
+                    shelf_core::library::standalone::scummvm_uri(&retro.path, &retro.target)
+                } else {
+                    standalone_uri(id, &retro.path)
+                };
+                (uri, LAUNCH_FLAGS, true)
             }
             Some(Emulator::Emu4Vita) if !retro.emu.is_empty() => {
                 let roots = crate::platform::emu4vita::Roots::vita();
@@ -1150,7 +1242,11 @@ pub fn standalone_installed() -> u8 {
 pub fn standalone_for(console: &str, installed: u8, path: &str) -> u8 {
     shelf_core::library::settings::Emulator::standalone_for(console)
         .filter(|app| installed & app.bit() != 0)
-        .filter(|app| app.title_id().is_some_and(|id| standalone_uri(id, path).len() <= crate::platform::retroarch::URI_MAX))
+        .filter(|app| match app {
+            // ScummVM takes a folder of up to 255 bytes (and the target).
+            shelf_core::host::Emulator::ScummVm => path.len() <= shelf_core::library::standalone::SCUMMVM_PATH_MAX,
+            _ => app.title_id().is_some_and(|id| standalone_uri(id, path).len() <= crate::platform::retroarch::URI_MAX),
+        })
         .fold(0, |bits, app| bits | app.bit())
 }
 
@@ -1169,6 +1265,7 @@ fn standalone_name(app: shelf_core::host::Emulator) -> Option<&'static core::ffi
         Emulator::DsVita => Some(c"DSVITA000"),
         Emulator::NooDs => Some(c"NOODSVITA"),
         Emulator::Flycast => Some(c"FLYCASTDC"),
+        Emulator::ScummVm => Some(c"VSCU00001"),
         _ => None,
     }
 }

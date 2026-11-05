@@ -524,6 +524,15 @@ stick at each launch when it differs.
   lines in `titles.tsv`), keep only their emulator's consoles, and list
   their games in the console tabs. **Not yet run on hardware**: none of the
   four launches, nor their folders.
+- **ScummVM** (`VSCU00001`, 2026-11-06): its games are `scummvm.ini`'s
+  sections other than `scummvm`, `keymapper` and `cloud` that have a
+  `gameid` and `path` (`standalone::scummvm_games`); listed with their
+  `description` in the ScummVM tab, id `game_id("scummvm:<target>")`, saved
+  as `scummvm` lines (the core column holds the target). Started with
+  `psgm:play?titleid=VSCU00001&path=<folder>&game_id=<target>`, which
+  `backends/platform/sdl/psp2/psp2-main.cpp` turns into `-p <folder>
+  <target>`, copying into 256- and 64-byte buffers without a bound, so
+  longer folders and targets are left out. **Not yet run on hardware.**
 - **Rescan this tab** (SELECT, above Language, 2026-11-06): `Host::rescan_some`
   with the scan phases that fill the tab (`Shelf::tab_sources`);
   `installed::rescan` keeps the saved list's other titles (`Parts::holds`:
