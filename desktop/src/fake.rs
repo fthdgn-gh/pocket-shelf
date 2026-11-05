@@ -830,12 +830,6 @@ impl Host for FakeHost {
         true
     }
 
-    fn import_picture(&mut self, from: &str, to: &str, _fit: bool) -> bool {
-        self.log.push(format!("import {from} to {to}"));
-        self.files.insert(to.into(), b"PNG".to_vec());
-        true
-    }
-
     /// The tai config's and AutoBoot's changes, done at once with the core's
     /// own text functions, answered the next frame.
     fn autostart(&mut self, change: shelf_core::autostart::Change) -> bool {

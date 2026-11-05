@@ -183,6 +183,10 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Pixels> {
 /// folder's `backdrops` directory.
 #[cfg(feature = "data-fs")]
 fn custom_path(file: &str) -> Option<String> {
+    // A PNG the title editor's Browse set, read where it is.
+    if shelf_core::library::overrides::is_path(file) {
+        return Some(file.to_string());
+    }
     let plain = !file.is_empty()
         && file.len() <= 96
         && !file.starts_with('.')

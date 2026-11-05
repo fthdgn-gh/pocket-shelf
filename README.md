@@ -242,11 +242,12 @@ box art.
 **Browse...** in either picker takes a PNG from any folder of the memory
 card (`ux0:`, `ur0:`, `uma0:` and the other storage there is). It opens on
 the folder you last took a box art (or a backdrop) from, kept in
-`folders.json`; ○ opens a folder, △ goes up one, and the highlighted file
-is shown on the left. The file you pick is copied to `art/` (shrunk to the
-tile's size) or `backdrops/` as `<title id>-<number>.png`, so the original
-can be moved or deleted afterwards. Only PNG files are listed: Pocket Shelf
-reads no JPEG.
+`folders.json`, or on the file the title already uses; ○ opens a folder,
+△ goes up one, and the highlighted file is shown on the left. The file you
+pick is used where it is: the title's changes keep its full path, and
+nothing is copied. If you move, rename or delete it later, the title goes
+back to its default picture. Only PNG files are listed: Pocket Shelf reads
+no JPEG.
 
 Files Pocket Shelf reads:
 

@@ -441,13 +441,16 @@ stick at each launch when it differs.
   the host lists a folder on a thread of its own (`Host::list_folder`,
   folders and `.png` files, at most 10,000 entries; `""` lists the devices
   that read, `ux0:` first) and decodes a file by its full path as it would
-  be saved (`PictureKey::File`: 128 px fitted box art, or a backdrop). The
-  file used is copied on the file thread (`Host::import_picture`, PNG
-  signature and 8 MB checked) to `art/` or `backdrops/` as
-  `<title id>-<CRC of the path>.png`, and the preview goes to the tile as
-  Find artwork's does. The folder is kept per kind in `folders.json`. **In
-  Vita3K** (2026-11-05): folders listed in 2–9 ms, `ux0:` read as it is
-  (not `ux0:/`), a box art (shrunk to 20 KB) and a backdrop copied and both
+  be saved (`PictureKey::File`: 128 px fitted box art, or a backdrop). **The
+  file used is named by its full path** in the title's changes
+  (`overrides::is_path`: a device, `:`, `.png`; up to 255 characters where
+  a name in `art/` stays limited to 96), read where it is by `art.rs` and
+  `backdrop.rs`; nothing is copied (the first version copied it, which the
+  user did not want). Clean up artwork leaves paths alone. The preview goes
+  to the tile as Find artwork's does. The folder is kept per kind in
+  `folders.json`; Browse opens on the title's own file when it has one. **In
+  Vita3K** (2026-11-05, the copying version): folders listed in 2–9 ms,
+  `ux0:` read as it is (not `ux0:/`), a box art and a backdrop set and both
   folders kept; it showed a device opened from the list of devices as
   `/ux0:`, fixed. **Not yet run on hardware**: the device roots and listing
   times on the card.

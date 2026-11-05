@@ -18,9 +18,10 @@ use crate::host::Host;
 pub struct TitleOverride {
     pub category: Option<String>,
     pub title: Option<String>,
-    /// File name in `art/`, or [`USE_ICON`].
+    /// File name in `art/`, a PNG's full path ([`is_path`], the title
+    /// editor's Browse), or [`USE_ICON`].
     pub art: Option<String>,
-    /// File name in `backdrops/`, or [`NO_BACKDROP`].
+    /// File name in `backdrops/`, a PNG's full path, or [`NO_BACKDROP`].
     pub backdrop: Option<String>,
     /// In the "Favorites" category.
     pub favorite: bool,
@@ -45,9 +46,19 @@ pub fn valid_title_id(id: &str) -> bool {
     (1..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
-/// A `.png` name (any case) of at most 96 UTF-16 units.
+/// A `.png` name (any case) of at most 96 UTF-16 units, or a PNG's full
+/// path of at most 255.
 fn png_name(name: &str) -> bool {
-    name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".png") && name.encode_utf16().count() <= 96
+    let most = if is_path(name) { 255 } else { 96 };
+    name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".png") && name.encode_utf16().count() <= most
+}
+
+/// Whether an `art` or `backdrop` value is a PNG's full path on a device
+/// (`ux0:picture/a.png`), read where it is, rather than a file name in
+/// `art/` or `backdrops/`.
+pub fn is_path(value: &str) -> bool {
+    let Some((device, rest)) = value.split_once(':') else { return false };
+    !device.is_empty() && device.bytes().all(|b| b.is_ascii_alphanumeric()) && !rest.is_empty() && value.to_ascii_lowercase().ends_with(".png")
 }
 
 impl TitleOverride {
@@ -97,20 +108,21 @@ pub fn files_in_use(overrides: &Overrides, backdrops: bool) -> HashSet<String> {
     overrides
         .values()
         .filter_map(|change| if backdrops { change.backdrop.as_ref() } else { change.art.as_ref() })
-        .filter(|file| *file != USE_ICON && *file != NO_BACKDROP)
+        .filter(|file| *file != USE_ICON && *file != NO_BACKDROP && !is_path(file))
         .cloned()
         .collect()
 }
 
-/// `overrides` without the files they name; "icon" and "none" stay.
+/// `overrides` without the files they name in `art/` and `backdrops/`;
+/// "icon", "none" and full paths (not those folders' files) stay.
 pub fn without_files(overrides: &Overrides) -> Overrides {
     let mut next = Overrides::default();
     for (id, change) in overrides {
         let mut kept = change.clone();
-        if kept.art.as_deref().is_some_and(|a| a != USE_ICON) {
+        if kept.art.as_deref().is_some_and(|a| a != USE_ICON && !is_path(a)) {
             kept.art = None;
         }
-        if kept.backdrop.as_deref().is_some_and(|b| b != NO_BACKDROP) {
+        if kept.backdrop.as_deref().is_some_and(|b| b != NO_BACKDROP && !is_path(b)) {
             kept.backdrop = None;
         }
         if !kept.is_empty() {
@@ -284,5 +296,21 @@ mod tests {
         assert_eq!(clean.backdrop, None);
         assert!(!clean.favorite);
         assert!(TitleOverride::sanitize(&serde_json::json!({"title": "  "})).is_empty());
+    }
+
+    #[test]
+    fn a_full_path_is_kept_and_left_out_of_the_folders_files() {
+        let long = format!("ux0:picture/{}/a.png", "x".repeat(150));
+        let clean = TitleOverride::sanitize(&serde_json::json!({"art": long, "backdrop": format!("ux0:{}.png", "y".repeat(300))}));
+        assert_eq!(clean.art.as_deref(), Some(long.as_str()));
+        assert_eq!(clean.backdrop, None, "over 255");
+        assert!(is_path("ux0:picture/Box art/a.PNG") && is_path("uma0:a.png"));
+        assert!(!is_path("PCSA00069-1.png") && !is_path("ux0:a.jpg") && !is_path(":a.png") && !is_path("icon"));
+        let mut o = Overrides::default();
+        o.insert("PCSA00069".into(), TitleOverride { art: Some("ux0:picture/a.png".into()), backdrop: Some("PCSA00069-2.png".into()), ..Default::default() });
+        assert!(files_in_use(&o, false).is_empty());
+        let next = without_files(&o);
+        assert_eq!(next["PCSA00069"].art.as_deref(), Some("ux0:picture/a.png"), "not Clean up's to delete");
+        assert_eq!(next["PCSA00069"].backdrop, None);
     }
 }

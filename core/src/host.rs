@@ -466,12 +466,6 @@ pub trait Host {
     fn list_folder(&mut self, _dir: &str) -> bool {
         false
     }
-    /// Copy a PNG from anywhere on the memory card to `art/` or `backdrops/`
-    /// (fitted into a 128 px square first with `fit`), in order with the
-    /// other writes.
-    fn import_picture(&mut self, _from: &str, _to: &str, _fit: bool) -> bool {
-        false
-    }
 
     /// What the last title scan found, as `Label=value` pairs separated by
     /// commas (PSM, PSP and PS1, disc images, RetroArch); "" when this start

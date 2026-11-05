@@ -2,10 +2,12 @@
 //! of the memory card. It opens on the folder the last one was taken from
 //! (`folders.json`), lists folders and PNG files a folder at a time (the
 //! host reads the folder off the frame, [`Host::list_folder`]), shows the
-//! highlighted picture, and copies the one chosen to `art/` or `backdrops/`
-//! ([`Host::import_picture`]), so the title's changes name a file there as
-//! they do for every other picture. The decoded preview goes to the tile
-//! at once: the copy may still be on its way to the card.
+//! highlighted picture, and sets the one chosen on the title by its full
+//! path (`ux0:picture/a.png`, [`is_path`]): nothing is copied, and a file
+//! moved or deleted later leaves the title on its default picture. The
+//! decoded preview goes to the tile at once.
+//!
+//! [`is_path`]: crate::library::overrides::is_path
 
 use std::collections::HashMap;
 
@@ -16,6 +18,7 @@ use super::Shelf;
 use crate::gfx::{Format, Gfx, Rect, TexId};
 use crate::host::{DecodeAs, FolderEntry, Host, Picture, PictureKey};
 use crate::i18n::upper;
+use crate::library::overrides::is_path;
 use crate::library::settings::FOLDERS_FILE;
 use crate::shapes::Symbol;
 use crate::text::Role;
@@ -73,13 +76,6 @@ pub fn sorted(entries: Vec<FolderEntry>) -> Vec<FolderEntry> {
     kept
 }
 
-/// The file an imported picture gets: the title id and the source path's
-/// CRC, so taking the same file again writes the same one.
-pub fn import_name(id: &str, from: &str) -> String {
-    let id: String = id.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-    format!("{id}-{:08x}.png", crate::online::gamedb::crc32(from.as_bytes()))
-}
-
 pub struct Browser {
     pub backdrop: bool,
     /// The folder shown; `""` lists the devices.
@@ -127,13 +123,20 @@ impl Browser {
 
 impl Shelf {
     /// Open Browse on the folder the last box art or backdrop came from.
+    /// Open Browse: on the file the title uses when it is one Browse set,
+    /// else on the folder the last box art (or backdrop) came from.
     pub(super) fn open_browser(&mut self, host: &mut dyn Host, backdrop: bool) {
-        let folders = &self.settings.folders;
-        let dir = if backdrop { &folders.backdrops } else { &folders.art };
-        let dir = clean(dir);
+        let current = self.chosen_file(backdrop).filter(|f| is_path(f));
+        let (dir, select) = match &current {
+            Some(path) => (parent(path), path.rsplit(['/', ':']).next().map(String::from)),
+            None => {
+                let folders = &self.settings.folders;
+                (clean(if backdrop { &folders.backdrops } else { &folders.art }), None)
+            }
+        };
         let dir = if dir.is_empty() { START.to_string() } else { dir };
         self.browser = Some(Browser { backdrop, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
-        self.browse_to(host, dir, None, "");
+        self.browse_to(host, dir, select, "");
     }
 
     /// Show a folder; `select` is the entry to highlight in it (the folder
@@ -187,7 +190,7 @@ impl Shelf {
         };
         let select = browser.select.take();
         let up = usize::from(browser.up_row());
-        let at = select.and_then(|name| entries.iter().position(|e| e.folder && e.name == name));
+        let at = select.and_then(|name| entries.iter().position(|e| e.name == name));
         browser.entries = Some(entries);
         // The folder just left, else the first entry.
         browser.row = at.map_or(if browser.count() > up { up } else { 0 }, |i| i + up);
@@ -329,35 +332,23 @@ impl Shelf {
         let backdrop = browser.backdrop;
         let dir = browser.dir.clone();
         let decoded = browser.preview.take().and_then(|(_, decoded)| decoded);
-        let file = import_name(&id, &path);
-        let folder = if backdrop { "backdrops" } else { "art" };
-        if !host.import_picture(&path, &format!("{folder}/{file}"), !backdrop) {
-            host.log(&format!("browse: {path} not copied"));
-            if let Some((tex, ..)) = decoded {
-                self.pending_free.push(tex);
-            }
-            return;
-        }
-        host.log(&format!("browse: {path} as {folder}/{file}"));
+        host.log(&format!("browse: {path} for {id}"));
+        // The title names the file where it is; the decoded preview goes
+        // on screen at once, so the file is not read again for it.
         if backdrop {
-            let key = PictureKey::Backdrop { id: id.clone(), file: file.clone() };
+            let key = PictureKey::Backdrop { id: id.clone(), file: path.clone() };
             if let Some((tex, ..)) = decoded {
                 self.wanted = Some(key.clone());
                 self.show_backdrop(super::Shown { key, tex, ready_at: None });
             }
-            self.library.patch(&id, |c| c.backdrop = Some(file));
+            self.library.patch(&id, |c| c.backdrop = Some(path));
             self.settings.folders.backdrops = dir;
         } else {
-            // The preview goes to the tile cache: the copy may still be on
-            // its way to the card, and a read before it lands would cache
-            // "no picture".
-            self.library.add_art(&file);
-            self.art.forget_missing();
             if let Some((tex, accent, shown)) = decoded {
-                self.art.expect(PictureKey::Art(file.clone()));
-                self.pending_art.push((PictureKey::Art(file.clone()), tex, accent, shown));
+                self.art.expect(PictureKey::Art(path.clone()));
+                self.pending_art.push((PictureKey::Art(path.clone()), tex, accent, shown));
             }
-            self.library.patch(&id, |c| c.art = Some(file));
+            self.library.patch(&id, |c| c.art = Some(path));
             self.settings.folders.art = dir;
         }
         host.write(FOLDERS_FILE, self.settings.folders.render().as_bytes());
@@ -456,9 +447,6 @@ mod tests {
         let listed = sorted(vec![e("b.PNG", false), e("notes.txt", false), e("Zelda", true), e(".hidden", true), e("a.png", false), e("art", true)]);
         let names: Vec<&str> = listed.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(names, ["art", "Zelda", "a.png", "b.PNG"]);
-        assert_eq!(import_name("PCSA00069", "ux0:pictures/a.png"), import_name("PCSA00069", "ux0:pictures/a.png"));
-        assert_ne!(import_name("PCSA00069", "ux0:pictures/a.png"), import_name("PCSA00069", "ux0:pictures/b.png"));
-        assert!(import_name("ra0/x", "p").starts_with("ra0x-"));
     }
 
     use crate::host::{Event, PluginState, Status, TitleInfo};
@@ -467,14 +455,12 @@ mod tests {
     use crate::library::testing::Files;
     use crate::library::Library;
 
-    /// A data folder that records folder listings, picture requests and
-    /// imports.
+    /// A data folder that records folder listings and picture requests.
     #[derive(Default)]
     struct BrowseHost {
         files: Files,
         listed: Vec<String>,
         requested: Vec<PictureKey>,
-        imported: Vec<(String, String, bool)>,
     }
 
     impl Host for BrowseHost {
@@ -515,10 +501,6 @@ mod tests {
             self.listed.push(dir.to_string());
             true
         }
-        fn import_picture(&mut self, from: &str, to: &str, fit: bool) -> bool {
-            self.imported.push((from.into(), to.into(), fit));
-            true
-        }
     }
 
     fn entry(name: &str, folder: bool) -> FolderEntry {
@@ -532,7 +514,7 @@ mod tests {
     }
 
     #[test]
-    fn a_picture_from_any_folder_is_copied_set_and_its_folder_kept() {
+    fn a_picture_from_any_folder_is_set_by_its_path_and_its_folder_kept() {
         let mut host = BrowseHost::default();
         let library = Library::load(&mut host);
         let mut shelf = Shelf::new(Settings::defaults(UpdateChannel::Off), library, Status::default());
@@ -559,22 +541,22 @@ mod tests {
         frames(&mut shelf, &mut host, PREVIEW_DELAY);
         let key = PictureKey::File { path: "ux0:pictures/gravity.png".into(), as_: DecodeAs::FittedArt };
         assert_eq!(host.requested.last(), Some(&key));
-        assert!(host.imported.is_empty(), "not before it decodes");
+        assert!(shelf.browser.is_some(), "not before it decodes");
         let picture = Picture::new(2, 2, vec![255; 16], Some(0));
         assert!(shelf.browser_picture(&mut gfx, &key, &Some(picture)));
         frames(&mut shelf, &mut host, 1);
-        let file = import_name("PCSA00069", "ux0:pictures/gravity.png");
-        assert_eq!(host.imported, [("ux0:pictures/gravity.png".into(), format!("art/{file}"), true)]);
-        assert_eq!(shelf.library.game("PCSA00069").and_then(|g| g.art.clone()), Some(file));
+        assert_eq!(shelf.library.game("PCSA00069").and_then(|g| g.art.clone()).as_deref(), Some("ux0:pictures/gravity.png"));
+        assert!(host.files.0.keys().all(|k| !k.starts_with("art/")), "nothing copied");
         assert!(shelf.browser.is_none() && shelf.picker.is_none());
         let saved = Folders::parse(&host.read(FOLDERS_FILE).unwrap());
         assert_eq!(saved, Folders { art: "ux0:pictures".into(), backdrops: String::new() });
 
-        // Next time it opens there; up goes back to the root with the
-        // folder highlighted, and a folder that does not read goes up.
+        // Next time it opens on that file; up goes back to the root with
+        // the folder highlighted, and a folder that does not read goes up.
         shelf.open_browser(&mut host, false);
         assert_eq!(host.listed.last().map(String::as_str), Some("ux0:pictures"));
-        shelf.folder_listed(&mut host, "ux0:pictures", Some(vec![entry("gravity.png", false)]));
+        shelf.folder_listed(&mut host, "ux0:pictures", Some(vec![entry("covers", true), entry("gravity.png", false)]));
+        assert_eq!(shelf.browser.as_ref().map(|b| b.row), Some(2), "gravity.png");
         shelf.browser_input(&mut host, None, false, false, true);
         shelf.folder_listed(&mut host, "ux0:", Some(vec![entry("data", true), entry("pictures", true)]));
         assert_eq!(shelf.browser.as_ref().map(|b| b.row), Some(2), "pictures/, after the up row and data/");

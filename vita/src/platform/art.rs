@@ -84,8 +84,13 @@ pub(crate) fn decode_bytes(bytes: &[u8]) -> Option<(u32, Vec<u8>)> {
 /// the name is not a plain PNG file name or the file does not decode.
 /// Called on a worker thread.
 pub fn picture(name: &str) -> Option<(u32, u32, Vec<u8>)> {
-    if !valid_name(name) {
+    // A PNG the title editor's Browse set, read where it is.
+    let path = if shelf_core::library::overrides::is_path(name) {
+        name.to_string()
+    } else if valid_name(name) {
+        format!("{}/{name}", dir())
+    } else {
         return None;
-    }
-    decode(&format!("{}/{name}", dir())).map(|(side, rgba)| (side, side, rgba))
+    };
+    decode(&path).map(|(side, rgba)| (side, side, rgba))
 }

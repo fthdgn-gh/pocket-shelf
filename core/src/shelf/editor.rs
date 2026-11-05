@@ -306,18 +306,20 @@ impl Shelf {
         let Some(game) = self.editor_game() else { return };
         let t = self.t();
         let theme = self.theme;
+        // A file Browse set shows by its name, not its whole path.
+        let named = |file: &str| file.rsplit(['/', ':']).next().unwrap_or(file).to_string();
         let art = if game.art_icon {
             t.game_icon.to_string()
         } else {
             match &game.art {
                 None => t.standard.to_string(),
                 Some(file) if game.art_auto => fill(t.auto_art, &[("file", file)]),
-                Some(file) => file.clone(),
+                Some(file) => named(file),
             }
         };
         let backdrop = match game.backdrop.as_deref() {
             Some(NO_BACKDROP) => t.none.to_string(),
-            Some(file) => file.to_string(),
+            Some(file) => named(file),
             None => t.standard.to_string(),
         };
         let category = self
@@ -380,7 +382,7 @@ impl Shelf {
     // --- Art and backdrop picker ------------------------------------------
 
     /// The file the edited title uses now, when the user chose one.
-    fn chosen_file(&self, backdrop: bool) -> Option<String> {
+    pub(super) fn chosen_file(&self, backdrop: bool) -> Option<String> {
         let game = self.editor_game()?;
         if backdrop {
             game.backdrop.filter(|b| b != NO_BACKDROP)
@@ -451,9 +453,17 @@ impl Shelf {
         }
         let files = &self.picker.as_ref().map(|p| p.listed.clone()).unwrap_or_default();
         let fixed = if backdrop { game.backdrop.as_deref() == Some(NO_BACKDROP) } else { game.art_icon };
+        let chosen_path = chosen.as_deref().is_some_and(crate::library::overrides::is_path);
         let current = chosen.and_then(|c| files.iter().position(|f| *f == c));
         if let Some(picker) = &mut self.picker {
-            picker.row = if fixed { 1 } else { current.map_or(0, |i| i + PICKER_FIXED) };
+            picker.row = if fixed {
+                1
+            } else if chosen_path {
+                // A file Browse set: Browse opens on it.
+                BROWSE_ROW
+            } else {
+                current.map_or(0, |i| i + PICKER_FIXED)
+            };
         }
     }
 

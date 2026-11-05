@@ -122,9 +122,7 @@ enum FileOp {
     /// A picture to `art/` or `backdrops/`, fitted into a square first.
     Picture(String, Vec<u8>, bool),
     Remove(String),
-    /// A PNG from anywhere on the memory card to `art/` or `backdrops/`,
-    /// fitted into a square first (Browse).
-    Import(String, String, bool),
+
     /// Answered once every earlier change is done.
     Flush(Sender<()>),
 }
@@ -171,10 +169,6 @@ fn file_op(op: FileOp) {
                 log_line(&format!("write {path}: {error}"));
             }
         }
-        FileOp::Import(from, to, fit) => match read_png(&from) {
-            Some(png) => file_op(FileOp::Picture(to, png, fit)),
-            None => log_line(&format!("import {from}: not a PNG of up to 8 MB")),
-        },
         FileOp::Remove(path) => match fs::remove_file(format!("{DATA}/{path}")) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -583,10 +577,6 @@ impl Host for VitaHost {
 
     fn save_picture(&mut self, path: &str, png: Vec<u8>, fit: bool) -> bool {
         picture_path(path) && self.files.send(FileOp::Picture(path.into(), png, fit)).is_ok()
-    }
-
-    fn import_picture(&mut self, from: &str, to: &str, fit: bool) -> bool {
-        picture_path(to) && shelf_core::shelf::browse::is_png(from) && self.files.send(FileOp::Import(from.into(), to.into(), fit)).is_ok()
     }
 
     fn list_folder(&mut self, dir: &str) -> bool {
