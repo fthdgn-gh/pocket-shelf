@@ -161,7 +161,7 @@ impl OverrideStore {
     }
 
     fn read_cache(&mut self, host: &mut dyn Host) -> bool {
-        let Some(raw) = host.read(CACHE_FILE).and_then(|b| serde_json::from_slice::<Value>(&b).ok()) else { return false };
+        let Some(raw) = host.read(CACHE_FILE).and_then(|b| crate::library::read_json(&b).ok()) else { return false };
         if raw.get("version").and_then(Value::as_f64) != Some(CACHE_VERSION as f64) {
             return false;
         }
@@ -190,7 +190,7 @@ impl OverrideStore {
             if !valid_title_id(id) {
                 continue;
             }
-            let Some(value) = host.read(&file_of(id)).and_then(|b| serde_json::from_slice::<Value>(&b).ok()) else { continue };
+            let Some(value) = host.read(&file_of(id)).and_then(|b| crate::library::read_json(&b).ok()) else { continue };
             let clean = TitleOverride::sanitize(&value);
             if clean.is_empty() {
                 continue;

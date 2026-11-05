@@ -17,7 +17,7 @@ fn valid(id: &str) -> bool {
 
 /// Valid ids from the file, each once, at most [`RECENT_MAX`].
 pub fn parse(bytes: &[u8]) -> Vec<String> {
-    let Ok(Value::Array(items)) = serde_json::from_slice::<Value>(bytes) else { return Vec::new() };
+    let Ok(Value::Array(items)) = crate::library::read_json(bytes) else { return Vec::new() };
     let mut ids: Vec<String> = Vec::new();
     for id in items.iter().filter_map(Value::as_str).filter(|id| valid(id)) {
         if !ids.iter().any(|seen| seen == id) {

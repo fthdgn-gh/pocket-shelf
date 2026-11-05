@@ -165,7 +165,17 @@ fn file_op(op: FileOp) {
             if let Some((dir, _)) = full.rsplit_once('/') {
                 let _ = fs::create_dir_all(dir);
             }
-            if let Err(error) = fs::write(&full, data) {
+            // Through `<file>.part`, renamed over the file: a file is never
+            // half written, and Vita3K, which does not empty a file opened
+            // for writing, left a shorter write with the old file's tail.
+            let part = format!("{full}.part");
+            let written = fs::write(&part, &data).and_then(|()| {
+                fs::rename(&part, &full).or_else(|_| {
+                    let _ = fs::remove_file(&full);
+                    fs::rename(&part, &full)
+                })
+            });
+            if let Err(error) = written {
                 log_line(&format!("write {path}: {error}"));
             }
         }

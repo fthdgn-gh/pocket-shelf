@@ -39,7 +39,7 @@ fn valid(id: &str) -> bool {
 /// The launches in `plays.json`: `{"<id>": {"count": 3, "last": <ms>}}`.
 /// Entries that do not parse are left out.
 pub fn parse(bytes: &[u8]) -> Vec<(String, Play)> {
-    let Ok(Value::Object(map)) = serde_json::from_slice::<Value>(bytes) else { return Vec::new() };
+    let Ok(Value::Object(map)) = crate::library::read_json(bytes) else { return Vec::new() };
     map.iter()
         .filter(|(id, _)| valid(id))
         .filter_map(|(id, v)| {

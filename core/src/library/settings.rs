@@ -78,7 +78,7 @@ impl StatusLayout {
     /// The saved layout; a missing or unusable value keeps its default.
     pub fn parse(bytes: &[u8]) -> StatusLayout {
         let mut layout = StatusLayout::default();
-        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return layout };
+        let Ok(raw) = crate::library::read_json(bytes) else { return layout };
         if let Some(p) = raw.get("position").and_then(Value::as_str).and_then(StatusPosition::from_key) {
             layout.position = p;
         }
@@ -125,7 +125,7 @@ impl TextSize {
 
     /// The saved size; Normal when the file is missing or unusable.
     pub fn parse(bytes: &[u8]) -> TextSize {
-        serde_json::from_slice::<Value>(bytes)
+        crate::library::read_json(bytes)
             .ok()
             .and_then(|raw| raw.get("size").and_then(Value::as_str).and_then(TextSize::from_key))
             .unwrap_or(TextSize::Normal)
@@ -166,7 +166,7 @@ impl Default for GameInfo {
 impl GameInfo {
     pub fn parse(bytes: &[u8]) -> GameInfo {
         let mut info = GameInfo::default();
-        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return info };
+        let Ok(raw) = crate::library::read_json(bytes) else { return info };
         if let Some(names) = raw.get("names").and_then(Value::as_str).and_then(GameNames::from_key) {
             info.names = names;
         }
@@ -198,7 +198,7 @@ impl KeyboardKind {
     /// The saved choice; Pocket Shelf's keyboard when the file is missing
     /// or unusable.
     pub fn parse(bytes: &[u8]) -> KeyboardKind {
-        serde_json::from_slice::<Value>(bytes)
+        crate::library::read_json(bytes)
             .ok()
             .and_then(|raw| raw.get("keyboard").and_then(Value::as_str).and_then(KeyboardKind::from_key))
             .unwrap_or(KeyboardKind::Own)
@@ -249,7 +249,7 @@ impl EmulatorChoice {
     /// The saved choice; the default for a missing or unusable file or value.
     pub fn parse(bytes: &[u8]) -> EmulatorChoice {
         let mut choice = EmulatorChoice::default();
-        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return choice };
+        let Ok(raw) = crate::library::read_json(bytes) else { return choice };
         if let Some(app) = raw.get("default").and_then(Value::as_str).and_then(Emulator::from_key) {
             choice.default = app;
         }
@@ -293,7 +293,7 @@ pub const FOLDERS_FILE: &str = "folders.json";
 
 impl Folders {
     pub fn parse(bytes: &[u8]) -> Folders {
-        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return Folders::default() };
+        let Ok(raw) = crate::library::read_json(bytes) else { return Folders::default() };
         let get = |key: &str| raw.get(key).and_then(Value::as_str).unwrap_or("").to_string();
         Folders { art: get("art"), backdrops: get("backdrops") }
     }
@@ -408,7 +408,7 @@ impl Settings {
     /// `defaults` with each usable value of a saved file over it.
     pub fn parse(bytes: &[u8], defaults: Settings) -> Settings {
         let mut s = defaults;
-        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return s };
+        let Ok(raw) = crate::library::read_json(bytes) else { return s };
         let text = |key: &str| raw.get(key).and_then(Value::as_str);
         let flag = |key: &str| raw.get(key).and_then(Value::as_bool);
         if let Some(v) = text("language").and_then(Language::from_key) {

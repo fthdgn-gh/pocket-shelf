@@ -68,7 +68,7 @@ pub struct SortOrders(Vec<(String, SortOrder)>);
 
 impl SortOrders {
     pub fn parse(bytes: &[u8]) -> SortOrders {
-        let Ok(Value::Object(map)) = serde_json::from_slice::<Value>(bytes) else { return SortOrders::default() };
+        let Ok(Value::Object(map)) = crate::library::read_json(bytes) else { return SortOrders::default() };
         SortOrders(
             map.iter()
                 .filter_map(|(id, v)| Some((id.clone(), SortOrder::from_key(v.as_str()?)?)))

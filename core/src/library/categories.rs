@@ -249,7 +249,7 @@ impl CategoryConfig {
     /// file degrades to defaults.
     pub fn parse(bytes: &[u8]) -> CategoryConfig {
         let mut config = CategoryConfig::default();
-        let Ok(object) = serde_json::from_slice::<Value>(bytes) else { return config };
+        let Ok(object) = crate::library::read_json(bytes) else { return config };
         let mut seen: Vec<String> =
             std::iter::once(search_category()).chain(smart_categories()).chain(builtin_categories()).map(|c| c.id).collect();
         for value in object.get("custom").and_then(Value::as_array).into_iter().flatten() {

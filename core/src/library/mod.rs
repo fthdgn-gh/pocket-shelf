@@ -19,6 +19,15 @@ pub mod settings;
 
 use std::sync::Arc;
 
+/// A saved JSON file's value: the first one in the file, so a file that
+/// kept the tail of a longer one written before it still reads (Vita3K does
+/// not empty a file opened for writing: `settings.json` read
+/// `..."title":"NPNA00001"}}a"}a"}"}` and every setting went back to its
+/// default at the next start).
+pub fn read_json(bytes: &[u8]) -> serde_json::Result<serde_json::Value> {
+    serde_json::Deserializer::from_slice(bytes).into_iter::<serde_json::Value>().next().unwrap_or_else(|| serde_json::from_slice(b""))
+}
+
 use catalog::{load_catalog, Game};
 use categories::{
     builtin_categories, order_categories, search_category, smart_categories, Category, CategoryConfig, CATEGORIES_FILE,
@@ -540,6 +549,15 @@ mod tests {
 
     fn tab_ids(library: &Library) -> Vec<String> {
         library.tabs().into_iter().map(|c| c.id).collect()
+    }
+
+    #[test]
+    fn a_json_file_with_an_old_tail_still_reads() {
+        let damaged = br#"{"confirm":"cross","title":"NPNA00001"}}a"}a"}"}"#;
+        assert_eq!(read_json(damaged).unwrap()["confirm"], "cross");
+        assert!(read_json(b"").is_err() && read_json(b"nonsense").is_err());
+        let settings = settings::Settings::parse(damaged, settings::Settings::defaults(settings::UpdateChannel::Off));
+        assert_eq!(settings.confirm, settings::ConfirmMode::Cross);
     }
 
     #[test]

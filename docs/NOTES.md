@@ -50,6 +50,12 @@ taiHEN plugins (Console start), and NEON results (below).
   it; use `kill -9` on instances started here. Never kill one the user opened.
 - It runs the real firmware `libssl`/`libhttp` modules, so TLS results there
   match hardware.
+- **It does not empty a file opened for writing** (2026-11-05): a shorter
+  `settings.json` kept the old file's tail (`..."title":"NPNA00001"}}a"}`),
+  did not parse at the next start, and every setting went back to its
+  default; `titles.cache.json` likewise. The file thread now writes
+  `<file>.part` and renames it over the file, and saved JSON is read up to
+  its first value (`library::read_json`). The console empties the file.
 - `sceAppMgrLaunchAppByUri` is unimplemented: launching only works on
   hardware. It has no package installer either, so an update installs on
   hardware only.

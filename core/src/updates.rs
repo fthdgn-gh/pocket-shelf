@@ -188,7 +188,7 @@ pub struct UpdateRecord {
 
 impl UpdateRecord {
     pub fn load(host: &mut dyn Host) -> UpdateRecord {
-        let Some(raw) = host.read(RECORD_FILE).and_then(|b| serde_json::from_slice::<Value>(&b).ok()) else { return UpdateRecord::default() };
+        let Some(raw) = host.read(RECORD_FILE).and_then(|b| crate::library::read_json(&b).ok()) else { return UpdateRecord::default() };
         UpdateRecord {
             checked_at: raw.get("checkedAt").and_then(Value::as_f64).map_or(0, |n| n as u64),
             later: raw.get("later").and_then(Value::as_str).map(String::from),
