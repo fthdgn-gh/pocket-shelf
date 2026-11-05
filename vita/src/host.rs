@@ -14,17 +14,14 @@ use crate::platform::{backdrop, installed};
 /// The data folder, the same one Pocket Shelf 0.1 used.
 pub const DATA: &str = "ux0:data/PocketShelf";
 
-/// Whether this build may write `path` in the data folder: only the files
-/// whose writers reproduce Pocket Shelf 0.1's output byte for byte
-/// (`core/src/library/round_trip.rs`; `steamgriddb.txt` is the key and a
-/// newline), and this build's own `status-bar.json`, `text-size.json`,
-/// `keyboard.json`, `plays.json` and `sort.json` (0.1 did not read them). Downloads go to their files through `http.rs`.
+/// Whether this build may write `path` in the data folder: the files in
+/// `shelf_core::host::SAVED_FILES` and a title's changes, `titles/<id>.json`.
+/// The core's tests and the desktop's fake refuse the same paths, so a
+/// setting saved to a file not on the list fails `make test`. Downloads go
+/// to their files through `http.rs`.
 fn writable(path: &str) -> bool {
-    matches!(
-        path,
-        "settings.json" | "categories.json" | "recent.json" | "titles.cache.json" | "status-bar.json" | "text-size.json" | "keyboard.json" | "emulators.json" | "plays.json" | "sort.json" | "steamgriddb.txt" | "update.json" | "update/version.txt"
-    )
-        || path.strip_prefix("titles/").is_some_and(|_| removable(path))
+    // The list is the core's, where the tests check every write against it.
+    shelf_core::host::writable(path)
 }
 
 /// The files this build deletes: a title's changes, `titles/<id>.json` (a

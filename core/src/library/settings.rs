@@ -281,6 +281,33 @@ impl EmulatorChoice {
     }
 }
 
+impl Settings {
+    /// The settings as saved: `settings.json`, then the files of their own
+    /// that later settings went in.
+    pub fn load(host: &mut dyn crate::host::Host, channel: UpdateChannel) -> Settings {
+        let mut settings = Settings::defaults(channel);
+        if let Some(bytes) = host.read(SETTINGS_FILE) {
+            settings = Settings::parse(&bytes, settings);
+        }
+        if let Some(bytes) = host.read(STATUS_BAR_FILE) {
+            settings.layout = StatusLayout::parse(&bytes);
+        }
+        if let Some(bytes) = host.read(KEYBOARD_FILE) {
+            settings.keyboard = KeyboardKind::parse(&bytes);
+        }
+        if let Some(bytes) = host.read(EMULATORS_FILE) {
+            settings.emulators = EmulatorChoice::parse(&bytes);
+        }
+        if let Some(bytes) = host.read(GAME_INFO_FILE) {
+            settings.game_info = GameInfo::parse(&bytes);
+        }
+        if let Some(bytes) = host.read(TEXT_SIZE_FILE) {
+            settings.text_size = TextSize::parse(&bytes);
+        }
+        settings
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Settings {
     pub language: Language,

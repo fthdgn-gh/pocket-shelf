@@ -82,8 +82,12 @@ titles over 40), with the same cases tested.
 **The Vita host writes `ux0:data/PocketShelf/` only for named files**:
 those with a round-trip test (`settings.json`, `categories.json`,
 `recent.json`, `titles.cache.json`, `titles/<id>.json`), `status-bar.json`,
-`text-size.json`, `emulators.json`, `game-info.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
-`vita/host.rs`), pictures in `art/` and `backdrops/`, downloads to
+`text-size.json`, `emulators.json`, `game-info.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt`
+(`host::SAVED_FILES` in the core; the core's test data folder and the
+desktop's fake refuse other paths as the Vita does, and
+`every_menu_setting_is_saved` changes each menu setting and reads it back:
+0.5.0 left `game-info.json` off the Vita's list, so Game names and Game
+details reset at each start), pictures in `art/` and `backdrops/`, downloads to
 `libretro/`, `gamedb/`, `wikidata/` and `update/`, and `gamedb/crcs.tsv`,
 `gamedb/known.tsv` and `wikidata/found.tsv` (written by the threads that
 identify and match titles); it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in

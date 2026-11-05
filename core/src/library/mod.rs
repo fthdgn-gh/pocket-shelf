@@ -480,6 +480,8 @@ pub(crate) mod testing {
             self.0.get(path).cloned()
         }
         fn write(&mut self, path: &str, data: &[u8]) -> bool {
+            // The Vita refuses any other path.
+            assert!(crate::host::writable(path), "{path} is not in host::SAVED_FILES: the Vita would refuse it");
             self.0.insert(path.into(), data.into());
             true
         }

@@ -1863,6 +1863,36 @@ mod tests {
         (shelf, host)
     }
 
+    /// Every setting in the menu, changed each way, reads back the same
+    /// after a restart: `game-info.json` was not on the Vita's list of
+    /// files it writes in 0.5.0, and Game names reset at each start. The
+    /// test data folder refuses what the Vita refuses (`host::writable`).
+    #[test]
+    fn every_menu_setting_is_saved() {
+        use menu::{items, Item, PAGES};
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let actions = [Item::FetchArt, Item::CleanArt, Item::Rescan, Item::GameDatabase, Item::CheckUpdates, Item::Diagnostics, Item::Categories];
+        let mut checked = 0;
+        for page in PAGES {
+            for (row, item) in items(page).iter().enumerate() {
+                if matches!(item, Item::Open(_)) || actions.contains(item) {
+                    continue;
+                }
+                for delta in [1, -1, 1] {
+                    shelf.menu.show(page, None);
+                    shelf.menu.row = row;
+                    shelf.menu_change(&mut host, delta);
+                    let saved = Settings::load(&mut host, UpdateChannel::Off);
+                    assert_eq!(saved, shelf.settings, "{item:?} changed by {delta}");
+                    let orders = Library::load(&mut host).orders;
+                    assert_eq!(orders.get(&shelf.tab), shelf.library.orders.get(&shelf.tab), "{item:?}: the tab's order");
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked >= 20, "{checked} settings");
+    }
+
     #[test]
     fn clean_up_deletes_unused_files_or_all_of_them_on_a_second_press() {
         let (mut shelf, mut host) = setup(true, PluginState::On);

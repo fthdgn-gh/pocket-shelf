@@ -4,7 +4,7 @@
 
 use crate::gfx::{Color, Gfx, Rect, TexId};
 use crate::host::{Event, Host, ScanPhase};
-use crate::library::settings::{Settings, UpdateChannel, SETTINGS_FILE};
+use crate::library::settings::{Settings, UpdateChannel};
 use crate::library::Library;
 use crate::shelf::{Request, Shelf};
 use crate::stats::FrameStats;
@@ -204,25 +204,7 @@ impl App {
         if self.frame == 0 {
             // A fresh install checks the channel it was released on.
             let build = host.build();
-            let mut settings = Settings::defaults(build.default_channel());
-            if let Some(bytes) = host.read(SETTINGS_FILE) {
-                settings = Settings::parse(&bytes, settings);
-            }
-            if let Some(bytes) = host.read(crate::library::settings::STATUS_BAR_FILE) {
-                settings.layout = crate::library::settings::StatusLayout::parse(&bytes);
-            }
-            if let Some(bytes) = host.read(crate::library::settings::KEYBOARD_FILE) {
-                settings.keyboard = crate::library::settings::KeyboardKind::parse(&bytes);
-            }
-            if let Some(bytes) = host.read(crate::library::settings::EMULATORS_FILE) {
-                settings.emulators = crate::library::settings::EmulatorChoice::parse(&bytes);
-            }
-            if let Some(bytes) = host.read(crate::library::settings::GAME_INFO_FILE) {
-                settings.game_info = crate::library::settings::GameInfo::parse(&bytes);
-            }
-            if let Some(bytes) = host.read(crate::library::settings::TEXT_SIZE_FILE) {
-                settings.text_size = crate::library::settings::TextSize::parse(&bytes);
-            }
+            let settings = Settings::load(host, build.default_channel());
             self.text_size = settings.text_size;
             self.theme = theme_by_id(settings.theme);
             self.language = settings.language;

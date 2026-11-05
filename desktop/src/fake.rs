@@ -651,6 +651,9 @@ impl Host for FakeHost {
     }
 
     fn write(&mut self, path: &str, data: &[u8]) -> bool {
+        // The Vita refuses any other path: a setting saved here would reset
+        // at each start there.
+        assert!(shelf_core::host::writable(path), "{path} is not in host::SAVED_FILES: the Vita would refuse it");
         self.files.insert(path.into(), data.to_vec());
         true
     }

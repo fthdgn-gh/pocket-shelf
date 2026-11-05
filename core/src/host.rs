@@ -293,6 +293,33 @@ impl NetState {
     }
 }
 
+/// The data folder's files the app writes ([`Host::write`]), besides a
+/// title's changes, `titles/<id>.json`. The Vita refuses any other path
+/// (`vita/src/host.rs`): `game-info.json` was missing from its list in
+/// 0.5.0, so the Game names and Game details settings reset at each start.
+pub const SAVED_FILES: &[&str] = &[
+    crate::library::settings::SETTINGS_FILE,
+    crate::library::categories::CATEGORIES_FILE,
+    crate::library::recent::RECENT_FILE,
+    crate::library::overrides::CACHE_FILE,
+    crate::library::settings::STATUS_BAR_FILE,
+    crate::library::settings::TEXT_SIZE_FILE,
+    crate::library::settings::GAME_INFO_FILE,
+    crate::library::settings::KEYBOARD_FILE,
+    crate::library::settings::EMULATORS_FILE,
+    crate::library::played::PLAYS_FILE,
+    crate::library::order::SORT_FILE,
+    crate::online::steamgriddb::KEY_FILE,
+    crate::updates::RECORD_FILE,
+    crate::updates::UPDATE_VERSION_FILE,
+];
+
+/// Whether the app writes this path of the data folder: one of
+/// [`SAVED_FILES`] or a title's changes.
+pub fn writable(path: &str) -> bool {
+    SAVED_FILES.contains(&path) || path.strip_prefix("titles/").and_then(|name| name.strip_suffix(".json")).is_some_and(crate::library::overrides::valid_title_id)
+}
+
 pub trait Host {
     /// Microseconds since the process started.
     fn time_us(&self) -> u64;
