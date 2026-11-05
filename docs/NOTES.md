@@ -194,7 +194,14 @@ taiHEN plugins (Console start), and NEON results (below).
   console from its table (`emu4vita::DATABASES`). At launch the chosen core
   is checked with one file stat (`<core>_libretro.self` in RetroArch's app
   folder, `eboot_<core>.self` in Emu4Vita++'s) and the default used when it
-  is gone. **Not yet run on hardware**; Vita3K cannot launch titles.
+  is gone. **Recommended** (`library/recommended.rs`), offered after Default
+  when it is another installed core, is saved as `recommended` and resolved
+  at launch from a table researched on 2026-11-05 for RetroArch 1.22.2 and
+  Emu4Vita++ 0.81: GameTechWiki's "Emulators on PS Vita" frame rates, the
+  cores' Vita builds (gpSP and PCSX ReARMed dynarecs) and Emu4Vita++'s
+  starred cores (`arch/source/app.cpp`, `ICON_STAR`); unsourced picks and
+  arcade (ROM set decides) are left out. **Not yet run on hardware**;
+  Vita3K cannot launch titles.
 - **Pictures for RetroArch games** are RetroArch's own thumbnails
   (`Named_Boxarts`, else `Named_Titles`, fitted into 128 px; backdrop
   `Named_Snaps`), with `&*/:`"<>?\|` in the label as `_`; then, for an

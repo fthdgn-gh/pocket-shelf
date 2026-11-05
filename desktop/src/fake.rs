@@ -815,7 +815,7 @@ impl Host for FakeHost {
         let Some(info) = self.titles.iter().find(|t| t.id == id) else { return false };
         let console = info.console.clone().unwrap_or_default();
         let ra: &[&str] = match console.as_str() {
-            "Nintendo - Super Nintendo Entertainment System" => &["snes9x_libretro.self", "snes9x2005_libretro.self", "snes9x2010_libretro.self"],
+            "Nintendo - Super Nintendo Entertainment System" => &["snes9x_libretro.self", "snes9x2005_plus_libretro.self", "snes9x2010_libretro.self"],
             "Sega - Mega Drive - Genesis" => &["genesis_plus_gx_libretro.self", "picodrive_libretro.self"],
             "Nintendo - Game Boy Advance" => &["gpsp_libretro.self", "mgba_libretro.self", "vba_next_libretro.self"],
             _ => &["fbneo_libretro.self"],

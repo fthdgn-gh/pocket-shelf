@@ -222,7 +222,13 @@ impl Shelf {
         use crate::library::settings::CORES_FILE;
         let Some(list) = self.editor_cores().cloned() else { return };
         let Some(game) = self.editor_game() else { return };
+        // Default, Recommended when it is another installed core, then the
+        // rest.
         let mut choices: Vec<Option<String>> = vec![None];
+        let console = game.console.as_deref().unwrap_or("");
+        if crate::library::recommended::recommended(list.app, console).is_some_and(|r| r != list.default && list.cores.iter().any(|c| c == r)) {
+            choices.push(Some(crate::library::recommended::RECOMMENDED.to_string()));
+        }
         choices.extend(list.cores.iter().filter(|c| **c != list.default).map(|c| Some(c.clone())));
         let now = self.settings.cores.get(&game.id, list.app).map(String::from);
         let at = choices.iter().position(|c| *c == now).unwrap_or(0) as i32;
@@ -403,6 +409,10 @@ impl Shelf {
         };
         let core = match self.editor_cores() {
             Some(list) => match self.settings.cores.get(&game.id, list.app) {
+                Some(crate::library::recommended::RECOMMENDED) => {
+                    let core = crate::library::recommended::recommended(list.app, game.console.as_deref().unwrap_or("")).unwrap_or(&list.default);
+                    fill(t.recommended_core, &[("core", core_name(core))])
+                }
                 Some(core) => core_name(core).to_string(),
                 None => fill(t.default_app, &[("app", core_name(&list.default))]),
             },
@@ -415,7 +425,7 @@ impl Shelf {
                 Row::Favorite => (t.favorite, favorite.clone(), Step::Both),
                 Row::Category => (t.category, category.clone(), Step::Both),
                 Row::OpenWith => (t.open_with, open_with.clone(), Step::Both),
-                Row::Core => (t.core, core.clone(), Step::Both),
+                Row::Core => (t.core, fit(gfx, &core), Step::Both),
                 Row::Title => (t.title, fit(gfx, &game.title), Step::Right),
                 Row::BoxArt => (t.box_art, fit(gfx, &art), Step::Right),
                 Row::Backdrop => (t.backdrop, fit(gfx, &backdrop), Step::Right),

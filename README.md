@@ -195,7 +195,12 @@ Emu4Vita++ has it, else with Emu4Vita++'s preferred core for the console.
 - **Core** in a game's editor picks the core it starts with, in the app that
   opens it: Default (the playlist's core, or Emu4Vita++'s preferred one for
   the console), or any other installed core that runs its console
-  (RetroArch's from its core info files). Each app keeps its own choice, in
+  (RetroArch's from its core info files). After Default comes
+  **Recommended**: the core recommended for that console on the Vita, when it
+  is installed and is not the default already (for example `fceumm` for NES,
+  `snes9x2005_plus` for SNES, `gpsp` for GBA, `pcsx_rearmed` for
+  PlayStation; arcade and Neo Geo have none, as the core depends on the ROM
+  set). Each app keeps its own choice, in
   `cores.json`; a core no longer installed falls back to the default. The
   row shows when the app has more than one core for the game.
 - **Favourites** you mark in Emu4Vita++ show in the Favorites tab, as games

@@ -1092,7 +1092,9 @@ impl Shelf {
         if back {
             host.write(crate::autostart::RETURN_FILE, game.id.as_bytes());
         }
-        let core = with.and_then(|app| self.settings.cores.get(&game.id, app));
+        // "Recommended" starts the console's recommended core.
+        let console = game.console.as_deref().unwrap_or("");
+        let core = with.and_then(|app| crate::library::recommended::resolve(self.settings.cores.get(&game.id, app)?, app, console));
         if let Some(core) = core {
             host.log(&format!("launch: core {core}"));
         }
@@ -2372,12 +2374,29 @@ mod tests {
         shelf.refresh();
         press(&mut shelf, &mut host, TRIANGLE);
         assert!(!shelf.editor_row_list().contains(&editor::Row::Core), "not before the host answers");
-        let ra = CoreList { app: Emulator::RetroArch, default: "snes9x_libretro.self".into(), cores: vec!["snes9x_libretro.self".into(), "snes9x2010_libretro.self".into()] };
+        let ra = CoreList {
+            app: Emulator::RetroArch,
+            default: "snes9x_libretro.self".into(),
+            cores: vec!["snes9x_libretro.self".into(), "snes9x2005_plus_libretro.self".into(), "snes9x2010_libretro.self".into()],
+        };
         let emu = CoreList { app: Emulator::Emu4Vita, default: "snes9x2005_plus".into(), cores: vec!["snes9x2005_plus".into()] };
-        shelf.cores_listed("ra0000001", vec![ra, emu]);
+        shelf.cores_listed("ra0000001", vec![ra.clone(), emu]);
         // Under Open with, for RetroArch, which has two.
         assert_eq!(shelf.editor_row_list()[3], editor::Row::Core);
         shelf.editor.as_mut().unwrap().row = 3;
+        // After Default comes Recommended, saved as such and started as the
+        // console's recommended core.
+        press(&mut shelf, &mut host, RIGHT);
+        assert_eq!(CoreChoice::parse(&host.files.0[CORES_FILE]).get("ra0000001", Emulator::RetroArch), Some("recommended"));
+        press(&mut shelf, &mut host, CROSS);
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(host.launched_cores.last(), Some(&Some("snes9x2005_plus_libretro.self".into())));
+        // Then each other core.
+        shelf.launching = None;
+        press(&mut shelf, &mut host, TRIANGLE);
+        shelf.cores_listed("ra0000001", vec![ra.clone()]);
+        shelf.editor.as_mut().unwrap().row = 3;
+        press(&mut shelf, &mut host, RIGHT);
         press(&mut shelf, &mut host, RIGHT);
         assert_eq!(CoreChoice::parse(&host.files.0[CORES_FILE]).get("ra0000001", Emulator::RetroArch), Some("snes9x2010_libretro.self"));
         press(&mut shelf, &mut host, CROSS);

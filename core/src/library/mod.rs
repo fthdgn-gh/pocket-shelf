@@ -12,6 +12,7 @@ pub mod order;
 pub mod overrides;
 pub mod played;
 pub mod recent;
+pub mod recommended;
 #[cfg(test)]
 mod round_trip;
 pub mod search;
