@@ -204,73 +204,140 @@ fn entry_count(root: &str) -> u32 {
     fs::read_dir(root).map(|entries| entries.count() as u32).unwrap_or(0)
 }
 
-fn scan() -> Vec<Title> {
-    SCAN_DONE.store(0, Ordering::Relaxed);
-    let emu = crate::platform::emu4vita::Install::find(crate::platform::emu4vita::Roots::vita());
-    SCAN_TOTAL.store(
-        entry_count(APP_ROOT)
-            + entry_count(SYSTEM_ROOT)
-            + 1
-            + crate::platform::pspemu::item_count()
-            + crate::platform::retroarch::item_count(&crate::platform::retroarch::Roots::vita(), emu.as_ref())
-            + crate::platform::folders::get().len() as u32,
-        Ordering::Relaxed,
-    );
-    let mut titles = Vec::new();
-    scan_phase("apps");
-    scan_root(APP_ROOT, &mut titles);
-    scan_phase("system");
-    scan_root(SYSTEM_ROOT, &mut titles);
-    // PSM, PSP and PS1 titles take their names from the home screen's
-    // database, read once per scan.
-    scan_phase("psm");
-    let rows = unsafe { crate::platform::appdb::bubbles() };
-    if let Some(rows) = &rows {
-        crate::platform::appdb::keep_icon_paths(rows);
-    }
-    for (title_id, title) in unsafe { crate::platform::psm::scan(rows.as_deref()) } {
-        if title_id != SELF_TITLE_ID && !titles.iter().any(|item| item.title_id == title_id) {
-            titles.push(Title { title_id, title, platform: "psm", adrenaline: false, image: None, retro: None });
+/// The parts of the title list a scan reads: the apps (`ux0:/app` and
+/// `vs0:/app`), PSM titles, Adrenaline's PSP and PS1 games, the playlists'
+/// games, and the folder categories' games.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Parts {
+    pub apps: bool,
+    pub psm: bool,
+    pub psp: bool,
+    pub retro: bool,
+    pub folders: bool,
+}
+
+impl Parts {
+    pub const ALL: Parts = Parts { apps: true, psm: true, psp: true, retro: true, folders: true };
+
+    /// The parts a guest's scan phases name (`Host::rescan_some`).
+    pub fn of(phases: &[shelf_core::host::ScanPhase]) -> Parts {
+        use shelf_core::host::ScanPhase;
+        let has = |wanted: &[ScanPhase]| phases.iter().any(|p| wanted.contains(p));
+        Parts {
+            apps: has(&[ScanPhase::Apps, ScanPhase::System]),
+            psm: has(&[ScanPhase::Psm]),
+            psp: has(&[ScanPhase::Psp, ScanPhase::Images]),
+            retro: has(&[ScanPhase::Retro]),
+            folders: has(&[ScanPhase::Folders]),
         }
     }
-    scan_step();
-    let known: Vec<String> = titles.iter().map(|item| item.title_id.clone()).collect();
-    for item in unsafe { crate::platform::pspemu::scan(rows.as_deref(), &known) } {
-        titles.push(Title {
-            title_id: item.title_id,
-            title: item.title,
-            platform: item.platform,
-            adrenaline: !item.bubble,
-            image: item.image,
-            retro: None,
-        });
+
+    /// Whether a listed title comes from a part this reads.
+    fn holds(&self, item: &Title) -> bool {
+        match (&item.retro, item.platform) {
+            (Some(retro), _) if retro.in_folder => self.folders,
+            (Some(_), _) => self.retro,
+            (None, "psm") => self.psm,
+            (None, "psp" | "psx") => self.psp,
+            (None, _) => self.apps,
+        }
     }
-    // The playlists RetroArch and Emu4Vita++ read, last: one step per
-    // playlist file.
-    scan_phase("retro");
-    let found = crate::platform::retroarch::scan(&crate::platform::retroarch::Roots::vita(), emu.as_ref(), &mut scan_step);
-    unsafe {
-        RETRO_REPORT = found.report;
+}
+
+fn scan() -> Vec<Title> {
+    scan_parts(Vec::new(), Parts::ALL)
+}
+
+/// The saved list with some parts read again and the rest as they were; a
+/// full scan when there is no saved list.
+fn rescan(parts: Parts) -> Vec<Title> {
+    let Some(mut titles) = load_list() else { return scan() };
+    titles.retain(|item| !parts.holds(item));
+    scan_parts(titles, parts)
+}
+
+/// `titles` with the parts `parts` names read and added, in name order.
+/// The playlists' games are read before the folders', which leave out a
+/// file a playlist lists.
+fn scan_parts(mut titles: Vec<Title>, parts: Parts) -> Vec<Title> {
+    SCAN_DONE.store(0, Ordering::Relaxed);
+    let emu = crate::platform::emu4vita::Install::find(crate::platform::emu4vita::Roots::vita());
+    let count = |on: bool, n: &dyn Fn() -> u32| if on { n() } else { 0 };
+    SCAN_TOTAL.store(
+        count(parts.apps, &|| entry_count(APP_ROOT) + entry_count(SYSTEM_ROOT))
+            + count(parts.psm, &|| 1)
+            + count(parts.psp, &crate::platform::pspemu::item_count)
+            + count(parts.retro, &|| crate::platform::retroarch::item_count(&crate::platform::retroarch::Roots::vita(), emu.as_ref()))
+            + count(parts.folders, &|| crate::platform::folders::get().len() as u32),
+        Ordering::Relaxed,
+    );
+    if parts.apps {
+        scan_phase("apps");
+        scan_root(APP_ROOT, &mut titles);
+        scan_phase("system");
+        scan_root(SYSTEM_ROOT, &mut titles);
     }
-    for game in found.games {
-        titles.push(Title {
-            title_id: game.id,
-            title: game.title,
-            platform: "retro",
-            adrenaline: false,
-            image: None,
-            retro: Some(Retro {
-                console: game.console,
-                core: game.core,
-                emu: game.emu,
-                path: game.path,
-                favourite: false,
-                art: String::new(),
-                in_folder: false,
-            }),
-        });
+    // PSM, PSP and PS1 titles take their names from the home screen's
+    // database, read once per scan.
+    if parts.psm || parts.psp {
+        scan_phase(if parts.psm { "psm" } else { "psp" });
+        let rows = unsafe { crate::platform::appdb::bubbles() };
+        if let Some(rows) = &rows {
+            crate::platform::appdb::keep_icon_paths(rows);
+        }
+        if parts.psm {
+            for (title_id, title) in unsafe { crate::platform::psm::scan(rows.as_deref()) } {
+                if title_id != SELF_TITLE_ID && !titles.iter().any(|item| item.title_id == title_id) {
+                    titles.push(Title { title_id, title, platform: "psm", adrenaline: false, image: None, retro: None });
+                }
+            }
+            scan_step();
+        }
+        if parts.psp {
+            let known: Vec<String> = titles.iter().map(|item| item.title_id.clone()).collect();
+            for item in unsafe { crate::platform::pspemu::scan(rows.as_deref(), &known) } {
+                titles.push(Title {
+                    title_id: item.title_id,
+                    title: item.title,
+                    platform: item.platform,
+                    adrenaline: !item.bubble,
+                    image: item.image,
+                    retro: None,
+                });
+            }
+        }
     }
-    add_folder_games(&mut titles, emu.as_ref());
+    // The playlists RetroArch and Emu4Vita++ read: one step per playlist
+    // file.
+    if parts.retro {
+        scan_phase("retro");
+        let found = crate::platform::retroarch::scan(&crate::platform::retroarch::Roots::vita(), emu.as_ref(), &mut scan_step);
+        unsafe {
+            RETRO_REPORT = found.report;
+        }
+        let ids: std::collections::HashSet<String> = titles.iter().map(|item| item.title_id.clone()).collect();
+        for game in found.games.into_iter().filter(|game| !ids.contains(&game.id)) {
+            titles.push(Title {
+                title_id: game.id,
+                title: game.title,
+                platform: "retro",
+                adrenaline: false,
+                image: None,
+                retro: Some(Retro {
+                    console: game.console,
+                    core: game.core,
+                    emu: game.emu,
+                    path: game.path,
+                    favourite: false,
+                    art: String::new(),
+                    in_folder: false,
+                }),
+            });
+        }
+    }
+    if parts.folders {
+        add_folder_games(&mut titles, emu.as_ref());
+    }
     titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
     titles
 }
@@ -313,19 +380,6 @@ fn add_folder_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4v
             }),
         });
     }
-}
-
-/// The saved list with the folder categories' games read again: the rest
-/// of the list as it was. A full scan when there is no saved list.
-fn rescan_folders() -> Vec<Title> {
-    let Some(mut titles) = load_list() else { return scan() };
-    titles.retain(|item| !item.retro.as_ref().is_some_and(|retro| retro.in_folder));
-    SCAN_DONE.store(0, Ordering::Relaxed);
-    SCAN_TOTAL.store(crate::platform::folders::get().len() as u32, Ordering::Relaxed);
-    let emu = crate::platform::emu4vita::Install::find(crate::platform::emu4vita::Roots::vita());
-    add_folder_games(&mut titles, emu.as_ref());
-    titles.sort_by_key(|item| (item.title.to_lowercase(), item.title_id.clone()));
-    titles
 }
 
 fn scan_root(root: &str, titles: &mut Vec<Title>) {
@@ -689,10 +743,10 @@ static SCAN_JOB: std::sync::Mutex<ScanJob> = std::sync::Mutex::new(ScanJob::Idle
 const SCAN_STACK: usize = 256 * 1024;
 
 /// Scan the installed titles on a worker thread and save the list; the guest
-/// follows it with `scan_state`. With `folders_only`, only the folder
-/// categories' folders are read again (`rescan_folders`). Does nothing while
-/// a scan runs. Returns false when the thread could not be started.
-pub fn scan_start(folders_only: bool) -> bool {
+/// follows it with `scan_state`. With `only`, those parts are read again
+/// and the rest of the saved list kept (`rescan`). Does nothing while a scan
+/// runs. Returns false when the thread could not be started.
+pub fn scan_start(only: Option<Parts>) -> bool {
     let Ok(mut job) = SCAN_JOB.lock() else {
         return false;
     };
@@ -709,7 +763,10 @@ pub fn scan_start(folders_only: bool) -> bool {
         .stack_size(SCAN_STACK)
         .spawn(move || {
             let started = unsafe { vitasdk_sys::sceKernelGetProcessTimeWide() };
-            let found = if folders_only { rescan_folders() } else { scan() };
+            let found = match only {
+                Some(parts) if parts != Parts::ALL => rescan(parts),
+                _ => scan(),
+            };
             save_list(&found);
             let ms = ((unsafe { vitasdk_sys::sceKernelGetProcessTimeWide() } - started) / 1000) as u32;
             if let Ok(mut job) = SCAN_JOB.lock() {

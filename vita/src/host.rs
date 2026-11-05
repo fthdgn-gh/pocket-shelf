@@ -300,9 +300,9 @@ impl VitaHost {
     }
 
     /// The title list: the saved one, or a scan (`force`), or the saved one
-    /// with the folder categories' folders read again (`folders_only`).
-    /// Answers with `Event::Scan` while it runs, then `Event::Titles`.
-    fn scan_titles(&mut self, force: bool, folders_only: bool) {
+    /// with some parts read again (`only`). Answers with `Event::Scan` while
+    /// it runs, then `Event::Titles`.
+    fn scan_titles(&mut self, force: bool, only: Option<installed::Parts>) {
         let sender = self.answer_sender.clone();
         spawn("shelf-scan", move || unsafe {
             let started = now_us();
@@ -310,7 +310,7 @@ impl VitaHost {
             // saves it (installed.rs).
             if !force && installed::titles_ready() {
                 log_line("titles: read the saved list");
-            } else if !installed::scan_start(folders_only) {
+            } else if !installed::scan_start(only) {
                 // A rescan the user asked for says so; at a start, the saved
                 // list (if any) is used.
                 log_line("titles: the scan could not start");
@@ -497,14 +497,20 @@ impl Host for VitaHost {
     }
 
     fn scan(&mut self, force: bool) {
-        self.scan_titles(force, false);
+        self.scan_titles(force, None);
+    }
+
+    fn rescan_some(&mut self, phases: Vec<ScanPhase>) {
+        let parts = installed::Parts::of(&phases);
+        log_line(&format!("titles: rescan {parts:?}"));
+        self.scan_titles(true, Some(parts));
     }
 
     fn rom_folders(&mut self, folders: Vec<String>, walk: bool) {
         log_line(&format!("folders: {} folder categories{}", folders.len(), if walk { ", reading them" } else { "" }));
         crate::platform::folders::set(folders);
         if walk {
-            self.scan_titles(true, true);
+            self.rescan_some(vec![ScanPhase::Folders]);
         }
     }
 

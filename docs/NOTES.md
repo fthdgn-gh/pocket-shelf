@@ -502,6 +502,13 @@ stick at each launch when it differs.
   20,000 games per reading; a zip64 or `.7z`/`.chd` goes by its folders.
   **Not yet run on hardware**: walking times on the card, and launches of
   folder games.
+- **Rescan this tab** (SELECT, above Language, 2026-11-06): `Host::rescan_some`
+  with the scan phases that fill the tab (`Shelf::tab_sources`);
+  `installed::rescan` keeps the saved list's other titles (`Parts::holds`:
+  apps, PSM, PSP/PS1, playlists, folders) and runs `scan_parts` for the
+  rest. A playlist rescan reads the folders after it, since folder games
+  leave out what playlists list. Tabs of titles from anywhere run a full
+  scan. Its progress shows as the row's value.
 - **Fetch artwork** (SELECT ▸ Games ▸ Artwork): one request at a time over a
   category or all titles but the system apps (whose names match unrelated
   games); busy replies (429) waited out five times, other failures halt the

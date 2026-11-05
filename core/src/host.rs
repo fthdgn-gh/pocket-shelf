@@ -502,6 +502,14 @@ pub trait Host {
     /// [`roms::walk`]: crate::library::roms::walk
     fn rom_folders(&mut self, _folders: Vec<String>, _walk: bool) {}
 
+    /// Read again the parts of the title list these phases read (Rescan
+    /// this tab), keeping the rest of the saved list; answered as a scan
+    /// (`Event::Scan`, then `Event::Titles`). A host that cannot runs a
+    /// full scan.
+    fn rescan_some(&mut self, _phases: Vec<ScanPhase>) {
+        self.scan(true);
+    }
+
     fn cores(&mut self, _id: &str) -> bool {
         false
     }

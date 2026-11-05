@@ -44,6 +44,8 @@ impl Shelf {
     pub fn scan_progress(&mut self, done: u32, total: u32, phase: ScanPhase) {
         if let Some(rescan) = &mut self.rescan {
             rescan.progress = Some((done, total, phase));
+        } else if self.tab_scanning {
+            self.tab_progress = Some((done, total, phase));
         }
     }
 

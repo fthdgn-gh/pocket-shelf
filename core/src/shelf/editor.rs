@@ -788,18 +788,57 @@ impl Shelf {
         self.read_folders(host);
     }
 
-    /// Read the folder categories' folders again (SELECT ▸ Refresh folder,
-    /// or a folder category added, changed or deleted): files added since
-    /// show, files gone drop out. Said in the menu and the category manager
-    /// until the titles come back.
+    /// Read the folder categories' folders again (a folder category added,
+    /// changed or deleted): files added since show, files gone drop out.
+    /// Said in the category manager until the titles come back.
     pub(super) fn read_folders(&mut self, host: &mut dyn Host) {
         host.rom_folders(self.library.config.rom_folders(), true);
-        self.folders_reading = true;
+        self.tab_scanning = true;
+        self.tab_progress = None;
     }
 
-    /// The folders were read: the new titles are in.
+    /// What fills the open tab, as the scan phases that read it; None for
+    /// a tab of titles from anywhere (Last Played, Favorites, the user's
+    /// own), which a full scan reads.
+    pub(super) fn tab_sources(&self) -> Option<Vec<crate::host::ScanPhase>> {
+        use crate::host::ScanPhase::*;
+        use crate::library::categories::{PSM_ID, PSP_ID, PSX_ID, SYSTEM_ID};
+        let category = self.library.all_categories().iter().find(|c| c.id == self.tab)?;
+        Some(match category.id.as_str() {
+            "games" | "homebrew" | SYSTEM_ID => vec![Apps],
+            PSM_ID => vec![Psm],
+            // RetroArch's PlayStation and PSP games join these tabs; the
+            // folders follow the playlists, whose files they leave out.
+            PSP_ID | PSX_ID => vec![Psp, Retro, Folders],
+            _ if category.folder.is_some() => vec![Folders],
+            _ if category.console => vec![Retro, Folders],
+            _ => return None,
+        })
+    }
+
+    /// SELECT ▸ Rescan this tab: what fills it is read again, the rest of
+    /// the list kept; a full scan for a tab of titles from anywhere.
+    pub(super) fn rescan_tab(&mut self, host: &mut dyn Host) {
+        let sources = self.tab_sources();
+        host.log(&format!("rescan tab {}: {sources:?}", self.tab));
+        match sources {
+            Some(phases) => {
+                // The folders a reading of them walks.
+                if phases.contains(&crate::host::ScanPhase::Folders) {
+                    host.rom_folders(self.library.config.rom_folders(), false);
+                }
+                host.rescan_some(phases);
+            }
+            None => host.scan(true),
+        }
+        self.tab_scanning = true;
+        self.tab_progress = None;
+    }
+
+    /// The titles came back: a tab's rescan is over.
     pub(super) fn folders_read(&mut self) {
-        self.folders_reading = false;
+        self.tab_scanning = false;
+        self.tab_progress = None;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1008,7 +1047,7 @@ impl Shelf {
 
     pub(super) fn draw_categories(&mut self, gfx: &mut Gfx) {
         let Some(manager) = &self.categories else { return };
-        let (row, armed, note, reading) = (manager.row, manager.armed.clone(), manager.note.clone(), self.folders_reading);
+        let (row, armed, note, reading) = (manager.row, manager.armed.clone(), manager.note.clone(), self.tab_scanning);
         let t = self.t();
         let theme = self.theme;
         let categories = self.library.all_categories().to_vec();

@@ -55,9 +55,8 @@ pub enum Item {
     Diagnostics,
     /// Open at console start and Return after a game (`autostart.rs`).
     ConsoleStart,
-    /// Read the folder categories' folders again: on the main page, after
-    /// Sort, while a folder category's tab is open.
-    RefreshFolder,
+    /// Read again what fills the open tab (`Shelf::tab_sources`).
+    RescanTab,
 }
 
 pub const PAGES: [Page; 6] = [Page::Main, Page::Appearance, Page::Status, Page::Games, Page::Artwork, Page::System];
@@ -68,7 +67,7 @@ pub const VISIBLE: usize = 7;
 pub fn items(page: Page) -> &'static [Item] {
     use Item::*;
     match page {
-        Page::Main => &[Sort, Open(Page::Appearance), Open(Page::Games), Open(Page::System), Language],
+        Page::Main => &[Sort, Open(Page::Appearance), Open(Page::Games), Open(Page::System), RescanTab, Language],
         Page::Appearance => &[Theme, View, TextSize, Details, Backdrop, IconBox, Open(Page::Status)],
         Page::Status => &[StatusBar, StatusPosition, ShowWifi, ShowBluetooth, ShowBattery, BatteryPercent, Clock],
         Page::Games => &[Categories, Emulator, Rescan, GameDatabase, GameNames, GameDetails, Open(Page::Artwork)],
@@ -102,26 +101,18 @@ pub struct Menu {
     pub open: bool,
     pub page: Page,
     pub row: usize,
-    /// The open tab is a folder category's: the main page has Refresh
-    /// folder.
-    pub folder_tab: bool,
 }
 
 impl Default for Menu {
     fn default() -> Self {
-        Menu { open: false, page: Page::Main, row: 0, folder_tab: false }
+        Menu { open: false, page: Page::Main, row: 0 }
     }
 }
 
 impl Menu {
-    /// The rows of the page shown: [`items`], with Refresh folder after
-    /// Sort on a folder category's tab.
-    pub fn rows(&self) -> Vec<Item> {
-        let mut rows = items(self.page).to_vec();
-        if self.page == Page::Main && self.folder_tab {
-            rows.insert(1, Item::RefreshFolder);
-        }
-        rows
+    /// The rows of the page shown.
+    pub fn rows(&self) -> &'static [Item] {
+        items(self.page)
     }
 
     /// Show `page`, with the row that opens `from` highlighted, or its
@@ -132,15 +123,8 @@ impl Menu {
     }
 
     /// Open on the main page: from a group, on the group's row there; from
-    /// the main page, on the row it was left at. `folder_tab`: the open tab
-    /// is a folder category's.
-    pub fn open(&mut self, folder_tab: bool) {
-        // The rows below Sort move with Refresh folder; the same row stays
-        // highlighted.
-        if self.page == Page::Main && self.folder_tab != folder_tab && self.row > 0 {
-            self.row = if folder_tab { self.row + 1 } else { (self.row - 1).max(1) };
-        }
-        self.folder_tab = folder_tab;
+    /// the main page, on the row it was left at.
+    pub fn open(&mut self) {
         if self.page != Page::Main {
             let path = menu_path(Item::Open(self.page));
             let top = path.get(1).copied().unwrap_or(self.page);
@@ -213,11 +197,11 @@ mod tests {
     #[test]
     fn reopening_from_a_group_lands_on_its_row_in_the_main_page() {
         let mut menu = Menu::default();
-        menu.open(false);
+        menu.open();
         menu.show(Page::Appearance, None);
         menu.show(Page::Status, None);
         menu.open = false;
-        menu.open(false);
+        menu.open();
         assert_eq!((menu.page, menu.item()), (Page::Main, Item::Open(Page::Appearance)));
         // Back from a group returns to its row; from the main page it closes.
         menu.show(Page::Appearance, None);

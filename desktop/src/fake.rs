@@ -277,6 +277,9 @@ pub struct FakeHost {
     pub first_start: bool,
     /// The frame a scan started on.
     scanning: Option<u64>,
+    /// A rescan of some parts (`rescan_some`): its phases; empty for a
+    /// full scan.
+    scan_only: Vec<ScanPhase>,
     /// Adrenaline's boot plugin, as `pspemu::plugin_state` would read it.
     pub plugin: PluginState,
     /// Network requests open, by id.
@@ -504,6 +507,7 @@ impl FakeHost {
             frame: 0,
             first_start: false,
             scanning: None,
+            scan_only: Vec::new(),
             plugin: PluginState::Missing,
             requests: HashMap::new(),
             next_request: 1,
@@ -736,6 +740,7 @@ impl Host for FakeHost {
     fn scan(&mut self, force: bool) {
         if self.first_start || force {
             self.scanning = Some(self.frame);
+            self.scan_only.clear();
         } else {
             self.later.push(Event::Titles(load_catalog(&self.listed()), 120));
             self.later.push(Event::Dates(self.dates()));
@@ -877,6 +882,11 @@ impl Host for FakeHost {
     }
 
     /// Browse's memory card: a few folders with PNG files and others.
+    fn rescan_some(&mut self, phases: Vec<ScanPhase>) {
+        self.scanning = Some(self.frame);
+        self.scan_only = phases;
+    }
+
     fn rom_folders(&mut self, folders: Vec<String>, walk: bool) {
         self.rom_folders = folders;
         if walk {
@@ -971,7 +981,14 @@ impl Host for FakeHost {
     fn poll(&mut self, events: &mut Vec<Event>) {
         self.frame += 1;
         if let Some(start) = self.scanning {
-            let total: u32 = SCAN_PHASES.iter().map(|p| p.1).sum();
+            // A rescan of some parts steps through those alone (the
+            // folders, 3 steps).
+            let phases: Vec<(ScanPhase, u32)> = if self.scan_only.is_empty() {
+                SCAN_PHASES.to_vec()
+            } else {
+                self.scan_only.iter().map(|p| (*p, SCAN_PHASES.iter().find(|s| s.0 == *p).map_or(3, |s| s.1))).collect()
+            };
+            let total: u32 = phases.iter().map(|p| p.1).sum();
             let elapsed = self.frame - start;
             if elapsed >= SCAN_FRAMES {
                 self.scanning = None;
@@ -980,7 +997,7 @@ impl Host for FakeHost {
             } else {
                 let done = (elapsed as u32 * total) / SCAN_FRAMES as u32;
                 let mut before = 0;
-                let phase = SCAN_PHASES.iter().find(|p| { before += p.1; done < before }).map_or(ScanPhase::Retro, |p| p.0);
+                let phase = phases.iter().find(|p| { before += p.1; done < before }).map_or(ScanPhase::Retro, |p| p.0);
                 events.push(Event::Scan { done, total, phase });
             }
         }

@@ -30,7 +30,7 @@ use tween::Tween;
 
 use crate::app::buttons::*;
 use crate::gfx::{Color, Format, Gfx, Rect, TexId};
-use crate::host::{Host, Picture, PictureKey, PluginState, Status};
+use crate::host::{Host, Picture, PictureKey, PluginState, ScanPhase, Status};
 use crate::library::catalog::{Game, TINT_COLORS};
 use crate::library::categories::{cycle_category, Category, RECENT_ID, SEARCH_ID};
 use crate::library::played::{self, PLAYS_FILE};
@@ -187,9 +187,12 @@ pub struct Shelf {
     adrenaline: Option<(PluginState, bool)>,
     drawer: Tween,
     menu: menu::Menu,
-    /// The folder categories' folders are being read (Refresh folder, a
-    /// folder category added or changed), until the titles come back.
-    folders_reading: bool,
+    /// A part of the title list is being read again (Rescan this tab, a
+    /// folder category added, changed or deleted), until the titles come
+    /// back.
+    tab_scanning: bool,
+    /// How far that reading is: the host's last `Event::Scan`.
+    tab_progress: Option<(u32, u32, ScanPhase)>,
     keyboard: Option<keyboard::Keyboard>,
     /// The library search's count for the typed text, worked out when the
     /// text changes (searching 5,900 titles every frame would not fit one).
@@ -291,7 +294,8 @@ impl Shelf {
             adrenaline: None,
             drawer: panel::slide(),
             menu: menu::Menu::default(),
-            folders_reading: false,
+            tab_scanning: false,
+            tab_progress: None,
             keyboard: None,
             found: None,
             before_search: None,
@@ -602,8 +606,7 @@ impl Shelf {
             if self.menu.open {
                 self.menu.open = false;
             } else {
-                let folder_tab = self.library.all_categories().iter().any(|c| c.id == self.tab && c.folder.is_some());
-                self.menu.open(folder_tab);
+                self.menu.open();
                 self.drawer = panel::slide();
                 self.drawer.set(1.0, now);
             }
@@ -969,9 +972,9 @@ impl Shelf {
                 self.open_rescan();
                 return;
             }
-            Item::RefreshFolder => {
-                if !self.folders_reading {
-                    self.read_folders(host);
+            Item::RescanTab => {
+                if !self.tab_scanning && self.rescan.as_ref().is_none_or(|r| !r.running) {
+                    self.rescan_tab(host);
                 }
                 return;
             }
@@ -1708,10 +1711,17 @@ impl Shelf {
             }
             Item::Diagnostics => (t.diagnostics, None, None, Right),
             Item::ConsoleStart => (t.console_start, None, None, Right),
-            // While the folders are read, the phase's name and dots.
-            Item::RefreshFolder => {
-                let value = self.folders_reading.then(|| format!("{}...", crate::i18n::scan_phase(t, crate::host::ScanPhase::Folders)));
-                (t.refresh_folder, value, None, Right)
+            // While it runs, what it reads and how far it is.
+            Item::RescanTab => {
+                let value = self.tab_scanning.then(|| match self.tab_progress {
+                    Some((done, total, phase)) if total > 0 => crate::i18n::fill(
+                        t.scan_step,
+                        &[("phase", crate::i18n::scan_phase(t, phase)), ("done", &done.min(total).to_string()), ("total", &total.to_string())],
+                    ),
+                    Some((_, _, phase)) => format!("{}...", crate::i18n::scan_phase(t, phase)),
+                    None => "...".to_string(),
+                });
+                (t.rescan_tab, value, None, Right)
             }
         }
     }
@@ -1868,6 +1878,8 @@ mod tests {
         ahead: Vec<PictureKey>,
         listed: Vec<String>,
         rom_folders: Vec<(Vec<String>, bool)>,
+        /// Rescans asked for: the phases, or None for a full scan.
+        rescans: Vec<Option<Vec<crate::host::ScanPhase>>>,
     }
 
     impl Host for TestHost {
@@ -1889,7 +1901,14 @@ mod tests {
         fn status(&mut self) -> Status {
             Status::default()
         }
-        fn scan(&mut self, _: bool) {}
+        fn scan(&mut self, force: bool) {
+            if force {
+                self.rescans.push(None);
+            }
+        }
+        fn rescan_some(&mut self, phases: Vec<crate::host::ScanPhase>) {
+            self.rescans.push(Some(phases));
+        }
         fn request(&mut self, key: PictureKey) {
             if matches!(key, PictureKey::Backdrop { .. }) {
                 self.backdrops.push(key);
@@ -1923,7 +1942,7 @@ mod tests {
     }
 
     fn setup(accept: bool, plugin: PluginState) -> (Shelf, TestHost) {
-        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), launched_with: Vec::new(), launched_cores: Vec::new(), backdrops: Vec::new(), ahead: Vec::new(), listed: Vec::new(), rom_folders: Vec::new() };
+        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), launched_with: Vec::new(), launched_cores: Vec::new(), backdrops: Vec::new(), ahead: Vec::new(), listed: Vec::new(), rom_folders: Vec::new(), rescans: Vec::new() };
         host.files.0.insert(RECENT_FILE.into(), b"[\"VITASHELL\"]\n".to_vec());
         let library = Library::load(&mut host);
         let mut shelf = Shelf::new(Settings::defaults(UpdateChannel::Off), library, Status::default());
@@ -1948,7 +1967,7 @@ mod tests {
     fn every_menu_setting_is_saved() {
         use menu::{items, Item, PAGES};
         let (mut shelf, mut host) = setup(true, PluginState::On);
-        let actions = [Item::RefreshFolder, Item::FetchArt, Item::CleanArt, Item::Rescan, Item::GameDatabase, Item::CheckUpdates, Item::Diagnostics, Item::Categories, Item::ConsoleStart];
+        let actions = [Item::RescanTab, Item::FetchArt, Item::CleanArt, Item::Rescan, Item::GameDatabase, Item::CheckUpdates, Item::Diagnostics, Item::Categories, Item::ConsoleStart];
         let mut checked = 0;
         for page in PAGES {
             for (row, item) in items(page).iter().enumerate() {
@@ -2584,27 +2603,33 @@ mod tests {
         assert_eq!(shelf.library.config.folders, [Category::folder("my-roms", "Retro", "ux0:/roms/snes")]);
         assert_eq!(host.rom_folders.last(), Some(&(vec!["ux0:/roms/snes".to_string()], true)));
 
-        // On its tab, the SELECT menu has Refresh folder after Sort; it
-        // reads the folders again, and the titles end it.
-        assert!(shelf.folders_reading, "the folder change is being read");
+        // On its tab, SELECT ▸ Rescan this tab reads its folders again, and
+        // the titles end it; on Games it reads the apps, and on a tab of
+        // titles from anywhere it is a full scan.
+        assert!(shelf.tab_scanning, "the folder change is being read");
         shelf.rescanned(&mut host, load_catalog(&infos), 10);
         press(&mut shelf, &mut host, CROSS);
         shelf.tab = "my-roms".into();
         shelf.refresh();
-        press(&mut shelf, &mut host, SELECT);
-        assert_eq!(shelf.menu.rows()[1], menu::Item::RefreshFolder);
-        shelf.menu.row = 1;
-        let walks = host.rom_folders.len();
-        press(&mut shelf, &mut host, RIGHT);
-        assert_eq!(host.rom_folders.len(), walks + 1);
-        assert!(shelf.folders_reading);
-        shelf.rescanned(&mut host, load_catalog(&infos), 10);
-        assert!(!shelf.folders_reading);
-        press(&mut shelf, &mut host, SELECT);
-        shelf.tab = "games".into();
-        press(&mut shelf, &mut host, SELECT);
-        assert!(!shelf.menu.rows().contains(&menu::Item::RefreshFolder));
-        press(&mut shelf, &mut host, SELECT);
+        use crate::host::ScanPhase;
+        let rescan_tab = |shelf: &mut Shelf, host: &mut TestHost, tab: &str| {
+            shelf.tab = tab.into();
+            press(shelf, host, SELECT);
+            shelf.menu.row = shelf.menu.rows().iter().position(|i| *i == menu::Item::RescanTab).unwrap();
+            press(shelf, host, RIGHT);
+            assert!(shelf.tab_scanning);
+            shelf.rescanned(host, load_catalog(&infos), 10);
+            assert!(!shelf.tab_scanning);
+            press(shelf, host, SELECT);
+        };
+        rescan_tab(&mut shelf, &mut host, "my-roms");
+        assert_eq!(host.rescans.last(), Some(&Some(vec![ScanPhase::Folders])));
+        rescan_tab(&mut shelf, &mut host, "games");
+        assert_eq!(host.rescans.last(), Some(&Some(vec![ScanPhase::Apps])));
+        rescan_tab(&mut shelf, &mut host, "retro-snes");
+        assert_eq!(host.rescans.last(), Some(&Some(vec![ScanPhase::Retro, ScanPhase::Folders])));
+        rescan_tab(&mut shelf, &mut host, crate::library::categories::FAVORITES_ID);
+        assert_eq!(host.rescans.last(), Some(&None), "a full scan");
         shelf.open_categories();
 
         // Deleted: the folders are read again without it.

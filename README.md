@@ -224,8 +224,15 @@ folder**, then name the tab (the folder's name to start with). Pocket Shelf
 reads the folder on the spot and again at each Rescan titles. ○ on a folder
 category edits it: Browse opens on its folder with Use this folder
 highlighted, then the keyboard on its name. On a folder category's tab, SELECT ▸
-**Refresh folder** (after Sort) reads the folders again, for files added
-or deleted since; switching tabs reads nothing.
+**Rescan this tab** reads the folders again, for files added or deleted
+since; switching tabs reads nothing.
+
+**SELECT ▸ Rescan this tab** works on every tab and reads only what fills
+it, keeping the rest of the list: Games, Homebrew and System read the
+installed apps; PS Mobile the PSM titles; PSP and PSX Adrenaline's games and
+the playlists; a console's tab the playlists; a folder category its
+folders. Last Played, Favorites and your own categories hold titles from
+anywhere, so there it is a full rescan, as SELECT ▸ Games ▸ Rescan titles.
 
 Each file's console is found from:
 - its extension, when one console uses it (`.sfc`, `.gba`, `.nes`, `.md`
