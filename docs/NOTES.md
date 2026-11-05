@@ -372,7 +372,11 @@ stick at each launch when it differs.
   PlayStation's 2,239 games in 1.3 s), a match takes 1.6–2.9 s with the
   reads of `known.tsv` and `found.tsv`, and the frame that takes a
   console's results spends about 90 ms in the library's rebuild, as
-  libretro's results do.
+  libretro's results do. **At start** (0.5.1-beta.1, 2026-11-05): the
+  title list in 781 ms as before; `found.tsv` read in 817 ms on the scan
+  thread after it (5,942 titles, 3,733 found), and the frame that takes
+  them spends 422 ms in events, 307 ms of it in `set_wiki` and the
+  library's rebuild. **The update from 0.5.0-beta.1 worked** on hardware.
 - **The scraper is the user's choice** (`scraper` in `settings.json`): Auto
   (libretro for RetroArch games, SteamGridDB for the rest), SteamGridDB, or
   libretro.
