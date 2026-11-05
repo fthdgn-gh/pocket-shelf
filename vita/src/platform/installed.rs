@@ -919,8 +919,11 @@ pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>, c
         (format!("psgm:play?titleid={title_id}"), LAUNCH_FLAGS, true)
     };
     // The request as sent (the core and content path for RetroArch and
-    // Emu4Vita++), logged before the frame that sends it.
-    crate::host::log_line(&format!("launch uri {uri}"));
+    // Emu4Vita++), in local builds only: a released build does as little
+    // as it can around a launch.
+    if env!("SHELF_CHANNEL") == "local" {
+        crate::host::log_line(&format!("launch uri {uri}"));
+    }
     let Ok(uri) = CString::new(uri) else {
         return false;
     };
