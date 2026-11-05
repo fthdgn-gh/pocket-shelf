@@ -276,6 +276,9 @@ Each file's console is found from:
   (`Nintendo - Game Boy`).
 
 The tracks a `.cue`, `.gdi` or `.m3u` names are not listed on their own. A
+game's name is its file's; a file named like `disc.gdi` or `EBOOT.PBP` takes
+its folder's name (`Sonic Adventure (USA)/disc.gdi`), which the game
+database, Wikidata and box art look up. A
 game starts in RetroArch with the console's recommended core when it is
 installed (else another core for the console), in Emu4Vita++, or in a
 [standalone emulator](#standalone-emulators) for its console; Open with and

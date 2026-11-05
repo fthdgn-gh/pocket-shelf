@@ -312,9 +312,20 @@ fn join(dir: &str, name: &str) -> String {
     }
 }
 
-fn title_of(name: &str) -> String {
+/// File names that say nothing of the game: a Dreamcast `disc.gdi`, a PS1
+/// `EBOOT.PBP`. Such a game takes its folder's name.
+const GENERIC: &[&str] = &["disc", "disk", "eboot", "game", "image", "cd", "gd", "track01", "track 01", "rom"];
+
+/// The name a game shows: the file's without its extension, or its
+/// folder's for a file named like [`GENERIC`]; spaces collapsed.
+fn title_of(dir: &str, name: &str) -> String {
     let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
-    stem.split_whitespace().collect::<Vec<_>>().join(" ")
+    let folder = dir.trim_end_matches('/').rsplit(['/', ':']).find(|p| !p.is_empty());
+    let text = match folder {
+        Some(folder) if GENERIC.contains(&stem.trim().to_lowercase().as_str()) => folder,
+        _ => stem,
+    };
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn at(bytes: &[u8], offset: usize, text: &[u8]) -> bool {
@@ -525,7 +536,7 @@ pub fn walk(files: &mut dyn Files, root: &str, skip: &mut dyn FnMut(&str) -> boo
                 continue;
             }
             match detect(files, &dir, &name, hint, 0) {
-                Some(console) => walk.roms.push(Rom { path: join(&dir, &name), title: title_of(&name), console }),
+                Some(console) => walk.roms.push(Rom { path: join(&dir, &name), title: title_of(&dir, &name), console }),
                 // A `.md` that is not a Mega Drive game is a text.
                 None if extension(&name) == "md" => {}
                 None => {
@@ -671,6 +682,7 @@ pub(crate) mod tests {
             ]
         );
         assert_eq!(walk.roms[0].title, "Mario (USA)");
+        assert_eq!(walk.roms.last().map(|r| r.title.as_str()), Some("Spyro"), "EBOOT.PBP takes its folder's name");
         assert_eq!((walk.unknown, walk.unknown_names.as_slice()), (1, &["Mystery.zip".to_string()][..]));
         assert_eq!(folders, 5, "roms, Crash, PSX, Spyro, arcade");
         assert!(skipped.contains(&"ux0:/roms/Listed.sfc".to_string()) && !skipped.iter().any(|p| p.ends_with(".txt")));
@@ -681,19 +693,20 @@ pub(crate) mod tests {
         let mut files = Memory::default();
         files.add("ux0:/data/Mega Drive/Streets.bin", &[0; 0x200]);
         files.add("ux0:/data/Mega Drive/Streets.zip", &zip(&["Streets.bin"]));
-        files.add("ux0:/data/Dreamcast/Sonic/disc.gdi", b"3\n1 0 4 2352 track01.bin 0\n2 600 0 2352 \"track 02.raw\" 0\n");
-        files.add("ux0:/data/Dreamcast/Sonic/track01.bin", &[0; 16]);
-        files.add("ux0:/data/Dreamcast/Sonic/track 02.raw", &[0; 16]);
+        files.add("ux0:/data/Dreamcast/Sonic Adventure (USA)/disc.gdi", b"3\n1 0 4 2352 track01.bin 0\n2 600 0 2352 \"track 02.raw\" 0\n");
+        files.add("ux0:/data/Dreamcast/Sonic Adventure (USA)/track01.bin", &[0; 16]);
+        files.add("ux0:/data/Dreamcast/Sonic Adventure (USA)/track 02.raw", &[0; 16]);
         files.add("ux0:/data/FF7/FF7.m3u", b"#EXTM3U\nFF7 (Disc 1).cue\nFF7 (Disc 2).cue\n");
         files.add("ux0:/data/FF7/FF7 (Disc 1).cue", b"FILE \"FF7 (Disc 1).bin\" BINARY\n");
         files.add("ux0:/data/FF7/FF7 (Disc 1).bin", &ps1_bin());
         files.add("ux0:/data/FF7/FF7 (Disc 2).cue", b"FILE \"FF7 (Disc 2).bin\" BINARY\n");
         files.add("ux0:/data/FF7/FF7 (Disc 2).bin", &ps1_bin());
         let walk = walk(&mut files, "ux0:/data", &mut |_| false, &mut || {});
+        assert_eq!(walk.roms[0].title, "Sonic Adventure (USA)");
         assert_eq!(
             consoles(&walk),
             [
-                ("ux0:/data/Dreamcast/Sonic/disc.gdi", DC),
+                ("ux0:/data/Dreamcast/Sonic Adventure (USA)/disc.gdi", DC),
                 ("ux0:/data/FF7/FF7.m3u", PS1),
                 ("ux0:/data/Mega Drive/Streets.bin", MD),
                 ("ux0:/data/Mega Drive/Streets.zip", MD),
