@@ -111,8 +111,6 @@ pub struct Categories {
     /// The category a first delete press armed.
     pub armed: Option<String>,
     pub note: String,
-    /// The folder categories' folders are being read.
-    pub reading: bool,
 }
 
 /// A name as part of a file name: lowercase letters without marks, digits,
@@ -772,7 +770,7 @@ impl Shelf {
     // --- Category manager ---------------------------------------------------
 
     pub(super) fn open_categories(&mut self) {
-        self.categories = Some(Categories { row: 0, armed: None, note: String::new(), reading: false });
+        self.categories = Some(Categories { row: 0, armed: None, note: String::new() });
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);
     }
@@ -790,26 +788,22 @@ impl Shelf {
         self.read_folders(host);
     }
 
-    /// Read the folder categories' folders again (SELECT on one in the
-    /// category manager, or after a change): files added since show, files
-    /// gone drop out. The manager says so until the titles come back.
-    fn read_folders(&mut self, host: &mut dyn Host) {
+    /// Read the folder categories' folders again (SELECT ▸ Refresh folder,
+    /// or a folder category added, changed or deleted): files added since
+    /// show, files gone drop out. Said in the menu and the category manager
+    /// until the titles come back.
+    pub(super) fn read_folders(&mut self, host: &mut dyn Host) {
         host.rom_folders(self.library.config.rom_folders(), true);
-        if let Some(manager) = &mut self.categories {
-            manager.reading = true;
-            manager.note.clear();
-        }
+        self.folders_reading = true;
     }
 
     /// The folders were read: the new titles are in.
     pub(super) fn folders_read(&mut self) {
-        if let Some(manager) = &mut self.categories {
-            manager.reading = false;
-        }
+        self.folders_reading = false;
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn categories_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool, triangle: bool, square: bool, start: bool, select: bool, shoulder: i32) {
+    pub(super) fn categories_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool, triangle: bool, square: bool, start: bool, shoulder: i32) {
         use super::navigation::{Direction, Step as Nav};
         let count = self.library.all_categories().len() + CATEGORY_FIXED;
         let Some(manager) = &mut self.categories else { return };
@@ -834,10 +828,6 @@ impl Shelf {
                 Some(c) if c.folder.is_some() => self.open_folder_browser(host, Some((c.id.clone(), c.folder.clone().unwrap_or_default()))),
                 Some(c) if c.custom => self.open_keyboard(keyboard::Target::Category(c.id.clone()), &c.label.clone()),
                 Some(_) => self.set_category_note(t.builtin_keep_names),
-            }
-        } else if select {
-            if item.as_ref().is_some_and(|c| c.folder.is_some()) {
-                self.read_folders(host);
             }
         } else if triangle {
             self.open_keyboard(keyboard::Target::NewCategory, "");
@@ -1018,7 +1008,7 @@ impl Shelf {
 
     pub(super) fn draw_categories(&mut self, gfx: &mut Gfx) {
         let Some(manager) = &self.categories else { return };
-        let (row, armed, note, reading) = (manager.row, manager.armed.clone(), manager.note.clone(), manager.reading);
+        let (row, armed, note, reading) = (manager.row, manager.armed.clone(), manager.note.clone(), self.folders_reading);
         let t = self.t();
         let theme = self.theme;
         let categories = self.library.all_categories().to_vec();
@@ -1033,10 +1023,7 @@ impl Shelf {
         let confirm = Button::confirm(self.settings.confirm);
         let cancel = Button::cancel(self.settings.confirm);
         let on_folder = self.category_at(row).is_some_and(|c| c.folder.is_some());
-        let mut first = vec![(confirm, if on_folder { t.edit } else { t.rename }), (Button::Face(Symbol::Triangle), t.create), (Button::Face(Symbol::Square), t.remove)];
-        if on_folder {
-            first.push((Button::Select, t.refresh));
-        }
+        let first = vec![(confirm, if on_folder { t.edit } else { t.rename }), (Button::Face(Symbol::Triangle), t.create), (Button::Face(Symbol::Square), t.remove)];
         let second = vec![(Button::Start, toggle), (Button::ShoulderLR, t.reorder), (cancel, t.back)];
         let mut hint_lines: Vec<Vec<(Button, &str)>> = Vec::new();
         for group in [first, second] {

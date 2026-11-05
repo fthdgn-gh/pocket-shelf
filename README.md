@@ -223,9 +223,9 @@ playlist lists. Browse opens on the memory card's folders; pick one with **Use t
 folder**, then name the tab (the folder's name to start with). Pocket Shelf
 reads the folder on the spot and again at each Rescan titles. ○ on a folder
 category edits it: Browse opens on its folder with Use this folder
-highlighted, then the keyboard on its name. SELECT on a folder category reads the
-folder categories' folders again, for files added since; switching tabs
-reads nothing.
+highlighted, then the keyboard on its name. On a folder category's tab, SELECT ▸
+**Refresh folder** (after Sort) reads the folders again, for files added
+or deleted since; switching tabs reads nothing.
 
 Each file's console is found from:
 - its extension, when one console uses it (`.sfc`, `.gba`, `.nes`, `.md`

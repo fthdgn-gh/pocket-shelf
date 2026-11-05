@@ -267,7 +267,7 @@ impl Shelf {
             return None;
         }
         if self.menu.open {
-            return Some((self.menu.row, super::menu::items(self.menu.page).len()));
+            return Some((self.menu.row, self.menu.rows().len()));
         }
         None
     }
@@ -338,7 +338,7 @@ impl Shelf {
             return;
         }
         if self.menu.open {
-            self.menu.row = row.min(super::menu::items(self.menu.page).len() - 1);
+            self.menu.row = row.min(self.menu.rows().len() - 1);
         }
     }
 }

@@ -187,6 +187,9 @@ pub struct Shelf {
     adrenaline: Option<(PluginState, bool)>,
     drawer: Tween,
     menu: menu::Menu,
+    /// The folder categories' folders are being read (Refresh folder, a
+    /// folder category added or changed), until the titles come back.
+    folders_reading: bool,
     keyboard: Option<keyboard::Keyboard>,
     /// The library search's count for the typed text, worked out when the
     /// text changes (searching 5,900 titles every frame would not fit one).
@@ -288,6 +291,7 @@ impl Shelf {
             adrenaline: None,
             drawer: panel::slide(),
             menu: menu::Menu::default(),
+            folders_reading: false,
             keyboard: None,
             found: None,
             before_search: None,
@@ -584,7 +588,6 @@ impl Shelf {
                 pressed & TRIANGLE != 0,
                 pressed & SQUARE != 0,
                 pressed & START != 0,
-                pressed & SELECT != 0,
                 shoulder,
             );
         } else if self.adrenaline.is_some() {
@@ -599,7 +602,8 @@ impl Shelf {
             if self.menu.open {
                 self.menu.open = false;
             } else {
-                self.menu.open();
+                let folder_tab = self.library.all_categories().iter().any(|c| c.id == self.tab && c.folder.is_some());
+                self.menu.open(folder_tab);
                 self.drawer = panel::slide();
                 self.drawer.set(1.0, now);
             }
@@ -963,6 +967,12 @@ impl Shelf {
             }
             Item::Rescan => {
                 self.open_rescan();
+                return;
+            }
+            Item::RefreshFolder => {
+                if !self.folders_reading {
+                    self.read_folders(host);
+                }
                 return;
             }
             Item::GameDatabase => {
@@ -1698,6 +1708,11 @@ impl Shelf {
             }
             Item::Diagnostics => (t.diagnostics, None, None, Right),
             Item::ConsoleStart => (t.console_start, None, None, Right),
+            // While the folders are read, the phase's name and dots.
+            Item::RefreshFolder => {
+                let value = self.folders_reading.then(|| format!("{}...", crate::i18n::scan_phase(t, crate::host::ScanPhase::Folders)));
+                (t.refresh_folder, value, None, Right)
+            }
         }
     }
 
@@ -1709,7 +1724,7 @@ impl Shelf {
         let heading = crate::i18n::upper(title, self.settings.language);
         let slide = self.drawer.at(self.now);
         let mut drawer = panel::Drawer::open(gfx, &theme, &heading, panel::Size::Wide, slide);
-        let items = menu::items(self.menu.page);
+        let items = self.menu.rows();
         let first = self.menu.first_visible();
         drawer.index = first;
         drawer.selectable = true;
@@ -1933,7 +1948,7 @@ mod tests {
     fn every_menu_setting_is_saved() {
         use menu::{items, Item, PAGES};
         let (mut shelf, mut host) = setup(true, PluginState::On);
-        let actions = [Item::FetchArt, Item::CleanArt, Item::Rescan, Item::GameDatabase, Item::CheckUpdates, Item::Diagnostics, Item::Categories, Item::ConsoleStart];
+        let actions = [Item::RefreshFolder, Item::FetchArt, Item::CleanArt, Item::Rescan, Item::GameDatabase, Item::CheckUpdates, Item::Diagnostics, Item::Categories, Item::ConsoleStart];
         let mut checked = 0;
         for page in PAGES {
             for (row, item) in items(page).iter().enumerate() {
@@ -2569,13 +2584,28 @@ mod tests {
         assert_eq!(shelf.library.config.folders, [Category::folder("my-roms", "Retro", "ux0:/roms/snes")]);
         assert_eq!(host.rom_folders.last(), Some(&(vec!["ux0:/roms/snes".to_string()], true)));
 
-        // SELECT on it reads the folders again; the titles end it.
-        let walks = host.rom_folders.len();
-        press(&mut shelf, &mut host, SELECT);
-        assert_eq!(host.rom_folders.len(), walks + 1);
-        assert!(shelf.categories.as_ref().unwrap().reading);
+        // On its tab, the SELECT menu has Refresh folder after Sort; it
+        // reads the folders again, and the titles end it.
+        assert!(shelf.folders_reading, "the folder change is being read");
         shelf.rescanned(&mut host, load_catalog(&infos), 10);
-        assert!(!shelf.categories.as_ref().unwrap().reading);
+        press(&mut shelf, &mut host, CROSS);
+        shelf.tab = "my-roms".into();
+        shelf.refresh();
+        press(&mut shelf, &mut host, SELECT);
+        assert_eq!(shelf.menu.rows()[1], menu::Item::RefreshFolder);
+        shelf.menu.row = 1;
+        let walks = host.rom_folders.len();
+        press(&mut shelf, &mut host, RIGHT);
+        assert_eq!(host.rom_folders.len(), walks + 1);
+        assert!(shelf.folders_reading);
+        shelf.rescanned(&mut host, load_catalog(&infos), 10);
+        assert!(!shelf.folders_reading);
+        press(&mut shelf, &mut host, SELECT);
+        shelf.tab = "games".into();
+        press(&mut shelf, &mut host, SELECT);
+        assert!(!shelf.menu.rows().contains(&menu::Item::RefreshFolder));
+        press(&mut shelf, &mut host, SELECT);
+        shelf.open_categories();
 
         // Deleted: the folders are read again without it.
         shelf.categories.as_mut().unwrap().row = super::editor::CATEGORY_FIXED + shelf.library.all_categories().iter().position(|c| c.id == "my-roms").unwrap();

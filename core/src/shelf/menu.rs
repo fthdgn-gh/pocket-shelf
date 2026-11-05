@@ -55,6 +55,9 @@ pub enum Item {
     Diagnostics,
     /// Open at console start and Return after a game (`autostart.rs`).
     ConsoleStart,
+    /// Read the folder categories' folders again: on the main page, after
+    /// Sort, while a folder category's tab is open.
+    RefreshFolder,
 }
 
 pub const PAGES: [Page; 6] = [Page::Main, Page::Appearance, Page::Status, Page::Games, Page::Artwork, Page::System];
@@ -99,25 +102,45 @@ pub struct Menu {
     pub open: bool,
     pub page: Page,
     pub row: usize,
+    /// The open tab is a folder category's: the main page has Refresh
+    /// folder.
+    pub folder_tab: bool,
 }
 
 impl Default for Menu {
     fn default() -> Self {
-        Menu { open: false, page: Page::Main, row: 0 }
+        Menu { open: false, page: Page::Main, row: 0, folder_tab: false }
     }
 }
 
 impl Menu {
+    /// The rows of the page shown: [`items`], with Refresh folder after
+    /// Sort on a folder category's tab.
+    pub fn rows(&self) -> Vec<Item> {
+        let mut rows = items(self.page).to_vec();
+        if self.page == Page::Main && self.folder_tab {
+            rows.insert(1, Item::RefreshFolder);
+        }
+        rows
+    }
+
     /// Show `page`, with the row that opens `from` highlighted, or its
     /// first row.
     pub fn show(&mut self, page: Page, from: Option<Page>) {
         self.page = page;
-        self.row = from.and_then(|f| items(page).iter().position(|i| *i == Item::Open(f))).unwrap_or(0);
+        self.row = from.and_then(|f| self.rows().iter().position(|i| *i == Item::Open(f))).unwrap_or(0);
     }
 
     /// Open on the main page: from a group, on the group's row there; from
-    /// the main page, on the row it was left at.
-    pub fn open(&mut self) {
+    /// the main page, on the row it was left at. `folder_tab`: the open tab
+    /// is a folder category's.
+    pub fn open(&mut self, folder_tab: bool) {
+        // The rows below Sort move with Refresh folder; the same row stays
+        // highlighted.
+        if self.page == Page::Main && self.folder_tab != folder_tab && self.row > 0 {
+            self.row = if folder_tab { self.row + 1 } else { (self.row - 1).max(1) };
+        }
+        self.folder_tab = folder_tab;
         if self.page != Page::Main {
             let path = menu_path(Item::Open(self.page));
             let top = path.get(1).copied().unwrap_or(self.page);
@@ -136,17 +159,18 @@ impl Menu {
     }
 
     pub fn item(&self) -> Item {
-        items(self.page)[self.row.min(items(self.page).len() - 1)]
+        let rows = self.rows();
+        rows[self.row.min(rows.len() - 1)]
     }
 
     pub fn step_row(&mut self, delta: i32) {
-        let count = items(self.page).len() as i32;
+        let count = self.rows().len() as i32;
         self.row = (self.row as i32 + delta).rem_euclid(count) as usize;
     }
 
     /// The first row shown: the highlight in the middle where it can be.
     pub fn first_visible(&self) -> usize {
-        let count = items(self.page).len();
+        let count = self.rows().len();
         (self.row.saturating_sub(VISIBLE / 2)).min(count.saturating_sub(VISIBLE))
     }
 }
@@ -189,11 +213,11 @@ mod tests {
     #[test]
     fn reopening_from_a_group_lands_on_its_row_in_the_main_page() {
         let mut menu = Menu::default();
-        menu.open();
+        menu.open(false);
         menu.show(Page::Appearance, None);
         menu.show(Page::Status, None);
         menu.open = false;
-        menu.open();
+        menu.open(false);
         assert_eq!((menu.page, menu.item()), (Page::Main, Item::Open(Page::Appearance)));
         // Back from a group returns to its row; from the main page it closes.
         menu.show(Page::Appearance, None);
