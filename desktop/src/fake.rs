@@ -808,6 +808,29 @@ impl Host for FakeHost {
         self.identifying = None;
     }
 
+    /// The cores of a sample RetroArch game: RetroArch's for its console,
+    /// the playlist's first; Emu4Vita++'s when it opens the game.
+    fn cores(&mut self, id: &str) -> bool {
+        use shelf_core::host::{CoreList, Emulator};
+        let Some(info) = self.titles.iter().find(|t| t.id == id) else { return false };
+        let console = info.console.clone().unwrap_or_default();
+        let ra: &[&str] = match console.as_str() {
+            "Nintendo - Super Nintendo Entertainment System" => &["snes9x_libretro.self", "snes9x2005_libretro.self", "snes9x2010_libretro.self"],
+            "Sega - Mega Drive - Genesis" => &["genesis_plus_gx_libretro.self", "picodrive_libretro.self"],
+            "Nintendo - Game Boy Advance" => &["gpsp_libretro.self", "mgba_libretro.self", "vba_next_libretro.self"],
+            _ => &["fbneo_libretro.self"],
+        };
+        let mut lists = Vec::new();
+        if info.opens.retroarch {
+            lists.push(CoreList { app: Emulator::RetroArch, default: ra[0].into(), cores: ra.iter().map(|c| c.to_string()).collect() });
+        }
+        if info.opens.emu4vita {
+            lists.push(CoreList { app: Emulator::Emu4Vita, default: "gpsp".into(), cores: vec!["gpsp".into(), "mgba".into(), "vba_next".into()] });
+        }
+        self.later.push(Event::Cores(id.to_string(), lists));
+        true
+    }
+
     /// Browse's memory card: a few folders with PNG files and others.
     fn list_folder(&mut self, dir: &str) -> bool {
         use shelf_core::host::FolderEntry;
@@ -929,7 +952,10 @@ impl Host for FakeHost {
         self.log.push(line.into());
     }
 
-    fn launch(&mut self, id: &str, with: Option<shelf_core::host::Emulator>) -> bool {
+    fn launch(&mut self, id: &str, with: Option<shelf_core::host::Emulator>, core: Option<&str>) -> bool {
+        if let Some(core) = core {
+            self.log.push(format!("launch with core {core}"));
+        }
         let known = self.index(id).is_some();
         if known {
             self.launched.push(id.into());

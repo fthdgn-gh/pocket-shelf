@@ -186,6 +186,11 @@ impl App {
                         shelf.identified(host, &database, names);
                     }
                 }
+                Event::Cores(id, lists) => {
+                    if let Some(shelf) = &mut self.shelf {
+                        shelf.cores_listed(&id, lists);
+                    }
+                }
                 Event::Folder(dir, entries) => {
                     if let Some(shelf) = &mut self.shelf {
                         shelf.folder_listed(host, &dir, entries);

@@ -25,6 +25,9 @@ pub(super) enum Row {
     /// The app that starts the game; only for a game both RetroArch and
     /// Emu4Vita++ open.
     OpenWith,
+    /// The core the game starts with in the app that opens it; only when
+    /// that app has more than one for its console (`cores.json`).
+    Core,
     Title,
     BoxArt,
     Backdrop,
@@ -32,14 +35,23 @@ pub(super) enum Row {
     Reset,
 }
 
-/// The rows for a title: Open with only when both apps can start it.
-pub(super) fn editor_rows(game: &crate::library::catalog::Game) -> Vec<Row> {
+/// The rows for a title: Open with only when both apps can start it, Core
+/// only when the app that opens it has more than one core for it.
+pub(super) fn editor_rows(game: &crate::library::catalog::Game, cores: bool) -> Vec<Row> {
     use Row::*;
-    let mut rows = vec![Favorite, Category, OpenWith, Title, BoxArt, Backdrop, FindArt, Reset];
+    let mut rows = vec![Favorite, Category, OpenWith, Core, Title, BoxArt, Backdrop, FindArt, Reset];
     if !game.opens.both() {
         rows.retain(|row| *row != OpenWith);
     }
+    if !cores {
+        rows.retain(|row| *row != Core);
+    }
     rows
+}
+
+/// A core as the Core row names it: RetroArch's without `_libretro.self`.
+pub(super) fn core_name(core: &str) -> &str {
+    core.strip_suffix("_libretro.self").unwrap_or(core)
 }
 
 /// Editor rows shown at once; with Open with the list scrolls.
@@ -61,6 +73,9 @@ pub struct Editor {
     pub id: String,
     pub row: usize,
     pub note: String,
+    /// The cores each app can start the title with, from the host (empty
+    /// until it answers, and for a title no core app opens).
+    pub cores: Vec<crate::host::CoreList>,
 }
 
 /// The art or backdrop picker: the fixed rows ("Default", then "Game icon"
@@ -162,12 +177,16 @@ impl Shelf {
     // --- Editor ------------------------------------------------------------
 
     /// TRIANGLE: edit the selected title.
-    pub(super) fn open_editor(&mut self) {
+    pub(super) fn open_editor(&mut self, host: &mut dyn Host) {
         let Some(game) = self.selected_game() else { return };
         // `art/` is listed when a picker opens, not here: listing thousands
-        // of files took 65 ms on hardware.
+        // of files took 65 ms on hardware. A game's cores are read off the
+        // frame, and its Core row shows once they come.
         let id = game.id.to_string();
-        self.editor = Some(Editor { id, row: 0, note: String::new() });
+        if game.opens.retroarch || game.opens.emu4vita {
+            host.cores(&id);
+        }
+        self.editor = Some(Editor { id, row: 0, note: String::new(), cores: Vec::new() });
         self.drawer = panel::slide();
         self.drawer.set(1.0, self.now);
     }
@@ -178,7 +197,38 @@ impl Shelf {
 
     /// The edited title's rows; none when no title is edited.
     pub(super) fn editor_row_list(&self) -> Vec<Row> {
-        self.editor_game().map(|game| editor_rows(&game)).unwrap_or_default()
+        let cores = self.editor_cores().is_some_and(|list| list.cores.len() > 1);
+        self.editor_game().map(|game| editor_rows(&game, cores)).unwrap_or_default()
+    }
+
+    /// The cores of the app that starts the edited title.
+    fn editor_cores(&self) -> Option<&crate::host::CoreList> {
+        let editor = self.editor.as_ref()?;
+        let game = self.library.game(&editor.id)?;
+        let app = self.settings.emulators.pick(&game.id, game.opens)?;
+        editor.cores.iter().find(|list| list.app == app)
+    }
+
+    /// The host's answer for a title's cores.
+    pub fn cores_listed(&mut self, id: &str, lists: Vec<crate::host::CoreList>) {
+        if let Some(editor) = self.editor.as_mut().filter(|e| e.id == id) {
+            editor.cores = lists;
+        }
+    }
+
+    /// The edited title's core in its app: the default, then each other
+    /// core that runs its console. Saved in `cores.json`.
+    fn change_core(&mut self, host: &mut dyn Host, delta: i32) {
+        use crate::library::settings::CORES_FILE;
+        let Some(list) = self.editor_cores().cloned() else { return };
+        let Some(game) = self.editor_game() else { return };
+        let mut choices: Vec<Option<String>> = vec![None];
+        choices.extend(list.cores.iter().filter(|c| **c != list.default).map(|c| Some(c.clone())));
+        let now = self.settings.cores.get(&game.id, list.app).map(String::from);
+        let at = choices.iter().position(|c| *c == now).unwrap_or(0) as i32;
+        let next = choices[(at + delta).rem_euclid(choices.len() as i32) as usize].clone();
+        self.settings.cores.set(&game.id, list.app, next);
+        host.write(CORES_FILE, self.settings.cores.render().as_bytes());
     }
 
     pub(super) fn editor_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool) {
@@ -198,6 +248,7 @@ impl Shelf {
                     Row::Favorite => self.toggle_favorite(host),
                     Row::Category => self.change_game_category(host, delta),
                     Row::OpenWith => self.change_open_with(host, delta),
+                    Row::Core => self.change_core(host, delta),
                     Row::FindArt => self.change_scraper(host, delta),
                     _ => {}
                 }
@@ -209,6 +260,7 @@ impl Shelf {
                 Row::Favorite => self.toggle_favorite(host),
                 Row::Category => self.change_game_category(host, 1),
                 Row::OpenWith => self.change_open_with(host, 1),
+                Row::Core => self.change_core(host, 1),
                 Row::Title => {
                     let title = self.editor_game().map(|g| g.title.to_string()).unwrap_or_default();
                     self.open_keyboard(keyboard::Target::Title, &title);
@@ -282,6 +334,9 @@ impl Shelf {
         if self.settings.emulators.titles.remove(&*game.id).is_some() {
             host.write(crate::library::settings::EMULATORS_FILE, self.settings.emulators.render().as_bytes());
         }
+        if self.settings.cores.titles.remove(&*game.id).is_some() {
+            host.write(crate::library::settings::CORES_FILE, self.settings.cores.render().as_bytes());
+        }
         self.after_change();
         let done = self.t().reset_done;
         if let Some(editor) = &mut self.editor {
@@ -346,12 +401,21 @@ impl Shelf {
                 fill(t.default_app, &[("app", app.name())])
             }
         };
-        let rows: Vec<(&str, String, Step)> = editor_rows(&game)
+        let core = match self.editor_cores() {
+            Some(list) => match self.settings.cores.get(&game.id, list.app) {
+                Some(core) => core_name(core).to_string(),
+                None => fill(t.default_app, &[("app", core_name(&list.default))]),
+            },
+            None => String::new(),
+        };
+        let rows: Vec<(&str, String, Step)> = self
+            .editor_row_list()
             .into_iter()
             .map(|r| match r {
                 Row::Favorite => (t.favorite, favorite.clone(), Step::Both),
                 Row::Category => (t.category, category.clone(), Step::Both),
                 Row::OpenWith => (t.open_with, open_with.clone(), Step::Both),
+                Row::Core => (t.core, core.clone(), Step::Both),
                 Row::Title => (t.title, fit(gfx, &game.title), Step::Right),
                 Row::BoxArt => (t.box_art, fit(gfx, &art), Step::Right),
                 Row::Backdrop => (t.backdrop, fit(gfx, &backdrop), Step::Right),

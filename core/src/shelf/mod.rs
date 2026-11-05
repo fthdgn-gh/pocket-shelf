@@ -643,7 +643,7 @@ impl Shelf {
                 self.open_search();
             }
             if pressed & TRIANGLE != 0 {
-                self.open_editor();
+                self.open_editor(host);
             }
         }
 
@@ -1092,7 +1092,11 @@ impl Shelf {
         if back {
             host.write(crate::autostart::RETURN_FILE, game.id.as_bytes());
         }
-        let accepted = host.launch(&game.id, with);
+        let core = with.and_then(|app| self.settings.cores.get(&game.id, app));
+        if let Some(core) = core {
+            host.log(&format!("launch: core {core}"));
+        }
+        let accepted = host.launch(&game.id, with, core);
         host.log(&format!("launch: host took {} ms (whole step {} ms)", (host.time_us() - asked) / 1000, (host.time_us() - started) / 1000));
         if !accepted {
             host.log(&format!("Launch rejected: {}", game.id));
@@ -1838,6 +1842,7 @@ mod tests {
         plugin: PluginState,
         launched: Vec<String>,
         launched_with: Vec<Option<crate::host::Emulator>>,
+        launched_cores: Vec<Option<String>>,
         backdrops: Vec<PictureKey>,
         ahead: Vec<PictureKey>,
     }
@@ -1872,7 +1877,8 @@ mod tests {
         }
         fn poll(&mut self, _: &mut Vec<Event>) {}
         fn log(&mut self, _: &str) {}
-        fn launch(&mut self, id: &str, with: Option<crate::host::Emulator>) -> bool {
+        fn launch(&mut self, id: &str, with: Option<crate::host::Emulator>, core: Option<&str>) -> bool {
+            self.launched_cores.push(core.map(String::from));
             self.launched.push(id.into());
             self.launched_with.push(with);
             self.accept
@@ -1887,7 +1893,7 @@ mod tests {
     }
 
     fn setup(accept: bool, plugin: PluginState) -> (Shelf, TestHost) {
-        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), launched_with: Vec::new(), backdrops: Vec::new(), ahead: Vec::new() };
+        let mut host = TestHost { files: Files::default(), accept, plugin, launched: Vec::new(), launched_with: Vec::new(), launched_cores: Vec::new(), backdrops: Vec::new(), ahead: Vec::new() };
         host.files.0.insert(RECENT_FILE.into(), b"[\"VITASHELL\"]\n".to_vec());
         let library = Library::load(&mut host);
         let mut shelf = Shelf::new(Settings::defaults(UpdateChannel::Off), library, Status::default());
@@ -2346,6 +2352,53 @@ mod tests {
         shelf.editor.as_mut().unwrap().row = rows.iter().position(|r| *r == editor::Row::Reset).unwrap();
         press(&mut shelf, &mut host, CIRCLE);
         assert!(EmulatorChoice::parse(&host.files.0[EMULATORS_FILE]).titles.is_empty());
+    }
+
+    #[test]
+    fn a_game_starts_with_the_core_chosen_for_it_in_its_app() {
+        use crate::host::{CoreList, Emulator, Emulators};
+        use crate::library::settings::{CoreChoice, CORES_FILE};
+        let (mut shelf, mut host) = setup(true, PluginState::On);
+        let info = TitleInfo {
+            id: "ra0000001".into(),
+            title: "Star Knight".into(),
+            platform: "retro".into(),
+            console: Some("Nintendo - Super Nintendo Entertainment System".into()),
+            opens: Emulators { retroarch: true, emu4vita: true },
+            ..Default::default()
+        };
+        shelf.set_titles(load_catalog(&[info]), true);
+        shelf.tab = "retro-snes".into();
+        shelf.refresh();
+        press(&mut shelf, &mut host, TRIANGLE);
+        assert!(!shelf.editor_row_list().contains(&editor::Row::Core), "not before the host answers");
+        let ra = CoreList { app: Emulator::RetroArch, default: "snes9x_libretro.self".into(), cores: vec!["snes9x_libretro.self".into(), "snes9x2010_libretro.self".into()] };
+        let emu = CoreList { app: Emulator::Emu4Vita, default: "snes9x2005_plus".into(), cores: vec!["snes9x2005_plus".into()] };
+        shelf.cores_listed("ra0000001", vec![ra, emu]);
+        // Under Open with, for RetroArch, which has two.
+        assert_eq!(shelf.editor_row_list()[3], editor::Row::Core);
+        shelf.editor.as_mut().unwrap().row = 3;
+        press(&mut shelf, &mut host, RIGHT);
+        assert_eq!(CoreChoice::parse(&host.files.0[CORES_FILE]).get("ra0000001", Emulator::RetroArch), Some("snes9x2010_libretro.self"));
+        press(&mut shelf, &mut host, CROSS);
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(host.launched_cores.last(), Some(&Some("snes9x2010_libretro.self".into())));
+        // In Emu4Vita++, with one core, the row goes and the default is used.
+        shelf.launching = None;
+        shelf.settings.emulators.titles.insert("ra0000001".into(), Emulator::Emu4Vita);
+        press(&mut shelf, &mut host, TRIANGLE);
+        shelf.cores_listed("ra0000001", vec![CoreList { app: Emulator::Emu4Vita, default: "snes9x2005_plus".into(), cores: vec!["snes9x2005_plus".into()] }]);
+        assert!(!shelf.editor_row_list().contains(&editor::Row::Core));
+        press(&mut shelf, &mut host, CROSS);
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(host.launched_cores.last(), Some(&None));
+        // Reset takes the cores away too.
+        shelf.launching = None;
+        press(&mut shelf, &mut host, TRIANGLE);
+        let rows = shelf.editor_row_list();
+        shelf.editor.as_mut().unwrap().row = rows.iter().position(|r| *r == editor::Row::Reset).unwrap();
+        press(&mut shelf, &mut host, CIRCLE);
+        assert!(CoreChoice::parse(&host.files.0[CORES_FILE]).titles.is_empty());
     }
 
     #[test]

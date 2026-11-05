@@ -534,8 +534,19 @@ impl Host for VitaHost {
         log_line(line);
     }
 
-    fn launch(&mut self, id: &str, with: Option<shelf_core::host::Emulator>) -> bool {
-        unsafe { installed::launch(id, with) }
+    fn launch(&mut self, id: &str, with: Option<shelf_core::host::Emulator>, core: Option<&str>) -> bool {
+        unsafe { installed::launch(id, with, core) }
+    }
+
+    fn cores(&mut self, id: &str) -> bool {
+        let (id, sender) = (id.to_string(), self.answer_sender.clone());
+        spawn("shelf-cores", move || {
+            let started = now_us();
+            let lists = unsafe { installed::core_lists(&id) };
+            log_line(&format!("cores {id}: {} in {} ms", lists.iter().map(|l| format!("{} {}", l.app.name(), l.cores.len())).collect::<Vec<_>>().join(", "), (now_us() - started) / 1000));
+            let _ = sender.send(Event::Cores(id, lists));
+        });
+        true
     }
 
     fn plugin_state(&mut self) -> PluginState {

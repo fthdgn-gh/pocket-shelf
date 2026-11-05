@@ -81,6 +81,7 @@ pub struct Messages {
     pub open_games_with: &'static str,
     /// The title editor's row for the same choice for one game.
     pub open_with: &'static str,
+    pub core: &'static str,
     /// That row's value when the game follows the menu's choice: `{app}`.
     pub default_app: &'static str,
     /// The favorite row's value for a game in Emu4Vita++'s favourites only:
@@ -458,6 +459,7 @@ impl Messages {
             ("keyboardSystem", self.keyboard_system),
             ("openGamesWith", self.open_games_with),
             ("openWith", self.open_with),
+            ("core", self.core),
             ("defaultApp", self.default_app),
             ("favoriteIn", self.favorite_in),
             ("sortOrders.nameAsc", self.sort_orders.name_asc),
@@ -772,6 +774,7 @@ pub static EN: Messages = Messages {
     keyboard_system: "System",
     open_games_with: "Open games with",
     open_with: "Open with",
+    core: "Core",
     default_app: "Default ({app})",
     favorite_in: "In {app}",
     sort_orders: SortNames {
@@ -1094,6 +1097,7 @@ pub static TR: Messages = Messages {
     keyboard_system: "Sistem",
     open_games_with: "Oyunları açan",
     open_with: "Açan uygulama",
+    core: "Çekirdek",
     default_app: "Varsayılan ({app})",
     favorite_in: "{app} listesinde",
     sort_orders: SortNames {
@@ -1416,6 +1420,7 @@ pub static DE: Messages = Messages {
     keyboard_system: "System",
     open_games_with: "Spiele öffnen mit",
     open_with: "Öffnen mit",
+    core: "Core",
     default_app: "Standard ({app})",
     favorite_in: "In {app}",
     sort_orders: SortNames {
@@ -1738,6 +1743,7 @@ pub static FR: Messages = Messages {
     keyboard_system: "Système",
     open_games_with: "Ouvrir les jeux avec",
     open_with: "Ouvrir avec",
+    core: "Core",
     default_app: "Par défaut ({app})",
     favorite_in: "Dans {app}",
     sort_orders: SortNames {
@@ -2060,6 +2066,7 @@ pub static ES: Messages = Messages {
     keyboard_system: "Sistema",
     open_games_with: "Abrir juegos con",
     open_with: "Abrir con",
+    core: "Núcleo",
     default_app: "Predeterminado ({app})",
     favorite_in: "En {app}",
     sort_orders: SortNames {

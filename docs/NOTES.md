@@ -185,6 +185,14 @@ taiHEN plugins (Console start), and NEON results (below).
   with, and the editor's Open with per game, saved in `emulators.json`
   (`EmulatorChoice`; RetroArch when absent). A game only one app opens uses
   that app whatever the choice.
+- **Which core** (the editor's Core row, `cores.json`, `CoreChoice`): per
+  title and per app. `Host::cores` reads the lists on a thread: RetroArch's
+  installed cores whose `info/<core>.info` `database` names the game's
+  console, the playlist's core first; Emu4Vita++'s installed cores for the
+  console from its table (`emu4vita::DATABASES`). At launch the chosen core
+  is checked with one file stat (`<core>_libretro.self` in RetroArch's app
+  folder, `eboot_<core>.self` in Emu4Vita++'s) and the default used when it
+  is gone. **Not yet run on hardware**; Vita3K cannot launch titles.
 - **Pictures for RetroArch games** are RetroArch's own thumbnails
   (`Named_Boxarts`, else `Named_Titles`, fitted into 128 px; backdrop
   `Named_Snaps`), with `&*/:`"<>?\|` in the label as `_`; then, for an

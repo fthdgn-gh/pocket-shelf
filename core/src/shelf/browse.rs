@@ -488,7 +488,7 @@ mod tests {
         }
         fn poll(&mut self, _: &mut Vec<Event>) {}
         fn log(&mut self, _: &str) {}
-        fn launch(&mut self, _: &str, _: Option<crate::host::Emulator>) -> bool {
+        fn launch(&mut self, _: &str, _: Option<crate::host::Emulator>, _: Option<&str>) -> bool {
             true
         }
         fn plugin_state(&mut self) -> PluginState {
@@ -520,7 +520,7 @@ mod tests {
         let mut shelf = Shelf::new(Settings::defaults(UpdateChannel::Off), library, Status::default());
         let infos = [TitleInfo { id: "PCSA00069".into(), title: "Gravity".into(), platform: "vita".into(), ..Default::default() }];
         shelf.set_titles(load_catalog(&infos), true);
-        shelf.open_editor();
+        shelf.open_editor(&mut host);
         let mut gfx = Gfx::new();
 
         // The first time it opens on the memory card's root.

@@ -192,6 +192,12 @@ Emu4Vita++ has it, else with Emu4Vita++'s preferred core for the console.
   RetroArch and Emu4Vita++ can open; **Open with** in a game's editor
   (TRIANGLE) picks it for that game. A game only one app can open always
   starts in that app.
+- **Core** in a game's editor picks the core it starts with, in the app that
+  opens it: Default (the playlist's core, or Emu4Vita++'s preferred one for
+  the console), or any other installed core that runs its console
+  (RetroArch's from its core info files). Each app keeps its own choice, in
+  `cores.json`; a core no longer installed falls back to the default. The
+  row shows when the app has more than one core for the game.
 - **Favourites** you mark in Emu4Vita++ show in the Favorites tab, as games
   of their own when no playlist lists them. Pocket Shelf reads them at each
   start and never changes Emu4Vita++'s files: remove a favourite in
@@ -330,6 +336,7 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `gamedb/` | libretro's game databases as tables, the games' checksums, and what each title was identified as |
 | `wikidata/` | Wikidata's game details tables, one per console, the genre and mode names, and what each title was matched to |
 | `folders.json` | The folders Browse last took a box art and a backdrop from |
+| `cores.json` | The core each game starts with, per app, where you chose one |
 | `autostart.txt`, `return.txt`, `boot-plugin.log` | The Console start settings the plugin reads, the mark a launch leaves for Return after a game, and the plugin's log of this console start |
 | `steamgriddb.txt` | Your SteamGridDB API key |
 | `update.json`, `update/` | The last update check; a downloaded update |

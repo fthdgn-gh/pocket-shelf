@@ -277,7 +277,7 @@ mod tests {
         fn request(&mut self, _: PictureKey) {}
         fn poll(&mut self, _: &mut Vec<Event>) {}
         fn log(&mut self, _: &str) {}
-        fn launch(&mut self, _: &str, _: Option<crate::host::Emulator>) -> bool {
+        fn launch(&mut self, _: &str, _: Option<crate::host::Emulator>, _: Option<&str>) -> bool {
             true
         }
         fn plugin_state(&mut self) -> PluginState {

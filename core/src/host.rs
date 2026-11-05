@@ -165,6 +165,17 @@ pub enum PictureKey {
     File { path: String, as_: DecodeAs },
 }
 
+/// The cores an app can start a title with ([`Host::cores`]): the one it
+/// starts with by default (the playlist's, or Emu4Vita++'s preferred one for
+/// the console), and every installed core that runs the title's console,
+/// the default among them.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct CoreList {
+    pub app: Emulator,
+    pub default: String,
+    pub cores: Vec<String>,
+}
+
 /// A folder's entry, as [`Host::list_folder`] answers it.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct FolderEntry {
@@ -253,6 +264,8 @@ pub enum Event {
     /// files ([`browse::sorted`](crate::shelf::browse::sorted)); `None` when it
     /// cannot be read.
     Folder(String, Option<Vec<FolderEntry>>),
+    /// A title's cores in each app that can start it ([`Host::cores`]).
+    Cores(String, Vec<CoreList>),
 }
 
 /// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP
@@ -331,6 +344,7 @@ pub const SAVED_FILES: &[&str] = &[
     crate::updates::UPDATE_VERSION_FILE,
     crate::autostart::AUTOSTART_FILE,
     crate::library::settings::FOLDERS_FILE,
+    crate::library::settings::CORES_FILE,
     crate::autostart::RETURN_FILE,
 ];
 
@@ -383,7 +397,9 @@ pub trait Host {
     /// on screen (the platform's `finish_launch`); false when refused. A
     /// game from a playlist or Emu4Vita++'s favourites starts in `with`
     /// (`EmulatorChoice::pick`); None for the rest.
-    fn launch(&mut self, id: &str, with: Option<Emulator>) -> bool;
+    /// `core` is the title's own core in that app (`cores.json`); None
+    /// starts it with its default.
+    fn launch(&mut self, id: &str, with: Option<Emulator>, core: Option<&str>) -> bool;
     /// Adrenaline's boot plugin, checked before a title with no bubble
     /// starts.
     fn plugin_state(&mut self) -> PluginState;
@@ -464,6 +480,12 @@ pub trait Host {
     /// `""` lists the storage devices there are. Answered with
     /// [`Event::Folder`]. False when this host cannot.
     fn list_folder(&mut self, _dir: &str) -> bool {
+        false
+    }
+    /// The cores a RetroArch or Emu4Vita++ game can start with, off the
+    /// frame (RetroArch's cores are read from their info files); answered
+    /// with [`Event::Cores`]. False when this host cannot.
+    fn cores(&mut self, _id: &str) -> bool {
         false
     }
 

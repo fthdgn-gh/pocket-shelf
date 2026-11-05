@@ -9,7 +9,7 @@ use crate::theme::{ThemeId, DEFAULT_THEME};
 macro_rules! keyed {
     ($(#[$doc:meta])* $name:ident { $($variant:ident = $key:literal),+ $(,)? }) => {
         $(#[$doc])*
-        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
         pub enum $name { $($variant),+ }
 
         impl $name {
@@ -281,6 +281,71 @@ impl EmulatorChoice {
     }
 }
 
+/// The core a title starts with in each app (`cores.json`, a file of its
+/// own beside `emulators.json`): RetroArch's by its file in RetroArch's app
+/// folder (`snes9x2010_libretro.self`), Emu4Vita++'s by its name
+/// (`snes9x`). A title with none starts with its default: the playlist's
+/// core, or Emu4Vita++'s preferred one for the console.
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+pub struct CoreChoice {
+    pub titles: std::collections::BTreeMap<String, std::collections::BTreeMap<Emulator, String>>,
+}
+
+pub const CORES_FILE: &str = "cores.json";
+
+/// A core name as a launch request can carry it: letters, digits, `_`, `.`
+/// and `-`, no separators.
+pub fn valid_core(core: &str) -> bool {
+    !core.is_empty() && core.len() <= 64 && core.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+}
+
+impl CoreChoice {
+    pub fn parse(bytes: &[u8]) -> CoreChoice {
+        let mut choice = CoreChoice::default();
+        let Ok(raw) = crate::library::read_json(bytes) else { return choice };
+        let Some(titles) = raw.as_object() else { return choice };
+        for (id, apps) in titles {
+            let Some(apps) = apps.as_object() else { continue };
+            for (app, core) in apps {
+                let (Some(app), Some(core)) = (Emulator::from_key(app), core.as_str().filter(|c| valid_core(c))) else { continue };
+                choice.titles.entry(id.clone()).or_default().insert(app, core.to_string());
+            }
+        }
+        choice
+    }
+
+    /// Two-space JSON and a newline: `{"<title id>": {"retroarch": "<core>"}}`.
+    pub fn render(&self) -> String {
+        let titles: Map<String, Value> = self
+            .titles
+            .iter()
+            .map(|(id, apps)| (id.clone(), Value::Object(apps.iter().map(|(app, core)| (app.key().to_string(), Value::from(core.clone()))).collect())))
+            .collect();
+        serde_json::to_string_pretty(&Value::Object(titles)).expect("json") + "\n"
+    }
+
+    pub fn get(&self, id: &str, app: Emulator) -> Option<&str> {
+        self.titles.get(id)?.get(&app).map(String::as_str)
+    }
+
+    /// Set a title's core in an app; None goes back to the default.
+    pub fn set(&mut self, id: &str, app: Emulator, core: Option<String>) {
+        match core {
+            Some(core) => {
+                self.titles.entry(id.to_string()).or_default().insert(app, core);
+            }
+            None => {
+                if let Some(apps) = self.titles.get_mut(id) {
+                    apps.remove(&app);
+                    if apps.is_empty() {
+                        self.titles.remove(id);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The folders the title editor's Browse last took a box art and a
 /// backdrop from (`folders.json`), where it opens next time.
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
@@ -336,6 +401,9 @@ impl Settings {
         if let Some(bytes) = host.read(FOLDERS_FILE) {
             settings.folders = Folders::parse(&bytes);
         }
+        if let Some(bytes) = host.read(CORES_FILE) {
+            settings.cores = CoreChoice::parse(&bytes);
+        }
         settings
     }
 }
@@ -374,6 +442,8 @@ pub struct Settings {
     pub autostart: crate::autostart::AutoStart,
     /// Saved in its own file, `folders.json` (not rendered here).
     pub folders: Folders,
+    /// Saved in its own file, `cores.json` (not rendered here).
+    pub cores: CoreChoice,
 }
 
 impl Settings {
@@ -402,6 +472,7 @@ impl Settings {
             game_info: GameInfo::default(),
             autostart: crate::autostart::AutoStart::default(),
             folders: Folders::default(),
+            cores: CoreChoice::default(),
         }
     }
 
@@ -480,6 +551,21 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cores_round_trip_per_title_and_app() {
+        let mut choice = CoreChoice::default();
+        choice.set("ra1", Emulator::RetroArch, Some("snes9x2010_libretro.self".into()));
+        choice.set("ra1", Emulator::Emu4Vita, Some("snes9x".into()));
+        let again = CoreChoice::parse(choice.render().as_bytes());
+        assert_eq!(again, choice);
+        assert_eq!(again.get("ra1", Emulator::Emu4Vita), Some("snes9x"));
+        choice.set("ra1", Emulator::RetroArch, None);
+        choice.set("ra1", Emulator::Emu4Vita, None);
+        assert!(choice.titles.is_empty());
+        let bad = CoreChoice::parse(br#"{"ra1": {"retroarch": "../x&y", "nope": "a"}}"#);
+        assert!(bad.titles.is_empty());
+    }
 
     #[test]
     fn the_keyboard_choice_round_trips_and_defaults_to_pocket_shelfs() {

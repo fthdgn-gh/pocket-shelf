@@ -817,7 +817,43 @@ static mut LAUNCHED: Option<Launch> = None;
 /// frame. Only ids found by the scan are accepted, so the URI is never built
 /// from guest-controlled text. Returns whether the id was accepted; the system
 /// gets the request in `finish_launch`.
-pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>) -> bool {
+/// The cores each app that starts a RetroArch game can use (the title
+/// editor's Core row): the game's default and every installed core that
+/// runs its console. Reads RetroArch's core info files; on a worker thread.
+pub unsafe fn core_lists(title_id: &str) -> Vec<shelf_core::host::CoreList> {
+    use shelf_core::host::{CoreList, Emulator};
+    let Some(retro) = find(title_id).and_then(|item| item.retro.as_ref()) else { return Vec::new() };
+    let mut lists = Vec::new();
+    let roots = crate::platform::retroarch::Roots::vita();
+    if !retro.core.is_empty() && roots.installed() {
+        let mut cores: Vec<String> = crate::platform::retroarch::installed_cores(&roots)
+            .into_iter()
+            .filter(|core| core.databases.iter().any(|d| *d == retro.console))
+            .map(|core| core.file)
+            .collect();
+        if !cores.contains(&retro.core) {
+            cores.insert(0, retro.core.clone());
+        }
+        lists.push(CoreList { app: Emulator::RetroArch, default: retro.core.clone(), cores });
+    }
+    if let Some(install) = (!retro.emu.is_empty()).then(|| crate::platform::emu4vita::Install::find(crate::platform::emu4vita::Roots::vita())).flatten() {
+        let mut cores = install.cores_for(&retro.console);
+        if !cores.contains(&retro.emu) {
+            cores.insert(0, retro.emu.clone());
+        }
+        lists.push(CoreList { app: Emulator::Emu4Vita, default: retro.emu.clone(), cores });
+    }
+    lists
+}
+
+/// A title's own core in RetroArch (a file in its app folder) when it is
+/// still installed; None for the default.
+fn retroarch_core(core: Option<&str>) -> Option<String> {
+    let core = core.filter(|c| shelf_core::library::settings::valid_core(c) && c.ends_with("_libretro.self"))?;
+    crate::platform::retroarch::core_file(&crate::platform::retroarch::Roots::vita(), &format!("app0:/{core}"))
+}
+
+pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>, core: Option<&str>) -> bool {
     use shelf_core::host::Emulator;
     if !valid_title_id(title_id) {
         return false;
@@ -840,14 +876,21 @@ pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>) -
                     return false;
                 }
                 close = Some(c"RETROVITA");
-                (crate::platform::retroarch::launch_uri(&retro.core, &retro.path), LAUNCH_FLAGS, true)
+                // The title's own core while it is installed, else the playlist's.
+                let core = retroarch_core(core).unwrap_or_else(|| retro.core.clone());
+                (crate::platform::retroarch::launch_uri(&core, &retro.path), LAUNCH_FLAGS, true)
             }
             Some(Emulator::Emu4Vita) if !retro.emu.is_empty() => {
-                if !crate::platform::emu4vita::Roots::vita().installed() {
+                let roots = crate::platform::emu4vita::Roots::vita();
+                if !roots.installed() {
                     return false;
                 }
                 close = Some(c"EMU4VPLUS");
-                (crate::platform::emu4vita::launch_uri(&retro.emu, &retro.path), LAUNCH_FLAGS, true)
+                // The title's own core while its executable is there (one
+                // stat; the launch runs in a frame), else the default.
+                let own = core.filter(|c| shelf_core::library::settings::valid_core(c) && std::fs::metadata(format!("{}/eboot_{c}.self", roots.app)).is_ok_and(|m| m.is_file()));
+                let core = own.map_or_else(|| retro.emu.clone(), String::from);
+                (crate::platform::emu4vita::launch_uri(&core, &retro.path), LAUNCH_FLAGS, true)
             }
             _ => return false,
         }

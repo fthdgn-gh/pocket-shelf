@@ -224,6 +224,12 @@ impl Install {
         cores.iter().find(|core| self.has(core)).map(|core| String::from(*core))
     }
 
+    /// Its installed cores that run a console, its preferred one first.
+    pub fn cores_for(&self, console: &str) -> Vec<String> {
+        let Some((_, cores)) = DATABASES.iter().find(|(database, _)| *database == console) else { return Vec::new() };
+        cores.iter().filter(|core| self.has(core)).map(|core| String::from(*core)).collect()
+    }
+
     /// The playlist folders it reads besides RetroArch's on `ux0:`: its own,
     /// then RetroArch's on `uma0:` (from that folder's `retroarch.cfg`).
     pub fn playlist_dirs(&self) -> Vec<String> {
