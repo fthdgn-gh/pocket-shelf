@@ -36,9 +36,15 @@ and updater. Shots are button scripts; renders go to
 `.build/validation/desktop/` (ignored). The README's `screenshots/`
 are copies of seven of them, captioned as renders with sample titles.
 
-**Vita3K.** Its window cannot be seen or screenshotted from here, and it
-cannot be driven. Evidence comes from the log and from files under
-`~/Library/Application Support/Vita3K/Vita3K/fs/ux0/data/`.
+**Vita3K** (`/Applications/Vita3K.app`, binary
+`Contents/MacOS/Vita3K`) comes after the desktop shots and before a console
+test: the user drives its window, and its log is read here directly at
+`~/Library/Application Support/Vita3K/Vita3K/fs/ux0/data/PocketShelf/log.txt`
+(no copy to Downloads). Its `ux0:` is
+`~/Library/Application Support/Vita3K/Vita3K/fs/ux0/`. Its window cannot be
+seen or screenshotted from here, and it cannot be driven. What it cannot
+show goes to the console: launching titles, package installs (updates),
+taiHEN plugins (Console start), and NEON results (below).
 
 - Launch in the background with output to a log file. `pkill` does not stop
   it; use `kill -9` on instances started here. Never kill one the user opened.
