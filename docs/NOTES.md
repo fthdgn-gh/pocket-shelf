@@ -445,9 +445,12 @@ stick at each launch when it differs.
   file used is copied on the file thread (`Host::import_picture`, PNG
   signature and 8 MB checked) to `art/` or `backdrops/` as
   `<title id>-<CRC of the path>.png`, and the preview goes to the tile as
-  Find artwork's does. The folder is kept per kind in `folders.json`. **Not
-  yet run on hardware**: reading a device's root (`ux0:`, else `ux0:/`),
-  folder listing times on the card.
+  Find artwork's does. The folder is kept per kind in `folders.json`. **In
+  Vita3K** (2026-11-05): folders listed in 2–9 ms, `ux0:` read as it is
+  (not `ux0:/`), a box art (shrunk to 20 KB) and a backdrop copied and both
+  folders kept; it showed a device opened from the list of devices as
+  `/ux0:`, fixed. **Not yet run on hardware**: the device roots and listing
+  times on the card.
 - **Fetch artwork** (SELECT ▸ Games ▸ Artwork): one request at a time over a
   category or all titles but the system apps (whose names match unrelated
   games); busy replies (429) waited out five times, other failures halt the
