@@ -177,19 +177,18 @@ impl Library {
     }
 
     /// Titles matched to Wikidata's games (the host saved them to
-    /// `wikidata/found.tsv`); recomputed once for the lot.
+    /// `wikidata/found.tsv`), set in place: Wikidata's game changes no
+    /// name, category, art or order (a release sort reads the year when a
+    /// tab is listed), so there is no rebuild. With one, the 3,733 saved
+    /// matches took 307 ms of a frame on the Vita after each start.
     pub fn set_wiki(&mut self, found: &[(String, Arc<crate::online::wikidata::Found>)]) {
-        let mut changed = false;
         for (id, wiki) in found {
+            // `games` is `base` with the user's changes, in the same order.
             let Some(&index) = self.index.get(id.as_str()) else { continue };
-            let game = &mut self.base[index];
-            if game.wiki.as_deref() != Some(wiki) {
+            self.base[index].wiki = Some(wiki.clone());
+            if let Some(game) = self.games.get_mut(index) {
                 game.wiki = Some(wiki.clone());
-                changed = true;
             }
-        }
-        if changed {
-            self.rebuild();
         }
     }
 
@@ -579,6 +578,26 @@ mod tests {
         assert_eq!(game("PCSB00245").art.as_deref(), Some("Neon Drift.png"));
         assert_eq!(game("VITASHELL").art, None);
         assert!(game("VITASHELL").art_icon);
+    }
+
+    #[test]
+    fn wikidata_games_reach_the_shown_titles_and_the_release_sort_without_a_rebuild() {
+        use crate::online::wikidata::{Found, Game as WikiGame};
+        let gb = "Nintendo - Game Boy";
+        let infos = vec![info("ra1", "Alpha", "retro", Some(gb)), info("ra2", "Beta", "retro", Some(gb))];
+        let mut library = library(&[]);
+        library.set_titles(&infos);
+        library.set_override("ra2", TitleOverride { title: Some("Mine".into()), ..Default::default() });
+        library.orders.set("retro-gb", order::SortOrder::NewestReleased);
+        let found = |year| Arc::new(Found { game: WikiGame { item: "Q1".into(), name: "Beta".into(), year, ..Default::default() }, genres: Vec::new() });
+        library.set_wiki(&[("ra2".into(), found(1995)), ("unknown".into(), found(1990))]);
+        let shown = |library: &Library| -> Vec<String> { library.titles_of("retro-gb").into_iter().map(|i| library.games()[i].title.to_string()).collect() };
+        assert_eq!(shown(&library), ["Mine", "Alpha"], "the dated game first, the user's title kept");
+        assert_eq!(library.game("ra2").map(|g| g.year()), Some(1995));
+        assert_eq!(library.base_game("ra2").and_then(|g| g.wiki.as_ref()).map(|w| w.game.year), Some(1995));
+        // A rebuild keeps them.
+        library.rebuild();
+        assert_eq!(library.game("ra2").map(|g| g.year()), Some(1995));
     }
 
     #[test]

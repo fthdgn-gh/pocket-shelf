@@ -262,11 +262,17 @@ impl Shelf {
         let mut named = None;
         if let Some(found) = &found {
             let started = host.time_us();
-            named = Some(found.iter().filter(|(id, _)| self.library.base_game(id).is_some_and(|g| g.details.is_none())).count());
+            if self.database.is_some() {
+                named = Some(found.iter().filter(|(id, _)| self.library.base_game(id).is_some_and(|g| g.details.is_none())).count());
+            }
             let keep = self.selected_game().map(|g| g.id.to_string());
             self.library.set_wiki(found);
             self.relist(keep);
             host.log(&format!("wikidata {file}: {} titles matched, library in {} us", found.len(), host.time_us() - started));
+        }
+        // Counting walks every title: only for the drawer, when it is open.
+        if self.database.is_none() {
+            return;
         }
         let t = self.t();
         let known = self.database_counts();
