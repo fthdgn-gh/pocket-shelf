@@ -83,6 +83,12 @@ pub struct Browser {
     pub backdrop: bool,
     /// Picking a folder (a folder category's), not a picture.
     pub folder: bool,
+    /// The folder category whose folder is being changed; None for a new
+    /// one.
+    pub editing: Option<String>,
+    /// Highlight "Use this folder" once the first folder is read (the
+    /// folder an edited category has).
+    use_first: bool,
     /// The folder shown; `""` lists the devices.
     pub dir: String,
     /// None while the host reads the folder.
@@ -155,27 +161,36 @@ impl Shelf {
             }
         };
         let dir = if dir.is_empty() { START.to_string() } else { dir };
-        self.browser = Some(Browser { backdrop, folder: false, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
+        self.browser = Some(Browser { backdrop, folder: false, editing: None, use_first: false, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
         self.browse_to(host, dir, select, "");
     }
 
-    /// Open Browse for a folder category's folder, on the folder the last
-    /// one was picked in.
-    pub(super) fn open_folder_browser(&mut self, host: &mut dyn Host) {
-        let dir = clean(&self.settings.folders.roms);
+    /// Open Browse for a folder category's folder: a new one's on the
+    /// folder the last one was picked in, an edited one's on its own folder
+    /// with "Use this folder" highlighted.
+    pub(super) fn open_folder_browser(&mut self, host: &mut dyn Host, editing: Option<(String, String)>) {
+        let (editing, dir) = match editing {
+            Some((id, folder)) => (Some(id), folder),
+            None => (None, clean(&self.settings.folders.roms)),
+        };
         let dir = if dir.is_empty() { START.to_string() } else { dir };
-        self.browser = Some(Browser { backdrop: false, folder: true, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
+        let use_first = editing.is_some();
+        self.browser = Some(Browser { backdrop: false, folder: true, editing, use_first, dir: String::new(), entries: None, row: 0, note: String::new(), select: None, preview: None, preview_wait: 0, decodes: HashMap::new(), waiting: false });
         self.browse_to(host, dir, None, "");
     }
 
     /// The folder picked: Browse closes and the keyboard asks for the
-    /// category's name, the folder's own to start with.
+    /// category's name: an edited one's own, else the folder's.
     fn browser_pick_folder(&mut self, host: &mut dyn Host, dir: String) {
+        let editing = self.browser.as_ref().and_then(|b| b.editing.clone());
         self.settings.folders.roms = dir.clone();
         host.write(FOLDERS_FILE, self.settings.folders.render().as_bytes());
         self.close_browser();
-        let name: String = dir.trim_end_matches('/').rsplit(['/', ':']).find(|s| !s.is_empty()).unwrap_or("").chars().take(crate::library::categories::CATEGORY_LABEL_MAX).collect();
-        self.open_keyboard(super::keyboard::Target::NewFolderCategory(dir), name.trim());
+        let own = editing.as_ref().and_then(|id| self.library.config.folders.iter().find(|c| c.id == *id)).map(|c| c.label.clone());
+        let name: String = own.unwrap_or_else(|| {
+            dir.trim_end_matches('/').rsplit(['/', ':']).find(|s| !s.is_empty()).unwrap_or("").chars().take(crate::library::categories::CATEGORY_LABEL_MAX).collect()
+        });
+        self.open_keyboard(super::keyboard::Target::FolderCategory { id: editing, folder: dir }, name.trim());
     }
 
     /// Show a folder; `select` is the entry to highlight in it (the folder
@@ -235,7 +250,7 @@ impl Shelf {
         browser.entries = Some(entries);
         // The folder just left, else the first entry; in a folder with no
         // folders, "Use this folder".
-        let first = if browser.count() > fixed { fixed } else { fixed.saturating_sub(1) };
+        let first = if browser.count() > fixed && !std::mem::take(&mut browser.use_first) { fixed } else { fixed.saturating_sub(1) };
         browser.row = at.map_or(first, |i| i + fixed);
         self.browser_moved(false);
     }
@@ -413,7 +428,11 @@ impl Shelf {
         let t = self.t();
         let theme = self.theme;
         let slide = self.drawer.at(self.now);
-        let title = if browser.folder {
+        // An edited folder category's name.
+        let editing = browser.editing.as_ref().and_then(|id| self.library.config.folders.iter().find(|c| c.id == *id)).map(|c| c.label.clone());
+        let title = if let Some(name) = &editing {
+            name.as_str()
+        } else if browser.folder {
             t.new_folder_category
         } else if browser.backdrop {
             t.backdrop

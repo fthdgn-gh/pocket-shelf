@@ -223,6 +223,7 @@ const SHOTS: &[Shot] = &[
     // shows its folder.
     Shot { name: "137-folder-tab", script: &[(0, 4), (0, SETTLE)], setup: rom_folder },
     Shot { name: "138-categories-folder", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (0, SETTLE)], setup: rom_folder },
+    Shot { name: "139-categories-folder-edit", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, 6), (0, SETTLE)], setup: rom_folder },
     // Rescan titles (Library, fourth row) before, during and after its
     // scan; Diagnostics (last row of the main page).
     shot("140-rescan", &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, SETTLE)]),

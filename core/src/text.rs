@@ -320,20 +320,22 @@ impl Gfx {
         format!("...{}", chars[start..].iter().collect::<String>())
     }
 
-    /// `text` broken into lines at spaces so each fits `max` pixels; a word
-    /// longer than a line keeps a line of its own.
+    /// `text` broken into lines at each `\n` and at spaces so each fits
+    /// `max` pixels; a word longer than a line keeps a line of its own.
     pub fn wrap(&mut self, role: Role, text: &str, max: f32) -> Vec<String> {
         let mut lines = Vec::new();
-        let mut line = String::new();
-        for word in text.split(' ') {
-            let next = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
-            if !line.is_empty() && self.measure(role, &next) > max {
-                lines.push(std::mem::replace(&mut line, word.to_string()));
-            } else {
-                line = next;
+        for paragraph in text.split('\n') {
+            let mut line = String::new();
+            for word in paragraph.split(' ') {
+                let next = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
+                if !line.is_empty() && self.measure(role, &next) > max {
+                    lines.push(std::mem::replace(&mut line, word.to_string()));
+                } else {
+                    line = next;
+                }
             }
+            lines.push(line);
         }
-        lines.push(line);
         lines
     }
 }

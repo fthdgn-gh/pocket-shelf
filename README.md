@@ -221,7 +221,9 @@ SELECT ▸ Games ▸ Categories ▸ **New folder category** makes a tab of the
 games in a folder of your choice and its subfolders, with no playlist
 needed. Browse opens on the memory card's folders; pick one with **Use this
 folder**, then name the tab (the folder's name to start with). Pocket Shelf
-reads the folder on the spot and again at each Rescan titles.
+reads the folder on the spot and again at each Rescan titles. ○ on a folder
+category edits it: Browse opens on its folder with Use this folder
+highlighted, then the keyboard on its name.
 
 Each file's console is found from:
 - its extension, when one console uses it (`.sfc`, `.gba`, `.nes`, `.md`

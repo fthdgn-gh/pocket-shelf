@@ -887,7 +887,9 @@ impl Host for FakeHost {
     fn list_folder(&mut self, dir: &str) -> bool {
         use shelf_core::host::FolderEntry;
         let entry = |name: &str| FolderEntry { name: name.into(), folder: !name.contains('.') };
-        let names: Option<&[&str]> = match dir {
+        // `ux0:/data` and `ux0:data` are one folder, as on the Vita.
+        let key = dir.replacen(":/", ":", 1);
+        let names: Option<&[&str]> = match key.as_str() {
             "" => Some(&["ux0:", "ur0:", "uma0:"]),
             "ux0:" => Some(&["app", "data", "pictures", "tai", "id.dat"]),
             "ux0:pictures" => Some(&["Box art", "Wallpapers", "screenshot.jpg", "Star Harbor.png"]),

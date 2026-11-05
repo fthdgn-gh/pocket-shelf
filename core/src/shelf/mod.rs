@@ -745,7 +745,8 @@ impl Shelf {
         let k = &self.t().keyboard_for;
         match target {
             Target::Title => k.title,
-            Target::NewCategory | Target::NewFolderCategory(_) => k.new_category,
+            Target::NewCategory | Target::FolderCategory { id: None, .. } => k.new_category,
+            Target::FolderCategory { id: Some(_), .. } => k.category,
             Target::Category(_) => k.category,
             Target::Library => k.library,
             Target::Search => k.search,
@@ -760,7 +761,7 @@ impl Shelf {
         match &keyboard.target {
             keyboard::Target::Library => self.apply_search(&text),
             keyboard::Target::Title => self.commit_title(host, &text),
-            keyboard::Target::NewCategory | keyboard::Target::NewFolderCategory(_) | keyboard::Target::Category(_) => {
+            keyboard::Target::NewCategory | keyboard::Target::FolderCategory { .. } | keyboard::Target::Category(_) => {
                 self.commit_category(host, &keyboard.target, &text)
             }
             keyboard::Target::Search => self.commit_online(host, false, &text),
@@ -2541,6 +2542,30 @@ mod tests {
         assert_eq!(listed(&shelf, "my-roms"), ["ra0000001", "ra0000002"]);
         assert_eq!(listed(&shelf, "retro-snes"), ["ra0000002", "ra0000003"]);
         assert_eq!(&*shelf.library.game("ra0000001").unwrap().category, "my-roms");
+
+        // Edited: Browse opens on its folder with "Use this folder"
+        // highlighted, then the keyboard has its name. A new name alone
+        // reads nothing again; another folder does.
+        let walks = host.rom_folders.len();
+        shelf.categories.as_mut().unwrap().row = super::editor::CATEGORY_FIXED + shelf.library.all_categories().iter().position(|c| c.id == "my-roms").unwrap();
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(host.listed.last().map(String::as_str), Some("ux0:/roms"));
+        shelf.folder_listed(&mut host, "ux0:/roms", Some(vec![entry("snes", true)]));
+        assert_eq!(shelf.browser.as_ref().map(|b| b.row), Some(1));
+        press(&mut shelf, &mut host, CIRCLE);
+        assert_eq!(shelf.keyboard.as_ref().map(|k| k.text().to_string()).as_deref(), Some("My ROMs"));
+        type_text(&mut shelf, &mut host, "Retro");
+        assert_eq!(shelf.library.config.folders, [Category::folder("my-roms", "Retro", "ux0:/roms")]);
+        assert_eq!(host.rom_folders.len(), walks);
+        press(&mut shelf, &mut host, CIRCLE);
+        shelf.folder_listed(&mut host, "ux0:/roms", Some(vec![entry("snes", true)]));
+        press(&mut shelf, &mut host, DOWN);
+        press(&mut shelf, &mut host, CIRCLE);
+        shelf.folder_listed(&mut host, "ux0:/roms/snes", Some(vec![]));
+        press(&mut shelf, &mut host, CIRCLE);
+        type_text(&mut shelf, &mut host, "Retro");
+        assert_eq!(shelf.library.config.folders, [Category::folder("my-roms", "Retro", "ux0:/roms/snes")]);
+        assert_eq!(host.rom_folders.last(), Some(&(vec!["ux0:/roms/snes".to_string()], true)));
 
         // Deleted: the folders are read again without it.
         shelf.categories.as_mut().unwrap().row = super::editor::CATEGORY_FIXED + shelf.library.all_categories().iter().position(|c| c.id == "my-roms").unwrap();

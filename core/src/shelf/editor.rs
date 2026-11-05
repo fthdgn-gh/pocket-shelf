@@ -66,7 +66,7 @@ pub(super) const PICKER_FIXED: usize = 3;
 const BROWSE_ROW: usize = 2;
 /// Frames the picker's highlight rests before its picture is loaded.
 const PREVIEW_DELAY: u32 = 8;
-/// Category manager rows shown at once.
+/// The fewest category manager rows shown; more when they fit.
 const CATEGORY_ROWS: usize = 4;
 /// The category manager's rows before the categories: New category, New
 /// folder category.
@@ -808,8 +808,10 @@ impl Shelf {
         let t = self.t();
         if confirm {
             match &item {
-                None if row == 1 => self.open_folder_browser(host),
+                None if row == 1 => self.open_folder_browser(host, None),
                 None => self.open_keyboard(keyboard::Target::NewCategory, ""),
+                // A folder category: its folder, then its name.
+                Some(c) if c.folder.is_some() => self.open_folder_browser(host, Some((c.id.clone(), c.folder.clone().unwrap_or_default()))),
                 Some(c) if c.custom => self.open_keyboard(keyboard::Target::Category(c.id.clone()), &c.label.clone()),
                 Some(_) => self.set_category_note(t.builtin_keep_names),
             }
@@ -930,7 +932,11 @@ impl Shelf {
         }
         let t = self.t();
         let taken = self.library.all_categories().iter().any(|c| {
-            crate::i18n::category_label(t, c).to_lowercase() == text.to_lowercase() && !matches!(target, keyboard::Target::Category(id) if *id == c.id)
+            let own = match target {
+                keyboard::Target::Category(id) | keyboard::Target::FolderCategory { id: Some(id), .. } => *id == c.id,
+                _ => false,
+            };
+            crate::i18n::category_label(t, c).to_lowercase() == text.to_lowercase() && !own
         });
         if taken {
             self.set_category_note(t.name_taken);
@@ -938,11 +944,22 @@ impl Shelf {
         }
         let mut folders_changed = false;
         match target {
-            keyboard::Target::NewCategory | keyboard::Target::NewFolderCategory(_) => {
+            keyboard::Target::FolderCategory { id: Some(id), folder } => {
+                let folder = crate::library::roms::canonical(folder);
+                if let Some(c) = self.library.config.folders.iter_mut().find(|c| c.id == *id) {
+                    c.label = text.to_string();
+                    folders_changed = c.folder.as_deref() != Some(folder.as_str());
+                    c.folder = Some(folder);
+                }
+                host.write(crate::library::categories::ROM_FOLDERS_FILE, self.library.config.render_folders().as_bytes());
+                self.library.rebuild();
+                self.set_category_note("");
+            }
+            keyboard::Target::NewCategory | keyboard::Target::FolderCategory { id: None, .. } => {
                 let ids: Vec<String> = std::iter::once(SEARCH_ID.to_string()).chain(self.library.all_categories().iter().map(|c| c.id.clone())).collect();
                 let id = make_category_id(text, &|candidate| ids.iter().any(|i| i == candidate));
                 debug_assert!(valid_category_id(&id));
-                if let keyboard::Target::NewFolderCategory(folder) = target {
+                if let keyboard::Target::FolderCategory { folder, .. } = target {
                     self.library.config.folders.push(crate::library::categories::Category::folder(&id, text, folder));
                     folders_changed = true;
                 } else {
@@ -985,10 +1002,15 @@ impl Shelf {
         let slide = self.drawer.at(self.now);
         let mut drawer = Drawer::open(gfx, &theme, &upper(t.categories_row, self.settings.language), panel::Size::Wide, slide);
         let count = categories.len() + CATEGORY_FIXED;
-        let first = row.saturating_sub(CATEGORY_ROWS / 2).min(count.saturating_sub(CATEGORY_ROWS));
+        // As many rows as fit above a line of note and the two lines of
+        // hints, at the text size in use.
+        let note_h = gfx.line_height(crate::text::Role::Small) + 4.0;
+        let room = drawer.bottom - 80.0 - note_h - 8.0 - drawer.y;
+        let rows = ((room + 4.0) / (panel::ROW_H + 4.0)).floor().max(CATEGORY_ROWS as f32) as usize;
+        let first = row.saturating_sub(rows / 2).min(count.saturating_sub(rows));
         drawer.index = first;
         drawer.selectable = true;
-        for i in first..(first + CATEGORY_ROWS).min(count) {
+        for i in first..(first + rows).min(count) {
             if i == 0 {
                 drawer.row(gfx, t.new_category, None, Some(Button::Plus), i == row, Step::None);
             } else if i == 1 {
@@ -1011,7 +1033,8 @@ impl Shelf {
         };
         let confirm = Button::confirm(self.settings.confirm);
         let cancel = Button::cancel(self.settings.confirm);
-        let first_line = [(confirm, t.rename), (Button::Face(Symbol::Triangle), t.create), (Button::Face(Symbol::Square), t.remove)];
+        let on_folder = self.category_at(row).is_some_and(|c| c.folder.is_some());
+        let first_line = [(confirm, if on_folder { t.edit } else { t.rename }), (Button::Face(Symbol::Triangle), t.create), (Button::Face(Symbol::Square), t.remove)];
         let second_line = [(Button::Start, toggle), (Button::ShoulderLR, t.reorder), (cancel, t.back)];
         let bottom = drawer.bottom;
         chrome::hints(gfx, &theme, &second_line, drawer.x, bottom - 16.0);
