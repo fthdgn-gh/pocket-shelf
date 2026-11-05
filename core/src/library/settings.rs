@@ -213,8 +213,17 @@ impl KeyboardKind {
 }
 
 keyed!(
-    /// The app that starts a game both RetroArch and Emu4Vita++ can open.
-    Emulator { RetroArch = "retroarch", Emu4Vita = "emu4vita" }
+    /// An app that starts a game from its file: RetroArch and Emu4Vita++
+    /// with a core, and standalone emulators for one console or two
+    /// (`psgm:play?titleid=<id>&param=<path>`).
+    Emulator {
+        RetroArch = "retroarch",
+        Emu4Vita = "emu4vita",
+        DaedalusX64 = "daedalusx64",
+        DsVita = "dsvita",
+        NooDs = "noods",
+        Flycast = "flycast",
+    }
 );
 
 /// Which app starts a game, a setting of its own (`emulators.json`): the
@@ -235,13 +244,50 @@ impl Default for EmulatorChoice {
     }
 }
 
+/// The standalone emulators: the app, its title id, and the consoles it
+/// starts, as RetroArch's databases name them. Each reads the launch
+/// parameter as DaedalusX64 does (`Source/SysVita/main.cpp`): everything
+/// after `&param=`, undecoded, as the file to open.
+pub const STANDALONE: &[(Emulator, &str, &[&str])] = &[
+    (Emulator::DaedalusX64, "DEDALOX64", &["Nintendo - Nintendo 64"]),
+    (Emulator::DsVita, "DSVITA000", &["Nintendo - Nintendo DS"]),
+    (Emulator::NooDs, "NOODSVITA", &["Nintendo - Nintendo DS", "Nintendo - Game Boy Advance"]),
+    (Emulator::Flycast, "FLYCASTDC", &["Sega - Dreamcast"]),
+];
+
 impl Emulator {
+    /// The apps "Open games with" offers for every game: those that open
+    /// many consoles.
+    pub const FOR_ALL: &'static [Emulator] = &[Emulator::RetroArch, Emulator::Emu4Vita];
+
     /// The app's name, the same in every language.
     pub fn name(self) -> &'static str {
         match self {
             Emulator::RetroArch => "RetroArch",
             Emulator::Emu4Vita => "Emu4Vita++",
+            Emulator::DaedalusX64 => "DaedalusX64",
+            Emulator::DsVita => "DSVita",
+            Emulator::NooDs => "NooDS",
+            Emulator::Flycast => "Flycast",
         }
+    }
+
+    /// A standalone emulator's bit in [`Emulators::standalone`]; 0 for
+    /// RetroArch and Emu4Vita++.
+    ///
+    /// [`Emulators::standalone`]: crate::library::catalog::Emulators::standalone
+    pub fn bit(self) -> u8 {
+        STANDALONE.iter().position(|(app, _, _)| *app == self).map_or(0, |i| 1 << i)
+    }
+
+    /// A standalone emulator's title id.
+    pub fn title_id(self) -> Option<&'static str> {
+        STANDALONE.iter().find(|(app, _, _)| *app == self).map(|(_, id, _)| *id)
+    }
+
+    /// The standalone emulators that start a console's games.
+    pub fn standalone_for(console: &str) -> impl Iterator<Item = Emulator> + '_ {
+        STANDALONE.iter().filter(move |(_, _, consoles)| consoles.contains(&console)).map(|(app, _, _)| *app)
     }
 }
 
@@ -556,6 +602,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn standalone_emulators_open_their_consoles_and_are_picked_when_alone() {
+        use crate::library::catalog::Emulators;
+        let nds: Vec<Emulator> = Emulator::standalone_for("Nintendo - Nintendo DS").collect();
+        assert_eq!(nds, [Emulator::DsVita, Emulator::NooDs]);
+        assert_eq!(Emulator::standalone_for("Nintendo - Super Nintendo Entertainment System").count(), 0);
+        assert_eq!(Emulator::DaedalusX64.title_id(), Some("DEDALOX64"));
+        assert_eq!((Emulator::RetroArch.bit(), Emulator::DaedalusX64.bit(), Emulator::Flycast.bit()), (0, 1, 8));
+        // A DS game both DS emulators open: DSVita first, the user may
+        // choose; an N64 game only DaedalusX64 opens.
+        let ds = Emulators { standalone: Emulator::DsVita.bit() | Emulator::NooDs.bit(), ..Default::default() };
+        assert!(ds.several() && ds.any());
+        let choice = EmulatorChoice::default();
+        assert_eq!(choice.pick("ra1", ds), Some(Emulator::DsVita));
+        let n64 = Emulators { standalone: Emulator::DaedalusX64.bit(), ..Default::default() };
+        assert_eq!((choice.pick("ra2", n64), n64.several()), (Some(Emulator::DaedalusX64), false));
+        // A saved choice of an app the title no longer has falls back.
+        let mut chosen = EmulatorChoice::default();
+        chosen.titles.insert("ra1".into(), Emulator::NooDs);
+        assert_eq!(chosen.pick("ra1", ds), Some(Emulator::NooDs));
+        assert_eq!(chosen.pick("ra1", n64), Some(Emulator::DaedalusX64));
+        assert_eq!(EmulatorChoice::parse(chosen.render().as_bytes()), chosen);
+    }
+
+    #[test]
     fn cores_round_trip_per_title_and_app() {
         let mut choice = CoreChoice::default();
         choice.set("ra1", Emulator::RetroArch, Some("snes9x2010_libretro.self".into()));
@@ -591,9 +661,9 @@ mod tests {
         assert_eq!(parsed.titles.len(), 1);
         assert_eq!(EmulatorChoice::parse(b"nope"), EmulatorChoice::default());
 
-        let both = Emulators { retroarch: true, emu4vita: true };
-        let retroarch = Emulators { retroarch: true, emu4vita: false };
-        let emu4vita = Emulators { retroarch: false, emu4vita: true };
+        let both = Emulators { retroarch: true, emu4vita: true, ..Default::default() };
+        let retroarch = Emulators { retroarch: true, emu4vita: false, ..Default::default() };
+        let emu4vita = Emulators { retroarch: false, emu4vita: true, ..Default::default() };
         assert_eq!(choice.pick("ra0000001", both), Some(Emulator::Emu4Vita));
         assert_eq!(choice.pick("ra0000002", both), Some(Emulator::RetroArch));
         // A choice the game cannot follow falls to the app that can.

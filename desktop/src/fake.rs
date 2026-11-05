@@ -62,7 +62,7 @@ fn sample_titles() -> Vec<TitleInfo> {
             // PSP and PS1 games started through Adrenaline.
             adrenaline: matches!(id, "ULUS10041" | "SCUS94163"),
             console: (!console.is_empty()).then(|| console.into()),
-            opens: shelf_core::host::Emulators { retroarch: platform == "retro", emu4vita: false },
+            opens: shelf_core::host::Emulators { retroarch: platform == "retro", emu4vita: false, ..Default::default() },
             emu_favorite: false,
             // As `gamedb/known.tsv` would give them.
             details: fake_database(id),
@@ -540,7 +540,7 @@ impl FakeHost {
                 platform: "retro".into(),
                 adrenaline: false,
                 console: Some(consoles[n % consoles.len()].into()),
-                opens: shelf_core::host::Emulators { retroarch: true, emu4vita: false },
+                opens: shelf_core::host::Emulators { retroarch: true, emu4vita: false, ..Default::default() },
                 emu_favorite: false,
                 ..Default::default()
             });
@@ -562,8 +562,8 @@ impl FakeHost {
         use shelf_core::host::Emulators;
         let gba = "Nintendo - Game Boy Advance";
         for (id, title, opens, emu_favorite) in [
-            ("ra0gba001", "Wing Raider Advance (USA)", Emulators { retroarch: true, emu4vita: true }, false),
-            ("ra0gba002", "Pocket Garden (Europe)", Emulators { retroarch: false, emu4vita: true }, true),
+            ("ra0gba001", "Wing Raider Advance (USA)", Emulators { retroarch: true, emu4vita: true, ..Default::default() }, false),
+            ("ra0gba002", "Pocket Garden (Europe)", Emulators { retroarch: false, emu4vita: true, ..Default::default() }, true),
         ] {
             self.titles.push(TitleInfo {
                 id: id.into(),
@@ -684,6 +684,8 @@ impl FakeHost {
             ("Game Boy/Tiny Lighthouse (World).gb", "Nintendo - Game Boy"),
             ("Mega Drive/Harbor Blitz (USA).md", "Sega - Mega Drive - Genesis"),
             ("PS1/Quiet Orbit (Europe).cue", "Sony - PlayStation"),
+            ("DS/Paper Comet (USA).nds", "Nintendo - Nintendo DS"),
+            ("N64/Rally Moon (Europe).z64", "Nintendo - Nintendo 64"),
         ];
         for (n, folder) in self.rom_folders.iter().enumerate() {
             for (i, (file, console)) in games.iter().enumerate() {
@@ -693,7 +695,12 @@ impl FakeHost {
                     title: name.rsplit_once('.').map_or(name, |(stem, _)| stem).into(),
                     platform: "retro".into(),
                     console: Some((*console).into()),
-                    opens: shelf_core::host::Emulators { retroarch: true, emu4vita: false },
+                    // RetroArch, or the standalone emulators for DS and N64.
+                    opens: {
+                        use shelf_core::host::Emulator;
+                        let standalone = Emulator::standalone_for(console).fold(0, |bits, app| bits | app.bit());
+                        shelf_core::host::Emulators { retroarch: standalone == 0, emu4vita: false, standalone }
+                    },
                     path: Some(format!("{folder}/{file}")),
                     in_folder: true,
                     ..Default::default()
@@ -906,7 +913,7 @@ impl Host for FakeHost {
             "ux0:pictures/Box art" => Some(&["Gravity Daze.png", "Neon Drift.png", "Pixel Quest.png", "broken.png", "readme.txt"]),
             "ux0:pictures/Wallpapers" => Some(&["Aurora.png", "Coast.png", "Night city.png"]),
             "ux0:data" => Some(&["roms"]),
-            "ux0:data/roms" => Some(&["Game Boy", "Mega Drive", "PS1", "SNES", "readme.txt"]),
+            "ux0:data/roms" => Some(&["DS", "Game Boy", "Mega Drive", "N64", "PS1", "SNES", "readme.txt"]),
             "ux0:app" | "ux0:tai" | "ur0:" | "uma0:" => Some(&[]),
             _ => None,
         };

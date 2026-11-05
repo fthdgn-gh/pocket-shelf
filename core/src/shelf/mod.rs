@@ -878,7 +878,7 @@ impl Shelf {
             }
             Item::Emulator => {
                 use crate::library::settings::EMULATORS_FILE;
-                s.emulators.default = cycle_by(crate::library::settings::Emulator::ALL, s.emulators.default, delta);
+                s.emulators.default = cycle_by(crate::library::settings::Emulator::FOR_ALL, s.emulators.default, delta);
                 // Saved in a file of its own (`emulators.json`).
                 host.write(EMULATORS_FILE, s.emulators.render().as_bytes());
                 return;
@@ -2345,8 +2345,8 @@ mod tests {
         use crate::host::{Emulator, Emulators};
         use crate::library::settings::{EmulatorChoice, EMULATORS_FILE};
         let (mut shelf, mut host) = setup(true, PluginState::On);
-        let both = Emulators { retroarch: true, emu4vita: true };
-        let emu = Emulators { retroarch: false, emu4vita: true };
+        let both = Emulators { retroarch: true, emu4vita: true, ..Default::default() };
+        let emu = Emulators { retroarch: false, emu4vita: true, ..Default::default() };
         let game = |id: &str, opens: Emulators, emu_favorite: bool| TitleInfo {
             id: id.into(),
             title: format!("Game {id}"),
@@ -2413,7 +2413,7 @@ mod tests {
             title: "Star Knight".into(),
             platform: "retro".into(),
             console: Some("Nintendo - Super Nintendo Entertainment System".into()),
-            opens: Emulators { retroarch: true, emu4vita: true },
+            opens: Emulators { retroarch: true, emu4vita: true, ..Default::default() },
             ..Default::default()
         };
         shelf.set_titles(load_catalog(&[info]), true);
@@ -2566,7 +2566,7 @@ mod tests {
             title: format!("Game {id}"),
             platform: "retro".into(),
             console: Some(snes.into()),
-            opens: Emulators { retroarch: true, emu4vita: false },
+            opens: Emulators { retroarch: true, emu4vita: false, ..Default::default() },
             path: Some(path.into()),
             in_folder,
             ..Default::default()

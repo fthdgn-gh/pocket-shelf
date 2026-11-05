@@ -5,8 +5,10 @@
 //!
 //! RetroArch gets the console's recommended core when it is installed,
 //! else a core whose info file names the console, else one Emu4Vita++ runs
-//! the console with; Emu4Vita++ gets its own preferred core. A file neither
-//! app can start, or one a playlist lists already, is left out.
+//! the console with; Emu4Vita++ gets its own preferred core. A standalone
+//! emulator installed for the console (DaedalusX64, DSVita, NooDS, Flycast)
+//! starts it too. A file no installed app can start, or one a playlist
+//! lists already, is left out.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -92,7 +94,14 @@ fn retroarch_core(cores: &[retroarch::CoreInfo], console: &str) -> Option<String
 /// files whose path key is in `known` (a playlist lists them) and ids in
 /// `ids`. `step` is called once per folder read. Returns the games and a
 /// report for the diagnostics screen.
-pub fn games(folders: &[String], known: &HashSet<String>, ids: &mut HashSet<String>, emu: Option<&emu4vita::Install>, step: &mut dyn FnMut()) -> (Vec<Game>, String) {
+pub fn games(
+    folders: &[String],
+    known: &HashSet<String>,
+    ids: &mut HashSet<String>,
+    emu: Option<&emu4vita::Install>,
+    standalone: u8,
+    step: &mut dyn FnMut(),
+) -> (Vec<Game>, String) {
     let roots = retroarch::Roots::vita();
     let retroarch = roots.installed();
     let cores = if retroarch { retroarch::installed_cores(&roots) } else { Vec::new() };
@@ -124,7 +133,10 @@ pub fn games(folders: &[String], known: &HashSet<String>, ids: &mut HashSet<Stri
                 .filter(|c| !c.is_empty() && !rom.path.contains('&') && retroarch::launch_uri(c, &rom.path).len() <= retroarch::URI_MAX)
                 .unwrap_or_default();
             let emu_core = Some(emu_core).filter(|c| !c.is_empty() && emu4vita::launch_uri(c, &rom.path).len() <= emu4vita::URI_MAX).unwrap_or_default();
-            if (core.is_empty() && emu_core.is_empty()) || rom.path.contains(['\t', '\n', '\r']) {
+            // A standalone emulator installed for the console starts it
+            // too (`installed::standalone_for`).
+            let other = super::installed::standalone_for(rom.console, standalone, &rom.path) != 0;
+            if (core.is_empty() && emu_core.is_empty() && !other) || rom.path.contains(['\t', '\n', '\r']) {
                 no_app += 1;
                 continue;
             }

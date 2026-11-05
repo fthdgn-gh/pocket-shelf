@@ -358,7 +358,7 @@ fn add_folder_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4v
     let known: std::collections::HashSet<String> =
         titles.iter().filter_map(|item| item.retro.as_ref()).map(|retro| shelf_core::library::roms::path_key(&retro.path)).collect();
     let mut ids: std::collections::HashSet<String> = titles.iter().map(|item| item.title_id.clone()).collect();
-    let (games, report) = crate::platform::folders::games(&folders, &known, &mut ids, emu, &mut scan_step);
+    let (games, report) = crate::platform::folders::games(&folders, &known, &mut ids, emu, standalone_installed(), &mut scan_step);
     unsafe {
         FOLDER_REPORT = report;
     }
@@ -576,7 +576,9 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
             "adrenaline" => (true, path, None),
             "retroarch" | "folder" => {
                 let path = path?;
-                if console.is_empty() || (core.is_empty() && emu.is_empty()) {
+                // A folder game may have neither core: a standalone
+                // emulator starts it.
+                if console.is_empty() || (launch == "retroarch" && core.is_empty() && emu.is_empty()) {
                     return None;
                 }
                 let retro = Retro {
@@ -899,6 +901,7 @@ pub unsafe fn classic_files(title_id: &str) -> Option<crate::platform::pspemu::F
 
 /// The listed titles as the app sees them, in scan order.
 pub unsafe fn infos() -> Vec<shelf_core::host::TitleInfo> {
+    let installed = standalone_installed();
     titles()
         .iter()
         .map(|item| shelf_core::host::TitleInfo {
@@ -910,6 +913,7 @@ pub unsafe fn infos() -> Vec<shelf_core::host::TitleInfo> {
             opens: item.retro.as_ref().map_or_else(Default::default, |retro| shelf_core::host::Emulators {
                 retroarch: !retro.core.is_empty(),
                 emu4vita: !retro.emu.is_empty(),
+                standalone: standalone_for(&retro.console, installed, &retro.path),
             }),
             emu_favorite: item.retro.as_ref().is_some_and(|retro| retro.favourite),
             details: None,
@@ -1018,6 +1022,17 @@ pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>, c
                 let core = retroarch_core(core).unwrap_or_else(|| retro.core.clone());
                 (crate::platform::retroarch::launch_uri(&core, &retro.path), LAUNCH_FLAGS, true)
             }
+            Some(app) if app.title_id().is_some() => {
+                // A standalone emulator for the console, while installed.
+                let Some(id) = app.title_id() else { return false };
+                // One stat: the launch runs in a frame.
+                let here = fs::metadata(format!("{APP_ROOT}/{id}/eboot.bin")).is_ok_and(|m| m.is_file());
+                if !here || standalone_for(&retro.console, app.bit(), &retro.path) == 0 {
+                    return false;
+                }
+                close = standalone_name(app);
+                (standalone_uri(id, &retro.path), LAUNCH_FLAGS, true)
+            }
             Some(Emulator::Emu4Vita) if !retro.emu.is_empty() => {
                 let roots = crate::platform::emu4vita::Roots::vita();
                 if !roots.installed() {
@@ -1053,6 +1068,43 @@ pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>, c
     };
     LAUNCHED = Some(Launch { uri, flags, repeat, adrenaline, close });
     true
+}
+
+/// The standalone emulators installed (`ux0:/app/<title id>/eboot.bin`),
+/// one bit each (`Emulator::bit`). Four stats, at each title list.
+pub fn standalone_installed() -> u8 {
+    shelf_core::library::settings::STANDALONE
+        .iter()
+        .filter(|(_, id, _)| fs::metadata(format!("{APP_ROOT}/{id}/eboot.bin")).is_ok_and(|m| m.is_file()))
+        .fold(0, |bits, (app, _, _)| bits | app.bit())
+}
+
+/// The installed standalone emulators that start a console's game at
+/// `path`: its URI must fit `retroarch::URI_MAX`.
+pub fn standalone_for(console: &str, installed: u8, path: &str) -> u8 {
+    shelf_core::library::settings::Emulator::standalone_for(console)
+        .filter(|app| installed & app.bit() != 0)
+        .filter(|app| app.title_id().is_some_and(|id| standalone_uri(id, path).len() <= crate::platform::retroarch::URI_MAX))
+        .fold(0, |bits, app| bits | app.bit())
+}
+
+/// The URI that starts `path` in a standalone emulator: `&param=` last and
+/// the path as it is, since the emulator takes the rest of the parameter as
+/// the path without decoding it.
+fn standalone_uri(title_id: &str, path: &str) -> String {
+    format!("psgm:play?titleid={title_id}&param={path}")
+}
+
+/// A standalone emulator's title id as `close_app` takes it.
+fn standalone_name(app: shelf_core::host::Emulator) -> Option<&'static core::ffi::CStr> {
+    use shelf_core::host::Emulator;
+    match app {
+        Emulator::DaedalusX64 => Some(c"DEDALOX64"),
+        Emulator::DsVita => Some(c"DSVITA000"),
+        Emulator::NooDs => Some(c"NOODSVITA"),
+        Emulator::Flycast => Some(c"FLYCASTDC"),
+        _ => None,
+    }
 }
 
 /// Start `title_id` after the current frame, as `launch` does, for an app

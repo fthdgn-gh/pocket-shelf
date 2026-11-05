@@ -71,6 +71,7 @@ pub fn recommended(app: Emulator, console: &str) -> Option<&'static str> {
     let table = match app {
         Emulator::RetroArch => RETROARCH,
         Emulator::Emu4Vita => EMU4VITA,
+        _ => return None,
     };
     table.iter().find(|(c, _)| *c == console).map(|(_, core)| *core)
 }

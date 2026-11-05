@@ -35,12 +35,12 @@ pub(super) enum Row {
     Reset,
 }
 
-/// The rows for a title: Open with only when both apps can start it, Core
+/// The rows for a title: Open with only when several apps can start it, Core
 /// only when the app that opens it has more than one core for it.
 pub(super) fn editor_rows(game: &crate::library::catalog::Game, cores: bool) -> Vec<Row> {
     use Row::*;
     let mut rows = vec![Favorite, Category, OpenWith, Core, Title, BoxArt, Backdrop, FindArt, Reset];
-    if !game.opens.both() {
+    if !game.opens.several() {
         rows.retain(|row| *row != OpenWith);
     }
     if !cores {
@@ -285,12 +285,12 @@ impl Shelf {
         }
     }
 
-    /// The edited title's app: the menu's choice, RetroArch, Emu4Vita++.
-    /// Saved in `emulators.json`.
+    /// The edited title's app: the menu's choice, then each app that can
+    /// start it. Saved in `emulators.json`.
     fn change_open_with(&mut self, host: &mut dyn Host, delta: i32) {
-        use crate::library::settings::{Emulator, EMULATORS_FILE};
+        use crate::library::settings::EMULATORS_FILE;
         let Some(game) = self.editor_game() else { return };
-        let choices = [None, Some(Emulator::RetroArch), Some(Emulator::Emu4Vita)];
+        let choices: Vec<_> = std::iter::once(None).chain(game.opens.apps().into_iter().map(Some)).collect();
         let titles = &mut self.settings.emulators.titles;
         let now = titles.get(&*game.id).copied();
         match super::cycle_by(&choices, now, delta) {

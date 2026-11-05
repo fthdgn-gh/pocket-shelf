@@ -215,6 +215,26 @@ Emu4Vita++ has it, else with Emu4Vita++'s preferred core for the console.
 - The core-only VPKs in Emu4Vita++'s `StandAlones.7z` cannot be started with a
   game and are not used.
 
+### Standalone emulators
+
+Games in [folder categories](#folder-categories) can also start in these
+emulators, when installed:
+
+| Emulator | Title id | Games |
+|---|---|---|
+| [DaedalusX64](https://github.com/Rinnegatamante/DaedalusX64-vitaGL) | `DEDALOX64` | Nintendo 64 |
+| [DSVita](https://github.com/Grarak/DSVita) | `DSVITA000` | Nintendo DS |
+| [NooDS](https://github.com/Hydr8gon/NooDS) | `NOODSVITA` | Nintendo DS, Game Boy Advance |
+| [Flycast](https://github.com/Rinnegatamante/flycast-vita) | `FLYCASTDC` | Dreamcast |
+
+Pocket Shelf starts the emulator with the game's file, as each one's own
+launcher does (`psgm:play?titleid=<id>&param=<file>`), so it opens the game
+without its file browser. A game only one of them opens starts there; when
+several apps open it (DSVita and NooDS, or RetroArch and NooDS for GBA),
+the editor's **Open with** chooses, the first one listed by default.
+SELECT ▸ Games ▸ Open games with stays a choice between RetroArch and
+Emu4Vita++. Install or remove one, then use SELECT ▸ Rescan this tab on the folder's tab: a game no other app opens is listed once its emulator is there.
+
 ### Folder categories
 
 SELECT ▸ Games ▸ Categories ▸ **New folder category** makes a tab of the
@@ -247,8 +267,9 @@ Each file's console is found from:
 
 The tracks a `.cue`, `.gdi` or `.m3u` names are not listed on their own. A
 game starts in RetroArch with the console's recommended core when it is
-installed (else another core for the console), or in Emu4Vita++; Open with
-and Core in its editor work as for playlist games. A file neither app can
+installed (else another core for the console), in Emu4Vita++, or in a
+[standalone emulator](#standalone-emulators) for its console; Open with and
+Core in its editor work as for playlist games. A file no installed app can
 start is left out. **The tab lists the games the folder adds:** a file a
 playlist already lists is not opened and stays in its console's tab only. Diagnostics reports how many files
 each reading found, left out, or could not place.

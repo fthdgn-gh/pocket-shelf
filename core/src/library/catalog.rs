@@ -12,26 +12,45 @@ pub const TINT_COUNT: usize = 6;
 /// The tints as `0xRRGGBB`, for a title whose icon gives no color.
 pub const TINT_COLORS: [u32; TINT_COUNT] = [0xf59e0b, 0x10b981, 0x3b82f6, 0x8b5cf6, 0xec4899, 0x06b6d4];
 
-/// The apps that can start a game from a playlist or Emu4Vita++'s
-/// favourites; neither for an installed title.
+/// The apps that can start a game from a playlist, Emu4Vita++'s
+/// favourites or a folder category's folder; none for an installed title.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Emulators {
     pub retroarch: bool,
     pub emu4vita: bool,
+    /// The standalone emulators installed for its console, one bit each
+    /// ([`Emulator::bit`]).
+    ///
+    /// [`Emulator::bit`]: crate::library::settings::Emulator::bit
+    pub standalone: u8,
 }
 
 impl Emulators {
     pub fn has(self, app: crate::library::settings::Emulator) -> bool {
+        use crate::library::settings::Emulator;
         match app {
-            crate::library::settings::Emulator::RetroArch => self.retroarch,
-            crate::library::settings::Emulator::Emu4Vita => self.emu4vita,
+            Emulator::RetroArch => self.retroarch,
+            Emulator::Emu4Vita => self.emu4vita,
+            _ => self.standalone & app.bit() != 0,
         }
     }
 
-    /// Both apps can start it, so the user chooses (the editor's "Open
-    /// with").
-    pub fn both(self) -> bool {
-        self.retroarch && self.emu4vita
+    /// The apps that can start it, in [`Emulator::ALL`]'s order.
+    ///
+    /// [`Emulator::ALL`]: crate::library::settings::Emulator::ALL
+    pub fn apps(self) -> Vec<crate::library::settings::Emulator> {
+        crate::library::settings::Emulator::ALL.iter().copied().filter(|app| self.has(*app)).collect()
+    }
+
+    /// More than one app can start it, so the user chooses (the editor's
+    /// "Open with").
+    pub fn several(self) -> bool {
+        self.apps().len() > 1
+    }
+
+    /// Any app can start it.
+    pub fn any(self) -> bool {
+        self.retroarch || self.emu4vita || self.standalone != 0
     }
 }
 
@@ -105,14 +124,14 @@ impl Game {
 
 impl Game {
     /// The id the "Detailed" views show: "RetroArch" for a RetroArch game,
-    /// whose id is a hash; "Emu4Vita++" for one only Emu4Vita++ opens.
+    /// whose id is a hash; the app's name for one only another app opens.
     pub fn shown_id(&self) -> &str {
         if self.console.is_none() {
             &self.id
-        } else if self.opens.emu4vita && !self.opens.retroarch {
-            crate::library::settings::Emulator::Emu4Vita.name()
-        } else {
+        } else if self.opens.retroarch {
             Platform::Retro.genre()
+        } else {
+            self.opens.apps().first().map_or(Platform::Retro.genre(), |app| app.name())
         }
     }
 

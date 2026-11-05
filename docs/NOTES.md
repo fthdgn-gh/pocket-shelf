@@ -502,6 +502,22 @@ stick at each launch when it differs.
   20,000 games per reading; a zip64 or `.7z`/`.chd` goes by its folders.
   **Not yet run on hardware**: walking times on the card, and launches of
   folder games.
+- **Standalone emulators** (2026-11-06): `settings::STANDALONE` lists
+  DaedalusX64 `DEDALOX64` (N64), DSVita `DSVITA000` (DS), NooDS `NOODSVITA`
+  (DS, GBA) and Flycast `FLYCASTDC` (Dreamcast). Each was checked in its
+  source to read `sceAppMgrGetAppParam` and take everything after
+  `&param=` as the file (DaedalusX64 `Source/SysVita/main.cpp`, and its
+  launcher sends that URI; DSVita `src/presenter/vita.rs`; NooDS
+  `src/ui/console/main_vita.cpp`; Flycast `core/linux-dist/main.cpp`), so
+  `installed::standalone_uri` puts `&param=` last, path undecoded.
+  `Emulators::standalone` is a bit per app, worked out in `infos()` from
+  the installed apps (`ux0:/app/<id>/eboot.bin`, four stats per list) and
+  the console, so installing one needs no scan; a folder game with no
+  RetroArch or Emu4Vita++ core is kept when one is installed (a `folder`
+  line with both core columns empty). Playlist entries without a core are
+  still left out. Open with lists every app that opens the game; Open games
+  with stays RetroArch/Emu4Vita++ (`Emulator::FOR_ALL`). **Not yet run on
+  hardware**: none of the four launches.
 - **Rescan this tab** (SELECT, above Language, 2026-11-06): `Host::rescan_some`
   with the scan phases that fill the tab (`Shelf::tab_sources`);
   `installed::rescan` keeps the saved list's other titles (`Parts::holds`:

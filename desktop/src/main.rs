@@ -230,6 +230,9 @@ const SHOTS: &[Shot] = &[
     Shot { name: "139-categories-folder-edit", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (0, 6), (0, SETTLE)], setup: rom_folder },
     // SELECT ▸ Rescan this tab on a folder category's tab, running.
     Shot { name: "140-menu-rescan-tab", script: &[(0, 4), (SELECT, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (RIGHT, TAP), (0, TAP)], setup: rom_folder },
+    // A folder's DS game: DSVita and NooDS both open it, so Open with
+    // offers them (NooDS chosen).
+    Shot { name: "141-editor-open-with-standalone", script: &[(0, 4), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (TRIANGLE, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (0, SETTLE)], setup: rom_folder },
     Shot { name: "215-larger-german-folder", script: &[(0, 4), (SELECT, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (DOWN, TAP), (0, TAP), (RIGHT, TAP), (0, TAP), (CIRCLE, TAP), (0, TAP), (UP, TAP), (0, TAP), (UP, TAP), (0, TAP), (SELECT, TAP), (0, TAP)], setup: larger_german_folder },
     // Rescan titles (Library, fourth row) before, during and after its
     // scan; Diagnostics (last row of the main page).
