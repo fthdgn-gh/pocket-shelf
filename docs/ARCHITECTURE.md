@@ -84,8 +84,9 @@ those with a round-trip test (`settings.json`, `categories.json`,
 `recent.json`, `titles.cache.json`, `titles/<id>.json`), `status-bar.json`,
 `text-size.json`, `emulators.json`, `game-info.json`, `sort.json`, `plays.json`, `steamgriddb.txt`, `update.json` and `update/version.txt` (`writable` in
 `vita/host.rs`), pictures in `art/` and `backdrops/`, downloads to
-`libretro/`, `gamedb/` and `update/`, and `gamedb/crcs.tsv` and
-`gamedb/known.tsv` (written by the thread that identifies titles); it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
+`libretro/`, `gamedb/`, `wikidata/` and `update/`, and `gamedb/crcs.tsv`,
+`gamedb/known.tsv` and `wikidata/found.tsv` (written by the threads that
+identify and match titles); it deletes only `titles/<id>.json` and pictures. **Writes run on a file thread, in
 order** (`FileOp` in `vita/host.rs`): on hardware a `settings.json` write
 in the frame took 24–30 ms, so every view change was a missed refresh.
 `Host::flush` waits for them before a launch ends the process. **The log**
@@ -259,7 +260,11 @@ sorted by that rank. Search and Last Played keep their own order.
 **The game database** (`online/gamedb.rs`, `shelf/database.rs`): each
 title's details come with the title list (`TitleInfo::details`, from
 `gamedb/known.tsv` on the host's thread) or from `Event::Identified`
-(`Library::set_details`, one rebuild for a database's results). The
+(`Library::set_details`, one rebuild for a database's results). Wikidata's
+game for a title comes the same way (`TitleInfo::wiki` from
+`wikidata/found.tsv`, `Host::match_wikidata`, `Event::WikidataMatched`,
+`Library::set_wiki`); the panel takes a field from libretro's details
+first, from Wikidata's game when libretro's is empty. The
 details panel (Appearance ▸ Game details) is drawn by the views
 (`views.rs`): a column of symbol and text rows right of the title in Home
 and the Cascade, one centered row under the title in the Carousel and the

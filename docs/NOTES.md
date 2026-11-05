@@ -287,7 +287,8 @@ stick at each launch when it differs.
   the scan thread with the title list. At each start, after the dates, the
   titles new since the last run are identified for each table on the card
   (no network). SELECT ▸ Library ▸ Game database downloads every table
-  over a week old and identifies every title, a database at a time.
+  over a week old and identifies every title, a database at a time, each
+  followed by its Wikidata table.
   Fetch artwork matches the database name before the label; Find artwork
   searches it. **Coverage** of regular releases (2026-11-04): year 58% on
   NES, 82–89% on SNES, Mega Drive, Game Boy and PS1; genre, developer and
@@ -340,8 +341,31 @@ stick at each launch when it differs.
   Taz` is *Taz in Escape from Mars*) and European and Japanese games
   Wikidata lacks. Of Wikidata's own games, libretro's regular names reach
   1,040 of 1,211 on the NES, 1,108 of 1,427 on the SNES, 1,859 of 2,239 on
-  the PlayStation. **Not in the app yet**: the Vita does not download these
-  tables.
+  the PlayStation.
+- **Wikidata's details in the app** (`shelf/database.rs`,
+  `vita/src/platform/wikidata.rs`): the Game database run reads the
+  release's `index.tsv` once, then goes console by console: libretro's
+  database identifies the titles, then the console's Wikidata table is
+  matched; Vita titles (ids `PCSA`–`PCSH`, `VCAS`/`VLJM` forms; no
+  homebrew, no system apps) have the Wikidata step only, last. A table is
+  downloaded to `wikidata/<file>.tsv` when the card's was built before the
+  release's, with `wikidata/labels.tsv` once a run; a download that does
+  not read as a table is not written. A title is looked up by the database
+  name libretro gave it, then its own name, and of several games with the
+  name the one released in libretro's year. **What each title was found to
+  be is kept in `wikidata/found.tsv`** (id, table, the table's build time,
+  the game's line without its aliases; a miss is looked up again in a newer
+  table only), read with `known.tsv` before the title list, and at each
+  start the new titles are matched in the tables on the card (no network).
+  The details panel takes each field from libretro first, Wikidata second:
+  year, the first genre in the app's language, developers, publishers, and
+  players from the modes (Multiplayer for a multiplayer or co-op mode, 1
+  player for single-player only); region is libretro's only. On the Mac
+  the PlayStation table (2,239 games) parses in 7 ms and matches in 4 ms,
+  about 350 and 200 ms on the Vita's worker thread by the usual ratio.
+  **Not yet confirmed on hardware**: the downloads from the release (a
+  redirect to GitHub's file host), how many of the user's Vita titles
+  match, and the start's read of `found.tsv` (its time is in the log).
 - **The scraper is the user's choice** (`scraper` in `settings.json`): Auto
   (libretro for RetroArch games, SteamGridDB for the rest), SteamGridDB, or
   libretro.

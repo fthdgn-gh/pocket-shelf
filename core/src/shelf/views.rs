@@ -132,40 +132,75 @@ impl Shelf {
     }
 
     /// Whether the selected title's details panel shows: the setting is on,
-    /// the view shows text, and the game database knows the title.
+    /// the view shows text, and the game database or Wikidata knows the
+    /// title.
     fn details_shown(&self, game: &Game) -> bool {
-        self.settings.game_info.details && self.settings.detail != DetailLevel::Basic && game.details.is_some()
+        self.settings.game_info.details && self.settings.detail != DetailLevel::Basic && (game.details.is_some() || game.wiki.is_some())
+    }
+
+    /// The genre libretro's database gives, else Wikidata's first in the
+    /// app's language.
+    fn genre_of(&self, game: &Game) -> Option<String> {
+        match game.details.as_deref().filter(|d| !d.genre.is_empty()) {
+            Some(d) => Some(d.genre.clone()),
+            None => {
+                let language = crate::i18n::LANGUAGES.iter().position(|(l, _)| *l == self.settings.language).unwrap_or(0);
+                game.wiki.as_ref()?.genre(language)
+            }
+        }
     }
 
     /// The release year and genre for a details line, when the panel does
     /// not show them.
     fn line_details(&self, game: &Game) -> Vec<String> {
-        let Some(d) = game.details.as_deref().filter(|_| !self.details_shown(game)) else { return Vec::new() };
-        let year = (d.year > 0).then(|| d.year.to_string());
-        let genre = (!d.genre.is_empty()).then(|| d.genre.clone());
-        year.into_iter().chain(genre).collect()
+        if (game.details.is_none() && game.wiki.is_none()) || self.details_shown(game) {
+            return Vec::new();
+        }
+        let year = game.year();
+        let year = (year > 0).then(|| year.to_string());
+        year.into_iter().chain(self.genre_of(game)).collect()
     }
 
     /// The panel's items, each with its icon: year, genre, developer, the
     /// publisher when another company (with `publisher`), players, region.
+    /// Each is libretro's database's, else Wikidata's.
     fn detail_items(&self, game: &Game, publisher: bool) -> Vec<(Icon, String)> {
-        let Some(d) = game.details.as_deref() else { return Vec::new() };
+        if game.details.is_none() && game.wiki.is_none() {
+            return Vec::new();
+        }
+        let empty = crate::online::gamedb::Details::default();
+        let d = game.details.as_deref().unwrap_or(&empty);
+        let wiki = game.wiki.as_deref().map(|w| &w.game);
+        let either = |own: &str, other: fn(&crate::online::wikidata::Game) -> &[String]| {
+            if own.is_empty() {
+                wiki.map_or(String::new(), |w| other(w).join(", "))
+            } else {
+                own.to_string()
+            }
+        };
+        let developer = either(&d.developer, |w| &w.developers);
+        let publisher_name = either(&d.publisher, |w| &w.publishers);
         let t = self.t();
         let mut items = Vec::new();
-        if d.year > 0 {
-            items.push((Icon::Calendar, d.year.to_string()));
+        let year = game.year();
+        if year > 0 {
+            items.push((Icon::Calendar, year.to_string()));
         }
-        if !d.genre.is_empty() {
-            items.push((Icon::Genre, d.genre.clone()));
+        if let Some(genre) = self.genre_of(game) {
+            items.push((Icon::Genre, genre));
         }
-        if !d.developer.is_empty() {
-            items.push((Icon::Developer, d.developer.clone()));
+        if !developer.is_empty() {
+            items.push((Icon::Developer, developer.clone()));
         }
-        if publisher && !d.publisher.is_empty() && d.publisher != d.developer {
-            items.push((Icon::Publisher, d.publisher.clone()));
+        if publisher && !publisher_name.is_empty() && publisher_name != developer {
+            items.push((Icon::Publisher, publisher_name));
         }
-        if d.players > 0 {
-            let text = if d.players == 1 { t.players_one.to_string() } else { crate::i18n::fill(t.players_many, &[("count", &d.players.to_string())]) };
+        let players = match d.players {
+            0 => game.wiki.as_ref().and_then(|w| w.multiplayer()).map(|multi| if multi { t.players_multi.to_string() } else { t.players_one.to_string() }),
+            1 => Some(t.players_one.to_string()),
+            n => Some(crate::i18n::fill(t.players_many, &[("count", &n.to_string())])),
+        };
+        if let Some(text) = players {
             items.push((Icon::Players, text));
         }
         if !d.region.is_empty() {

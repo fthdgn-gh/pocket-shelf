@@ -71,6 +71,9 @@ pub struct Game {
     /// out once: a rebuild that made them for every title took 1.8 ms more
     /// on the desktop, about 100 ms on the Vita.
     pub db_names: Option<(Arc<str>, Arc<str>)>,
+    /// Its game in Wikidata's tables, for the details libretro's database
+    /// leaves out (and for Vita titles, which it does not list).
+    pub wiki: Option<Arc<crate::online::wikidata::Found>>,
 }
 
 impl Game {
@@ -81,6 +84,15 @@ impl Game {
             .filter(|d| !d.name.is_empty())
             .map(|d| (Arc::from(d.name.as_str()), Arc::from(crate::online::gamedb::short_name(&d.name))));
         self.details = details;
+    }
+
+    /// The release year libretro's database gives, else Wikidata's; 0 when
+    /// neither knows it.
+    pub fn year(&self) -> u16 {
+        match self.details.as_deref().map_or(0, |d| d.year) {
+            0 => self.wiki.as_ref().map_or(0, |w| w.game.year),
+            year => year,
+        }
     }
 }
 
@@ -213,6 +225,7 @@ pub fn load_catalog(infos: &[TitleInfo]) -> Vec<Game> {
                 backdrop: None,
                 details: None,
                 db_names: None,
+                wiki: info.wiki.clone(),
             };
             game.with_details(info.details.clone().map(Arc::new));
             game

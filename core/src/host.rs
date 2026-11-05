@@ -45,6 +45,8 @@ pub struct TitleInfo {
     pub emu_favorite: bool,
     /// What the game database says about it (`gamedb/known.tsv`).
     pub details: Option<crate::online::gamedb::Details>,
+    /// Its game in Wikidata's tables (`wikidata/found.tsv`).
+    pub wiki: Option<std::sync::Arc<crate::online::wikidata::Found>>,
 }
 
 /// An RGBA picture.
@@ -228,6 +230,11 @@ pub enum Event {
     /// details)`; `None` when there is no table built after the time asked
     /// for. The host has saved them to `gamedb/known.tsv` already.
     Identified(String, Option<Vec<(String, crate::online::gamedb::Details)>>),
+    /// A table's titles matched to Wikidata's games ([`Host::match_wikidata`]),
+    /// `(title id, game)`; `None` when the table or the labels are missing,
+    /// or the table was built before the time asked for. The host has saved
+    /// them to `wikidata/found.tsv` already.
+    WikidataMatched(String, Option<Vec<(String, std::sync::Arc<crate::online::wikidata::Found>)>>),
 }
 
 /// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP
@@ -389,6 +396,14 @@ pub trait Host {
     /// Stop a running [`identify`](Host::identify); it answers with what it
     /// found so far.
     fn identify_stop(&mut self) {}
+    /// Match the titles of a Wikidata table, `wikidata/<file>.tsv`
+    /// ([`wikidata`](crate::online::wikidata)), to its games by name off
+    /// the frame. Answered with [`Event::WikidataMatched`]; a table built
+    /// before `newer_than_ms`, or missing labels, count as missing. False
+    /// when this host cannot.
+    fn match_wikidata(&mut self, _file: &str, _newer_than_ms: u64) -> bool {
+        false
+    }
 
     /// What the last title scan found, as `Label=value` pairs separated by
     /// commas (PSM, PSP and PS1, disc images, RetroArch); "" when this start

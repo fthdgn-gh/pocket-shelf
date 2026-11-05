@@ -186,6 +186,11 @@ impl App {
                         shelf.identified(host, &database, names);
                     }
                 }
+                Event::WikidataMatched(file, found) => {
+                    if let Some(shelf) = &mut self.shelf {
+                        shelf.wikidata_matched(host, &file, found);
+                    }
+                }
             }
         }
         self.events = events;

@@ -83,6 +83,10 @@ enum Kind {
     /// A game database (`.rdb`, libretro-database): read in memory and
     /// written as its table (`gamedb::table_from_rdb`).
     Database,
+    /// A Wikidata table or the labels (`wikidata/`, the `gamedb-data`
+    /// release): read in memory and written once it reads as one, so an
+    /// error page never replaces a good file.
+    Wikidata,
 }
 
 enum Outcome {
@@ -121,7 +125,8 @@ fn tls_config() -> Option<Arc<ClientConfig>> {
 
 /// A file a download may be written to: `art/<name>.png` or
 /// `backdrops/<name>.png` with a plain file name, `libretro/<name>.txt` for a
-/// listing's names, `gamedb/<name>.tsv` for a database's table, or
+/// listing's names, `gamedb/<name>.tsv` for a database's table,
+/// `wikidata/<name>.tsv` for a Wikidata table or the labels, or
 /// `UPDATE_VPK`.
 fn valid_dest(path: &str) -> bool {
     if path == UPDATE_VPK {
@@ -132,10 +137,10 @@ fn valid_dest(path: &str) -> bool {
     };
     let extension = match dir {
         "libretro" => ".txt",
-        "gamedb" => ".tsv",
+        "gamedb" | "wikidata" => ".tsv",
         _ => ".png",
     };
-    (dir == "art" || dir == "backdrops" || dir == "libretro" || dir == "gamedb")
+    (dir == "art" || dir == "backdrops" || dir == "libretro" || dir == "gamedb" || dir == "wikidata")
         && name.len() >= 5
         && name.len() <= 64
         && !name.starts_with('.')
@@ -206,6 +211,7 @@ fn start_kind(url: &str, auth: &str, dest: Option<&str>, icon: bool, bytes: bool
         Some(UPDATE_VPK) => Kind::Package,
         Some(path) if path.starts_with("libretro/") => Kind::Index,
         Some(path) if path.starts_with("gamedb/") => Kind::Database,
+        Some(path) if path.starts_with("wikidata/") => Kind::Wikidata,
         Some(path) if icon && path.starts_with("art/") => Kind::Icon,
         Some(_) => Kind::File,
     };
@@ -374,11 +380,11 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &
         (None, _) | (_, Kind::Text) | (_, Kind::Bytes) => TEXT_MAX,
         (Some(_), Kind::File | Kind::Icon) => FILE_MAX,
         (Some(_), Kind::Package) => VPK_MAX,
-        (Some(_), Kind::Index | Kind::Database) => INDEX_MAX,
+        (Some(_), Kind::Index | Kind::Database | Kind::Wikidata) => INDEX_MAX,
     };
-    // A listing page and a database are read in memory; everything else
+    // A listing page and the tables are read in memory; everything else
     // saved goes to a file.
-    let in_memory = matches!(kind, Kind::Index | Kind::Database);
+    let in_memory = matches!(kind, Kind::Index | Kind::Database | Kind::Wikidata);
     // The whole reply at once: a growing buffer copies itself at each
     // doubling (a 7.7 MB database would briefly hold 24 MB).
     if let (true, Some(_), Some(length)) = (in_memory, saving, response.length.filter(|length| *length <= limit)) {
@@ -477,6 +483,18 @@ fn run(id: i32, url: &str, auth: &str, dest: Option<&str>, kind: Kind, cancel: &
         let table = shelf_core::online::gamedb::table_from_rdb(&body, now).map_err(String::from)?;
         crate::host::log_line(&format!("gamedb: {} KB database as a {} KB table in {} ms", body.len() / 1024, table.len() / 1024, (crate::host::now_us() - started) / 1000));
         write_atomic(path, table.as_bytes())?;
+    }
+    if let (Kind::Wikidata, Some(path)) = (kind, saving) {
+        let body = with_slot(id, |slot| core::mem::take(&mut slot.body)).unwrap_or_default();
+        let text = String::from_utf8_lossy(&body);
+        let first = text.split('\n').next().unwrap_or("");
+        let table = shelf_core::online::wikidata::table_built(first).is_some();
+        // The labels have no first line of their own: an item and five names.
+        let labels = path == shelf_core::online::wikidata::LABELS_PATH && first.starts_with('Q') && first.split('\t').count() == 6;
+        if !table && !labels {
+            return Err(String::from("not a game details table"));
+        }
+        write_atomic(path, &body)?;
     }
     if let (Some(file), Some(part), Some(path)) = (file, part, saving) {
         drop(file);

@@ -555,6 +555,34 @@ pub unsafe fn database_roms(database: &str) -> Vec<shelf_core::online::gamedb::R
         .collect()
 }
 
+/// The listed titles a Wikidata table covers (`wikidata::file_of`): `(title
+/// id, name)`.
+pub unsafe fn wikidata_titles(file: &str) -> Vec<(String, String)> {
+    titles()
+        .iter()
+        .filter(|item| shelf_core::library::catalog::is_listed(&item.title_id))
+        .filter(|item| {
+            let console = item.retro.as_ref().map(|retro| retro.console.as_str());
+            shelf_core::online::wikidata::file_of(item.platform, &item.title_id, console).as_deref() == Some(file)
+        })
+        .map(|item| (item.title_id.clone(), item.title.clone()))
+        .collect()
+}
+
+/// The Wikidata tables the listed titles are in, each once.
+pub unsafe fn wikidata_files() -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for item in titles() {
+        let console = item.retro.as_ref().map(|retro| retro.console.as_str());
+        if let Some(file) = shelf_core::online::wikidata::file_of(item.platform, &item.title_id, console) {
+            if !found.contains(&file) {
+                found.push(file);
+            }
+        }
+    }
+    found
+}
+
 /// The databases the listed titles belong to, each once.
 pub unsafe fn databases() -> Vec<String> {
     let mut found: Vec<String> = Vec::new();
@@ -763,6 +791,7 @@ pub unsafe fn infos() -> Vec<shelf_core::host::TitleInfo> {
             }),
             emu_favorite: item.retro.as_ref().is_some_and(|retro| retro.favourite),
             details: None,
+            wiki: None,
         })
         .collect()
 }

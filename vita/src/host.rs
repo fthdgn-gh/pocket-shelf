@@ -315,6 +315,12 @@ impl Host for VitaHost {
         crate::platform::gamedb::stop();
     }
 
+    fn match_wikidata(&mut self, file: &str, newer_than_ms: u64) -> bool {
+        let (file, sender) = (file.to_string(), self.answer_sender.clone());
+        spawn("shelf-wikidata", move || crate::platform::wikidata::run(file, newer_than_ms, sender));
+        true
+    }
+
     fn build(&self) -> shelf_core::updates::BuildInfo {
         shelf_core::updates::BuildInfo {
             version: env!("SHELF_VERSION").into(),
@@ -415,6 +421,7 @@ impl Host for VitaHost {
             let mut infos = installed::infos();
             let known = crate::platform::gamedb::known();
             known.apply(&mut infos);
+            crate::platform::wikidata::apply(&mut infos);
             let titles = shelf_core::library::catalog::load_catalog(&infos);
             log_line(&format!("gamedb: {} titles known", known.len()));
             let _ = sender.send(Event::Titles(titles, ((now_us() - started) / 1000) as u32));
@@ -425,6 +432,7 @@ impl Host for VitaHost {
             let _ = sender.send(Event::Dates(dates));
             // Titles new since the last start, in the tables on the card.
             crate::platform::gamedb::identify_new(&sender);
+            crate::platform::wikidata::match_new(&sender);
         });
     }
 

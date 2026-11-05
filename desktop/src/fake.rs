@@ -66,8 +66,18 @@ fn sample_titles() -> Vec<TitleInfo> {
             emu_favorite: false,
             // As `gamedb/known.tsv` would give them.
             details: fake_database(id),
+            wiki: None,
         })
         .collect();
+    // As `wikidata/found.tsv` would give them.
+    let labels = shelf_core::online::wikidata::shared_labels(FAKE_LABELS);
+    for file in ["vita", "snes", "md"] {
+        for (id, found) in fake_matches(&titles, file, &labels) {
+            if let Some(info) = titles.iter_mut().find(|t| t.id == id) {
+                info.wiki = Some(found);
+            }
+        }
+    }
     for index in 0..120 {
         titles.push(TitleInfo {
             id: format!("HBREW{index:04}"),
@@ -312,6 +322,66 @@ pub fn fake_database(id: &str) -> Option<shelf_core::online::gamedb::Details> {
     })
 }
 
+/// The fake Wikidata tables' games: table, item, name, year, genre,
+/// developers, publishers, modes. "Gravity Daze" and "Neon Drift" are Vita
+/// games libretro's database does not list; "Star Knight Saga" has
+/// libretro's details already and adds its modes.
+const WIKI: [(&str, &str, &str, u16, &str, &str, &str, &str); 5] = [
+    ("vita", "Q90001", "Gravity Daze", 2012, "Q1342372", "Project Siren", "Sony Computer Entertainment", "Q208850"),
+    ("vita", "Q90002", "Neon Drift", 2013, "Q860750", "Lumen Soft", "Northwind Games", "Q208850|Q6895044"),
+    ("snes", "Q90003", "Star Knight Saga", 1994, "Q744038", "Lumen Soft", "Northwind Games", "Q208850|Q1758804"),
+    ("snes", "Q90004", "Paper Kingdom", 1992, "Q1342372", "Sunrise Studio", "", ""),
+    ("md", "Q90005", "Turbo Hedgehog", 1991, "Q828322", "Blue Comet", "Blue Comet", "Q208850"),
+];
+
+/// The fake `labels.tsv`.
+const FAKE_LABELS: &str = "Q1342372\taction-adventure game\taksiyon-macera oyunu\tAction-Adventure\tjeu d'action-aventure\tvideojuego de acción-aventura
+Q860750\tracing video game\tyarış oyunu\tRennspiel\tjeu de course\tvideojuego de carreras
+Q744038\trole-playing video game\trol yapma oyunu\tComputer-Rollenspiel\tjeu vidéo de rôle\tvideojuego de rol
+Q828322\tplatform game\tplatform oyunu\tJump ’n’ Run\tjeu de plates-formes\tvideojuego de plataformas
+Q208850\tsingle-player video game\ttek oyunculu oyun\tEinzelspieler\tsolo\tun jugador
+Q6895044\tmultiplayer video game\tçok oyunculu video oyunu\tMehrspieler\tmultijoueur\tmultijugador
+Q1758804\tco-op mode\teşli oynanış modu\tKoop-Modus\tmode coopératif\tmodo cooperativo
+";
+
+/// A fake Wikidata table as the release publishes it.
+fn fake_wiki_table(file: &str, built_ms: u64) -> String {
+    use shelf_core::online::wikidata::{render, Game};
+    let split = |text: &str| text.split('|').filter(|s| !s.is_empty()).map(String::from).collect::<Vec<_>>();
+    let games: Vec<Game> = WIKI
+        .iter()
+        .filter(|row| row.0 == file)
+        .map(|&(_, item, name, year, genre, developer, publisher, modes)| Game {
+            item: item.into(),
+            name: name.into(),
+            year,
+            genres: split(genre),
+            developers: split(developer),
+            publishers: split(publisher),
+            modes: split(modes),
+            ..Default::default()
+        })
+        .collect();
+    render(file, built_ms, &games)
+}
+
+/// The sample titles of a fake table matched as the Vita matches them: by
+/// the database name, then the label.
+fn fake_matches(titles: &[TitleInfo], file: &str, labels: &std::collections::HashMap<String, shelf_core::online::wikidata::Names>) -> Vec<(String, std::sync::Arc<shelf_core::online::wikidata::Found>)> {
+    use shelf_core::online::wikidata::{file_of, match_titles, Found, Index, Title};
+    let Some(index) = Index::parse(&fake_wiki_table(file, 0)) else { return Vec::new() };
+    let titles: Vec<Title> = titles
+        .iter()
+        .filter(|t| file_of(&t.platform, &t.id, t.console.as_deref()).as_deref() == Some(file))
+        .map(|t| Title {
+            id: t.id.clone(),
+            names: t.details.iter().map(|d| d.name.clone()).chain([t.title.clone()]).collect(),
+            year: t.details.as_ref().map_or(0, |d| d.year),
+        })
+        .collect();
+    match_titles(&index, &titles).into_iter().map(|(id, game)| (id, std::sync::Arc::new(Found::new(game, labels)))).collect()
+}
+
 /// GitHub's releases list: a beta newer than the fake build (0.1.0, beta)
 /// and the build's own release.
 fn github_reply() -> String {
@@ -458,7 +528,7 @@ impl FakeHost {
                 console: Some(consoles[n % consoles.len()].into()),
                 opens: shelf_core::host::Emulators { retroarch: true, emu4vita: false },
                 emu_favorite: false,
-                details: None,
+                ..Default::default()
             });
         }
         self
@@ -713,6 +783,19 @@ impl Host for FakeHost {
         self.identifying = None;
     }
 
+    /// A table the fake downloaded, matched at once.
+    fn match_wikidata(&mut self, file: &str, newer_than_ms: u64) -> bool {
+        use shelf_core::online::wikidata::{shared_labels, table_built, table_path, LABELS_PATH};
+        let built = self.files.get(&table_path(file)).and_then(|b| table_built(String::from_utf8_lossy(b).lines().next()?));
+        let labels = self.files.get(LABELS_PATH).map(|b| shared_labels(&String::from_utf8_lossy(b)));
+        let found = match (built, labels) {
+            (Some(built), Some(labels)) if built >= newer_than_ms => Some(fake_matches(&self.titles, file, &labels)),
+            _ => None,
+        };
+        self.later.push(Event::WikidataMatched(file.to_string(), found));
+        true
+    }
+
     fn keyboard_open(&mut self, _title: &str, _text: &str, _max: usize, _search: bool) -> bool {
         match &mut self.system_keyboard {
             Some((_, frames)) => {
@@ -803,6 +886,19 @@ impl Host for FakeHost {
             NetKind::Text { .. } if url.starts_with("https://api.github.com/") => {
                 let text = github_reply();
                 FakeRequest { polls: 0, status: 200, size: text.len() as u64, text }
+            }
+            NetKind::Text { .. } if url == shelf_core::online::wikidata::index_url() => {
+                let text: String = ["vita", "snes", "md"].iter().map(|file| format!("{file}\t2\t{}\n", self.unix_ms())).collect();
+                FakeRequest { polls: 0, status: 200, size: text.len() as u64, text }
+            }
+            NetKind::Save(path) if path == shelf_core::online::wikidata::LABELS_PATH => {
+                self.files.insert(path, FAKE_LABELS.as_bytes().to_vec());
+                FakeRequest { polls: 0, status: 200, text: String::new(), size: 50 * 1024 }
+            }
+            NetKind::Save(path) if path.starts_with("wikidata/") => {
+                let file = path.trim_start_matches("wikidata/").trim_end_matches(".tsv").to_string();
+                self.files.insert(path, fake_wiki_table(&file, self.unix_ms()).into_bytes());
+                FakeRequest { polls: 0, status: 200, text: String::new(), size: 200 * 1024 }
             }
             NetKind::Save(path) if path.starts_with("update/") => {
                 self.files.insert(path, b"PK".to_vec());

@@ -24,6 +24,7 @@ pub mod emu4vita;
 pub mod retroarch;
 pub mod seplugins;
 pub mod update;
+pub mod wikidata;
 
 /// The data folder, the same one Pocket Shelf 0.1 used.
 pub fn data_dir() -> String {

@@ -13,8 +13,15 @@
 //! mode ids, series, Wikipedia articles (`lang:title`); lists separated by
 //! `|`. Genre and mode names, in the app's languages, are in `labels.tsv`:
 //! item id, then en, tr, de, fr, es.
+//!
+//! **On the card** (`wikidata/`): the tables the library's titles need,
+//! `labels.tsv`, and `found.tsv` ([`Matches`]), what each title was found
+//! to be. The Game database run reads the release's `index.tsv` (each
+//! table's build time) and downloads a table only when the release's is
+//! newer; the host matches titles on a worker thread ([`match_titles`]).
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::gamedb::short_name;
 use super::libretro::base_name;
@@ -127,6 +134,95 @@ pub fn table_url(file: &str) -> String {
     format!("{RELEASE_URL}/{file}.tsv")
 }
 
+/// The release's list of tables: `file`, games, build time, one per line.
+pub fn index_url() -> String {
+    format!("{RELEASE_URL}/index.tsv")
+}
+
+/// Where the labels are published.
+pub fn labels_url() -> String {
+    format!("{RELEASE_URL}/{LABELS_FILE}")
+}
+
+/// Where a table is kept in the data folder.
+pub fn table_path(file: &str) -> String {
+    format!("wikidata/{file}.tsv")
+}
+
+/// Where the labels are kept in the data folder.
+pub const LABELS_PATH: &str = "wikidata/labels.tsv";
+
+/// What each title was found to be ([`Matches`]).
+pub const FOUND_PATH: &str = "wikidata/found.tsv";
+
+/// The table a listed title is looked up in: its game database's, when
+/// that console has a table; `vita` for Vita titles. None for the rest
+/// (PSM titles, a console Wikidata's tables leave out).
+pub fn file_of(platform: &str, id: &str, console: Option<&str>) -> Option<String> {
+    if platform == "vita" {
+        return vita_game(id).then(|| "vita".into());
+    }
+    file_of_database(&super::gamedb::database_for(platform, id, console)?)
+}
+
+/// Whether a Vita title id is a game's: `PCSA`–`PCSH` and the Asian
+/// `VCAS`, `VLJM` forms, then five digits. The system's apps (`NPXS`) and
+/// homebrew (`VITASHELL`, `RTCW00001`) are left out, so a homebrew named
+/// like a game is not taken for it.
+pub fn vita_game(id: &str) -> bool {
+    let b = id.as_bytes();
+    let prefix = (b.len() == 9 && &b[..3] == b"PCS" && (b'A'..=b'H').contains(&b[3]))
+        || (b.len() == 9 && b[0] == b'V' && matches!(b[1], b'C' | b'L') && matches!(b[2], b'A' | b'J' | b'K') && matches!(b[3], b'S' | b'M'));
+    prefix && b[4..].iter().all(u8::is_ascii_digit)
+}
+
+/// The table of a libretro database's titles, when there is one.
+pub fn file_of_database(database: &str) -> Option<String> {
+    let file = file_for(database);
+    published().iter().any(|f| *f == file).then_some(file)
+}
+
+/// [`file_of`] for a listed title.
+pub fn file_of_game(game: &crate::library::catalog::Game) -> Option<String> {
+    use crate::library::categories::Platform;
+    let platform = match game.platform {
+        Platform::Vita => "vita",
+        Platform::Retro => "retro",
+        Platform::Psp => "psp",
+        Platform::Psx => "psx",
+        Platform::Psm => return None,
+    };
+    file_of(platform, &game.id, game.console.as_deref())
+}
+
+/// The tables' file names, worked out once.
+fn published() -> &'static [String] {
+    static FILES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    FILES.get_or_init(|| tables().into_iter().map(|(f, _)| f).collect())
+}
+
+/// The release's `index.tsv`: each table's build time by file.
+pub fn parse_index(text: &str) -> HashMap<String, u64> {
+    text.lines()
+        .filter_map(|line| {
+            let mut f = line.split('\t');
+            let file = f.next().filter(|f| !f.is_empty())?;
+            let built = f.nth(1)?.trim().parse().ok()?;
+            Some((file.to_string(), built))
+        })
+        .collect()
+}
+
+/// A table's build time from its first line; None for anything else (an
+/// error page, another version).
+pub fn table_built(first_line: &str) -> Option<u64> {
+    let mut head = first_line.split_whitespace();
+    if head.next()? != TABLE_MARK || head.next()?.parse::<u32>().ok()? != TABLE_VERSION {
+        return None;
+    }
+    head.next()?.parse().ok()
+}
+
 /// What two names are compared by: the name without its brackets and with
 /// a trailing article moved to the front ([`short_name`]), as [`base_name`]
 /// compares it, so `Legend of Zelda, The - A Link to the Past (USA)` is
@@ -225,11 +321,7 @@ pub struct Index {
 impl Index {
     pub fn parse(text: &str) -> Option<Index> {
         let mut lines = text.split('\n');
-        let mut head = lines.next()?.split_whitespace();
-        if head.next()? != TABLE_MARK || head.next()?.parse::<u32>().ok()? != TABLE_VERSION {
-            return None;
-        }
-        let built_ms = head.next()?.parse().ok()?;
+        let built_ms = table_built(lines.next()?)?;
         let mut index = Index { built_ms, games: Vec::new(), by_name: HashMap::new() };
         for line in lines {
             let Some(game) = Game::read(line) else { continue };
@@ -254,10 +346,18 @@ impl Index {
     /// that name, the one whose own name is it (not an alias), else the
     /// first.
     pub fn find(&self, name: &str) -> Option<&Game> {
+        self.find_near(name, 0)
+    }
+
+    /// [`find`](Index::find), and of several games with the name, the one
+    /// released in `year` first (0 when unknown): *Tetris* is a different
+    /// game on the NES in 1989 than in 1988.
+    pub fn find_near(&self, name: &str, year: u16) -> Option<&Game> {
         let key = name_key(name);
         let found = self.by_name.get(&key)?;
+        let same_year = found.iter().find(|&&at| year > 0 && self.games[at].year == year);
         let own = found.iter().find(|&&at| name_key(&self.games[at].name) == key);
-        own.or(found.first()).map(|&at| &self.games[at])
+        same_year.or(own).or(found.first()).map(|&at| &self.games[at])
     }
 }
 
@@ -280,6 +380,162 @@ pub fn parse_labels(text: &str) -> HashMap<String, [String; 5]> {
         labels.insert(item.to_string(), names);
     }
     labels
+}
+
+// --- What each title was found to be ----------------------------------------------
+
+/// Genre and mode names in [`LANGUAGES`]' order, shared by the games that
+/// use them.
+pub type Names = Arc<[String; 5]>;
+
+/// `labels.tsv` with each name list shared.
+pub fn shared_labels(text: &str) -> HashMap<String, Names> {
+    parse_labels(text).into_iter().map(|(item, names)| (item, Arc::new(names))).collect()
+}
+
+/// Wikidata's items for single-player, multiplayer and co-op modes.
+const SINGLE_PLAYER: &str = "Q208850";
+const MULTIPLAYER: [&str; 2] = ["Q6895044", "Q1758804"];
+
+/// A title's game in a table, with its genres' names.
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+pub struct Found {
+    pub game: Game,
+    /// The genres `labels.tsv` names, in the game's order.
+    pub genres: Vec<Names>,
+}
+
+impl Found {
+    pub fn new(game: Game, labels: &HashMap<String, Names>) -> Found {
+        let genres = game.genres.iter().filter_map(|item| labels.get(item).cloned()).collect();
+        Found { game, genres }
+    }
+
+    /// The first genre in the language at `language` of [`LANGUAGES`]
+    /// (English when it has no name there), its first letter capitalized:
+    /// Wikidata writes `platform game`.
+    pub fn genre(&self, language: usize) -> Option<String> {
+        let names = self.genres.first()?;
+        let name = names.get(language).filter(|n| !n.is_empty()).unwrap_or(&names[0]);
+        let mut chars = name.chars();
+        let first = chars.next()?;
+        Some(first.to_uppercase().chain(chars).collect())
+    }
+
+    /// Whether the game has a multiplayer or co-op mode (`Some(true)`), only
+    /// a single-player one (`Some(false)`), or no modes listed.
+    pub fn multiplayer(&self) -> Option<bool> {
+        let modes = &self.game.modes;
+        if modes.iter().any(|m| MULTIPLAYER.contains(&m.as_str())) {
+            Some(true)
+        } else if modes.iter().any(|m| m == SINGLE_PLAYER) {
+            Some(false)
+        } else {
+            None
+        }
+    }
+}
+
+/// A title to look up: its id, the names to try in order (the database
+/// name libretro gave it, then its own), and the year libretro gave.
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+pub struct Title {
+    pub id: String,
+    pub names: Vec<String>,
+    pub year: u16,
+}
+
+/// Each title's game in the table, `(title id, game)` for those found.
+pub fn match_titles(index: &Index, titles: &[Title]) -> Vec<(String, Game)> {
+    titles
+        .iter()
+        .filter_map(|title| {
+            let game = title.names.iter().filter(|n| !n.trim().is_empty()).find_map(|name| index.find_near(name, title.year))?;
+            Some((title.id.clone(), game.clone()))
+        })
+        .collect()
+}
+
+/// `wikidata/found.tsv`: for each title looked up, its table, the table's
+/// build time and the game's line of the table (empty when not found), one
+/// title per line: `id`, `file`, `built`, then the game's fields. A title
+/// not found is looked up again in a newer table only.
+#[derive(Default)]
+pub struct Matches {
+    entries: HashMap<String, (String, u64, Option<Game>)>,
+}
+
+impl Matches {
+    pub fn parse(text: &str) -> Matches {
+        let mut matches = Matches::default();
+        for line in text.split('\n') {
+            let mut fields = line.splitn(4, '\t');
+            let (Some(id), Some(file), Some(built), Some(rest)) = (fields.next(), fields.next(), fields.next(), fields.next()) else { continue };
+            if id.is_empty() {
+                continue;
+            }
+            let game = Game::read(rest);
+            matches.entries.insert(id.to_string(), (file.to_string(), built.parse().unwrap_or(0), game));
+        }
+        matches
+    }
+
+    /// One title per line, in id order.
+    pub fn render(&self) -> String {
+        let mut ids: Vec<&String> = self.entries.keys().collect();
+        ids.sort();
+        let mut out = String::new();
+        for id in ids {
+            let (file, built, game) = &self.entries[id];
+            out.push_str(&format!("{}\t{}\t{built}\t", clean(id), clean(file)));
+            match game {
+                Some(game) => game.write(&mut out),
+                None => out.push('\n'),
+            }
+        }
+        out
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn get(&self, id: &str) -> Option<&Game> {
+        self.entries.get(id)?.2.as_ref()
+    }
+
+    /// Whether a title has not been looked up in `file`'s table built at
+    /// `built_ms` or later.
+    pub fn wants(&self, id: &str, file: &str, built_ms: u64) -> bool {
+        match self.entries.get(id) {
+            None => true,
+            Some((f, built, game)) => f != file || (game.is_none() && *built < built_ms),
+        }
+    }
+
+    /// A run over `titles`: those `found` with their games, the rest as
+    /// looked up and not found. The aliases are left out: only matching
+    /// reads them, and the file is read at each start.
+    pub fn record(&mut self, file: &str, built_ms: u64, titles: &[Title], found: &[(String, Game)]) {
+        let found: HashMap<&str, &Game> = found.iter().map(|(id, g)| (id.as_str(), g)).collect();
+        for title in titles {
+            let game = found.get(title.id.as_str()).map(|g| Game { aliases: Vec::new(), ..(*g).clone() });
+            self.entries.insert(title.id.clone(), (file.to_string(), built_ms, game));
+        }
+    }
+
+    /// Each title's game from this file, named with `labels` (the host does
+    /// this on its thread before
+    /// [`load_catalog`](crate::library::catalog::load_catalog)).
+    pub fn apply(&self, infos: &mut [crate::host::TitleInfo], labels: &HashMap<String, Names>) {
+        for info in infos {
+            info.wiki = self.get(&info.id).map(|game| Arc::new(Found::new(game.clone(), labels)));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -343,5 +599,61 @@ mod tests {
             assert!(databases.iter().all(|d| file_for(d) == file_for(databases[0])), "{databases:?} share a table");
         }
         assert_eq!(table_url("nes"), format!("{RELEASE_URL}/nes.tsv"));
+    }
+
+    #[test]
+    fn titles_match_by_database_name_then_label_and_round_trip_in_found_tsv() {
+        let tetris = |item: &str, year| Game { item: item.into(), name: "Tetris".into(), year, ..Default::default() };
+        let text = render("nes", 1_700_000_000_000, &[zelda(), tetris("Q1", 1988), tetris("Q2", 1989)]);
+        let index = Index::parse(&text).unwrap();
+        let titles = [
+            Title { id: "a".into(), names: vec!["Legend of Zelda, The - A Link to the Past (USA)".into(), "zelda3".into()], year: 0 },
+            Title { id: "b".into(), names: vec![String::new(), "Tetris (USA)".into()], year: 1989 },
+            Title { id: "c".into(), names: vec!["Frogger (USA)".into()], year: 0 },
+        ];
+        let found = match_titles(&index, &titles);
+        assert_eq!(found.iter().map(|(id, g)| (id.as_str(), g.item.as_str())).collect::<Vec<_>>(), [("a", "Q14625"), ("b", "Q2")], "the 1989 Tetris");
+
+        let mut matches = Matches::default();
+        matches.record("nes", 5, &titles, &found);
+        let again = Matches::parse(&matches.render());
+        assert_eq!(again.len(), 3);
+        assert_eq!(again.get("a"), Some(&Game { aliases: Vec::new(), ..zelda() }));
+        assert_eq!(again.get("c"), None);
+        // A miss is looked up again in a newer table only; another table
+        // always.
+        assert!(!again.wants("c", "nes", 5) && again.wants("c", "nes", 6) && again.wants("a", "snes", 0) && again.wants("d", "nes", 0));
+        assert!(!again.wants("a", "nes", 6), "a match is kept");
+        assert_eq!(table_built("#pocket-shelf-wikidata 1 42 nes"), Some(42));
+        assert_eq!(table_built("<!DOCTYPE html>"), None);
+        assert_eq!(parse_index("nes\t1211\t42\nvita\t928\t43\n\n").get("vita"), Some(&43));
+    }
+
+    #[test]
+    fn found_games_name_their_genre_and_modes_in_the_apps_language() {
+        let labels = shared_labels("Q1342372\taction-adventure game\taksiyon-macera oyunu\tAction-Adventure\t\tvideojuego de acción-aventura\n");
+        let found = Found::new(zelda(), &labels);
+        assert_eq!(found.genre(0).as_deref(), Some("Action-adventure game"));
+        assert_eq!(found.genre(2).as_deref(), Some("Action-Adventure"));
+        assert_eq!(found.genre(3).as_deref(), Some("Action-adventure game"), "English when French has no name");
+        assert_eq!(found.multiplayer(), Some(false));
+        let co_op = Found::new(Game { modes: vec!["Q208850".into(), "Q1758804".into()], ..zelda() }, &labels);
+        assert_eq!(co_op.multiplayer(), Some(true));
+        assert_eq!(Found::new(Game { genres: vec!["Q404".into()], modes: Vec::new(), ..zelda() }, &labels).genre(0), None);
+    }
+
+    #[test]
+    fn titles_go_to_their_consoles_table() {
+        assert_eq!(file_of("retro", "x", Some("Nintendo - Super Nintendo Entertainment System")).as_deref(), Some("snes"));
+        assert_eq!(file_of("retro", "x", Some("MAME 2003-Plus")).as_deref(), Some("arcade"));
+        assert_eq!(file_of("psp", "NPUZ00001", None).as_deref(), Some("psp"));
+        assert_eq!(file_of("psx", "SCUS94163", None).as_deref(), Some("psx"));
+        assert_eq!(file_of("vita", "PCSA00069", None).as_deref(), Some("vita"));
+        assert_eq!(file_of("vita", "NPXS10001", None), None, "a system app");
+        assert_eq!(file_of("vita", "VITASHELL", None), None, "homebrew");
+        assert_eq!(file_of("vita", "RTCW00001", None), None, "homebrew");
+        assert_eq!(file_of("vita", "VLJS00055", None).as_deref(), Some("vita"));
+        assert_eq!(file_of("psm", "NPOA00013", None), None);
+        assert_eq!(file_of("retro", "x", Some("Nintendo - Pokemon Mini")), None, "no table");
     }
 }

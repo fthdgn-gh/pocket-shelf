@@ -176,6 +176,23 @@ impl Library {
         }
     }
 
+    /// Titles matched to Wikidata's games (the host saved them to
+    /// `wikidata/found.tsv`); recomputed once for the lot.
+    pub fn set_wiki(&mut self, found: &[(String, Arc<crate::online::wikidata::Found>)]) {
+        let mut changed = false;
+        for (id, wiki) in found {
+            let Some(&index) = self.index.get(id.as_str()) else { continue };
+            let game = &mut self.base[index];
+            if game.wiki.as_deref() != Some(wiki) {
+                game.wiki = Some(wiki.clone());
+                changed = true;
+            }
+        }
+        if changed {
+            self.rebuild();
+        }
+    }
+
     /// [`Library::set_catalog`] from the host's list.
     pub fn set_titles(&mut self, infos: &[TitleInfo]) {
         self.set_catalog(load_catalog(infos));
@@ -376,7 +393,7 @@ impl Library {
         order::sort(&mut list, self.orders.get(id), |i| {
             let game = &self.games[i];
             let id: &str = &game.id;
-            Facts { play: self.plays.get(id).copied(), system: self.system.get(id).copied(), year: game.details.as_ref().map_or(0, |d| d.year) }
+            Facts { play: self.plays.get(id).copied(), system: self.system.get(id).copied(), year: game.year() }
         });
         list
     }

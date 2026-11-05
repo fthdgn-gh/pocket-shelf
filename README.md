@@ -286,6 +286,7 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `art/`, `backdrops/` | Box art and backdrops, downloaded or your own (see [Your own box art and backdrops](#your-own-box-art-and-backdrops)) |
 | `libretro/` | libretro's name lists, one per console, fetched once |
 | `gamedb/` | libretro's game databases as tables, the games' checksums, and what each title was identified as |
+| `wikidata/` | Wikidata's game details tables, one per console, the genre and mode names, and what each title was matched to |
 | `steamgriddb.txt` | Your SteamGridDB API key |
 | `update.json`, `update/` | The last update check; a downloaded update |
 | `titles.tsv` | The scanned title list. Delete it to force a new scan |
@@ -378,6 +379,8 @@ restart run on hardware only.
   4.0) for the game databases Pocket Shelf identifies RetroArch, PSP and PS1
   games with, and [libretro-thumbnails](https://github.com/libretro-thumbnails/libretro-thumbnails)
   for the artwork from libretro's thumbnail server.
+- [Wikidata](https://www.wikidata.org/) (CC0) for the game details of the
+  tables on the `gamedb-data` release, Vita games' included.
 - RetroFlow and VitaShell,
   for showing how to launch system applications and PlayStation Mobile titles,
   and how to lay out the LiveArea.
