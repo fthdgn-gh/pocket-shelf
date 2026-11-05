@@ -253,9 +253,10 @@ impl Library {
         for (index, game) in self.games.iter().enumerate() {
             self.index.insert(game.id.clone(), index);
             self.by_category.entry(game.category.clone()).or_default().push(index);
-            // A folder category lists every game in its folder, playlist
-            // games too.
-            if let Some(path) = game.path.as_deref() {
+            // A game found in nested folder categories' folders is listed
+            // in the outer ones too. Playlist games stay in their console
+            // tabs only.
+            if let Some(path) = game.path.as_deref().filter(|_| game.in_folder) {
                 for (id, folder) in &self.folder_keys {
                     if *id != game.category && roms::is_under(path, folder) {
                         self.by_category.entry(id.clone()).or_default().push(index);

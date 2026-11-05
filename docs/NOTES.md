@@ -492,10 +492,13 @@ stick at each launch when it differs.
   `folder` lines in `titles.tsv` with a playlist game's columns; a release
   before them meets an unknown launch and scans over the list. Their ids are
   `retroarch::game_id` of the path, the same a playlist entry for the file
-  gets; a file a playlist lists is left to the playlist. The library lists
-  in a folder tab every game whose path is under the folder (`Game::path`, a
-  `path_key`); a game found only in a folder takes the folder tab as its own
-  category and adds no console tab. Limits: 8 folders deep, 60,000 entries,
+  gets; a file a playlist lists is left to the playlist, before it is
+  opened (`walk`'s `skip`: a folder holding a playlist's 5,800 files would
+  otherwise open each). A folder tab lists only the games its reading found
+  (the user's choice, 2026-11-06: the console tabs already hold the playlist
+  games); such a game takes the folder tab as its own category, adds no
+  console tab, and shows in an outer folder category's tab too
+  (`Game::path`, a `path_key`). Limits: 8 folders deep, 60,000 entries,
   20,000 games per reading; a zip64 or `.7z`/`.chd` goes by its folders.
   **Not yet run on hardware**: walking times on the card, and launches of
   folder games.

@@ -102,15 +102,16 @@ pub fn games(folders: &[String], known: &HashSet<String>, ids: &mut HashSet<Stri
     let mut unknown_names: Vec<String> = Vec::new();
     let mut read = 0u32;
     for folder in folders {
-        let walk = roms::walk(&mut Card, folder, step);
+        // A file a playlist lists is not opened.
+        let walk = roms::walk(&mut Card, folder, &mut |path| {
+            let known = known.contains(&roms::path_key(path));
+            listed += u32::from(known);
+            known
+        }, step);
         read += walk.folders;
         unknown += walk.unknown;
         unknown_names.extend(walk.unknown_names);
         for rom in walk.roms {
-            if known.contains(&roms::path_key(&rom.path)) {
-                listed += 1;
-                continue;
-            }
             let (core, emu_core) = by_console
                 .entry(rom.console)
                 .or_insert_with(|| {

@@ -218,8 +218,8 @@ Emu4Vita++ has it, else with Emu4Vita++'s preferred core for the console.
 ### Folder categories
 
 SELECT ▸ Games ▸ Categories ▸ **New folder category** makes a tab of the
-games in a folder of your choice and its subfolders, with no playlist
-needed. Browse opens on the memory card's folders; pick one with **Use this
+games in a folder of your choice and its subfolders that no RetroArch
+playlist lists. Browse opens on the memory card's folders; pick one with **Use this
 folder**, then name the tab (the folder's name to start with). Pocket Shelf
 reads the folder on the spot and again at each Rescan titles. ○ on a folder
 category edits it: Browse opens on its folder with Use this folder
@@ -240,8 +240,8 @@ The tracks a `.cue`, `.gdi` or `.m3u` names are not listed on their own. A
 game starts in RetroArch with the console's recommended core when it is
 installed (else another core for the console), or in Emu4Vita++; Open with
 and Core in its editor work as for playlist games. A file neither app can
-start is left out, and a file a playlist already lists keeps the playlist's
-entry and shows in the folder's tab too. Diagnostics reports how many files
+start is left out. **The tab lists the games the folder adds:** a file a
+playlist already lists is not opened and stays in its console's tab only. Diagnostics reports how many files
 each reading found, left out, or could not place.
 
 ### SteamGridDB API key

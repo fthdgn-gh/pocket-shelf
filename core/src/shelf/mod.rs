@@ -2492,8 +2492,8 @@ mod tests {
     }
 
     /// New folder category: Browse picks a folder, the keyboard names it;
-    /// the tab lists the games under the folder, and a game found there
-    /// only joins no console's tab.
+    /// the tab lists the games the folder adds to the playlists', which
+    /// join no console's tab.
     #[test]
     fn a_folder_category_lists_the_games_in_its_folder() {
         use crate::host::{Emulators, FolderEntry};
@@ -2539,7 +2539,8 @@ mod tests {
         let infos = [game("ra0000001", "ux0:/roms/snes/a.sfc", true), game("ra0000002", "UX0:roms/b.sfc", false), game("ra0000003", "ux0:/data/c.sfc", false)];
         shelf.set_titles(load_catalog(&infos), true);
         let listed = |shelf: &Shelf, tab: &str| -> Vec<String> { shelf.library.titles_of(tab).iter().map(|&i| shelf.library.games()[i].id.to_string()).collect() };
-        assert_eq!(listed(&shelf, "my-roms"), ["ra0000001", "ra0000002"]);
+        // Only what the folder adds: a playlist game keeps its console tab.
+        assert_eq!(listed(&shelf, "my-roms"), ["ra0000001"]);
         assert_eq!(listed(&shelf, "retro-snes"), ["ra0000002", "ra0000003"]);
         assert_eq!(&*shelf.library.game("ra0000001").unwrap().category, "my-roms");
 

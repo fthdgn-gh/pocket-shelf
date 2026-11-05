@@ -483,8 +483,9 @@ fn detect(files: &mut dyn Files, dir: &str, name: &str, hint: Option<&'static st
 }
 
 /// Every game under `root` and its subfolders. `step` is called once per
-/// folder read.
-pub fn walk(files: &mut dyn Files, root: &str, step: &mut dyn FnMut()) -> Walk {
+/// folder read; a file `skip` takes (by its path) is not opened or listed
+/// (a playlist lists it).
+pub fn walk(files: &mut dyn Files, root: &str, skip: &mut dyn FnMut(&str) -> bool, step: &mut dyn FnMut()) -> Walk {
     let mut walk = Walk::default();
     let mut seen = 0usize;
     // Folders to read: path, depth, its folders' console.
@@ -520,7 +521,7 @@ pub fn walk(files: &mut dyn Files, root: &str, step: &mut dyn FnMut()) -> Walk {
                 }
                 continue;
             }
-            if !is_candidate(&name) || parts.contains(&name.to_lowercase()) || walk.roms.len() >= ROMS_MAX {
+            if !is_candidate(&name) || parts.contains(&name.to_lowercase()) || walk.roms.len() >= ROMS_MAX || skip(&join(&dir, &name)) {
                 continue;
             }
             match detect(files, &dir, &name, hint, 0) {
@@ -633,6 +634,7 @@ pub(crate) mod tests {
         files.add("ux0:/roms/Mario (USA).sfc", b"");
         files.add("ux0:/roms/notes.txt", b"");
         files.add("ux0:/roms/README.md", b"# Notes");
+        files.add("ux0:/roms/Listed.sfc", b"");
         files.add("ux0:/roms/.hidden.gba", b"");
         files.add("ux0:/roms/Tetris.zip", &zip(&["readme.txt", "Tetris (World).gb"]));
         files.add("ux0:/roms/sonic.bin", &{
@@ -652,7 +654,11 @@ pub(crate) mod tests {
             b
         });
         let mut folders = 0;
-        let walk = walk(&mut files, "ux0:roms/", &mut || folders += 1);
+        let mut skipped = Vec::new();
+        let walk = walk(&mut files, "ux0:roms/", &mut |path| {
+            skipped.push(path.to_string());
+            path == "ux0:/roms/Listed.sfc"
+        }, &mut || folders += 1);
         assert_eq!(
             consoles(&walk),
             [
@@ -667,6 +673,7 @@ pub(crate) mod tests {
         assert_eq!(walk.roms[0].title, "Mario (USA)");
         assert_eq!((walk.unknown, walk.unknown_names.as_slice()), (1, &["Mystery.zip".to_string()][..]));
         assert_eq!(folders, 5, "roms, Crash, PSX, Spyro, arcade");
+        assert!(skipped.contains(&"ux0:/roms/Listed.sfc".to_string()) && !skipped.iter().any(|p| p.ends_with(".txt")));
     }
 
     #[test]
@@ -682,7 +689,7 @@ pub(crate) mod tests {
         files.add("ux0:/data/FF7/FF7 (Disc 1).bin", &ps1_bin());
         files.add("ux0:/data/FF7/FF7 (Disc 2).cue", b"FILE \"FF7 (Disc 2).bin\" BINARY\n");
         files.add("ux0:/data/FF7/FF7 (Disc 2).bin", &ps1_bin());
-        let walk = walk(&mut files, "ux0:/data", &mut || {});
+        let walk = walk(&mut files, "ux0:/data", &mut |_| false, &mut || {});
         assert_eq!(
             consoles(&walk),
             [
