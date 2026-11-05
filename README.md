@@ -13,7 +13,7 @@ downloads on worker threads. Up to 0.1 it was a TypeScript app on
 its saved data.
 
 - Title id `POCKTSHLF`
-- Version 0.5.1
+- Version 0.5.2
 
 <p align="center">
   <img src="./screenshots/home.png" width="720" alt="Pocket Shelf's Home view on the Games tab in the Dynamic theme: the selected title's icon large at the left in a white ring, the next titles smaller after it, the title's name, platform and category, a Launch button, and the game's release year, genre, developer, publisher and players from Wikidata, over the title's backdrop." />
@@ -162,7 +162,7 @@ from the home screen, or closing Pocket Shelf itself, leaves you on the home
 screen. A change to the plugin takes effect at the next console start, and the
 plugin logs what it did to `boot-plugin.log`. **If the console does not reach
 the home screen, hold L while turning it on**: taiHEN then loads no plugins,
-and the line can be removed from the tai config. Not yet tested on hardware.
+and the line can be removed from the tai config.
 
 ### RetroArch
 
@@ -382,8 +382,8 @@ Three GitHub Actions workflows build and publish the VPK:
 The tag's version must be the `version` in `vita/Cargo.toml`:
 
 ```sh
-git tag shelf-v0.5.1-beta.1   # beta: published as a pre-release
-git tag shelf-v0.5.1          # stable: published as the latest release
+git tag shelf-v0.5.2-beta.1   # beta: published as a pre-release
+git tag shelf-v0.5.2          # stable: published as the latest release
 git push origin <tag>
 ```
 
