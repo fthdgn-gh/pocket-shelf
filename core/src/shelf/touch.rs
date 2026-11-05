@@ -40,6 +40,7 @@ impl Shelf {
             || self.database.is_some()
             || self.diagnostics.is_some()
             || self.picker.is_some()
+            || self.browser.is_some()
             || self.editor.is_some()
             || self.categories.is_some()
             || self.adrenaline.is_some()
@@ -206,7 +207,10 @@ impl Shelf {
     /// picture, and confirmed by a second.
     fn touch_row(&mut self, host: &mut dyn Host, row: usize) -> bool {
         if self.keyboard.is_none() && self.picker.is_some() && !self.update.open && self.online.is_none() {
-            let current = self.picker.as_ref().map_or(0, |p| p.row);
+            let current = match &self.browser {
+                Some(browser) => browser.row(),
+                None => self.picker.as_ref().map_or(0, |p| p.row),
+            };
             if current != row {
                 self.set_panel_row(host, row);
                 return false;
@@ -247,8 +251,11 @@ impl Shelf {
             let count = self.diagnostics_lines.len().max(1);
             return Some((row % count, count));
         }
+        if let Some(browser) = &self.browser {
+            return Some((browser.row(), browser.count()));
+        }
         if let Some(picker) = &self.picker {
-            return Some((picker.row, self.picker_count() + 2));
+            return Some((picker.row, self.picker_count() + super::editor::PICKER_FIXED));
         }
         if let Some(editor) = &self.editor {
             return Some((editor.row, self.editor_row_list().len().max(1)));
@@ -299,6 +306,10 @@ impl Shelf {
         }
         if let Some(current) = &mut self.diagnostics {
             *current = row;
+            return;
+        }
+        if self.browser.is_some() {
+            self.browser_focus(row);
             return;
         }
         if self.picker.is_some() {

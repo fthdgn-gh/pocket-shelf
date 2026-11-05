@@ -281,6 +281,32 @@ impl EmulatorChoice {
     }
 }
 
+/// The folders the title editor's Browse last took a box art and a
+/// backdrop from (`folders.json`), where it opens next time.
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+pub struct Folders {
+    pub art: String,
+    pub backdrops: String,
+}
+
+pub const FOLDERS_FILE: &str = "folders.json";
+
+impl Folders {
+    pub fn parse(bytes: &[u8]) -> Folders {
+        let Ok(raw) = serde_json::from_slice::<Value>(bytes) else { return Folders::default() };
+        let get = |key: &str| raw.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+        Folders { art: get("art"), backdrops: get("backdrops") }
+    }
+
+    /// Two-space JSON and a newline, as the app's other files.
+    pub fn render(&self) -> String {
+        let mut map = Map::new();
+        map.insert("art".into(), self.art.clone().into());
+        map.insert("backdrops".into(), self.backdrops.clone().into());
+        serde_json::to_string_pretty(&Value::Object(map)).expect("json") + "\n"
+    }
+}
+
 impl Settings {
     /// The settings as saved: `settings.json`, then the files of their own
     /// that later settings went in.
@@ -306,6 +332,9 @@ impl Settings {
         }
         if let Some(bytes) = host.read(crate::autostart::AUTOSTART_FILE) {
             settings.autostart = crate::autostart::AutoStart::parse(&bytes);
+        }
+        if let Some(bytes) = host.read(FOLDERS_FILE) {
+            settings.folders = Folders::parse(&bytes);
         }
         settings
     }
@@ -343,6 +372,8 @@ pub struct Settings {
     /// Saved in its own file, `autostart.txt`, which the console start
     /// plugin reads (not rendered here).
     pub autostart: crate::autostart::AutoStart,
+    /// Saved in its own file, `folders.json` (not rendered here).
+    pub folders: Folders,
 }
 
 impl Settings {
@@ -370,6 +401,7 @@ impl Settings {
             emulators: EmulatorChoice::default(),
             game_info: GameInfo::default(),
             autostart: crate::autostart::AutoStart::default(),
+            folders: Folders::default(),
         }
     }
 

@@ -427,7 +427,21 @@ stick at each launch when it differs.
   downloads, 8 MB each) and writes only the one used. The used picture goes
   to the tile from the preview's texture: reading the file back while the
   file thread was still writing it cached "no picture" (the tile showed
-  initials). Confirmed on hardware.
+  initials). Confirmed on hardware. **The tile's own request in the same
+  update went to the host anyway** until 2026-11-05 (`Art::expect` now
+  marks the box art as on its way): the desktop's render showed the file
+  read back, not the preview.
+- **Browse** (title editor ▸ Box art or Backdrop ▸ Browse..., `browse.rs`):
+  the host lists a folder on a thread of its own (`Host::list_folder`,
+  folders and `.png` files, at most 10,000 entries; `""` lists the devices
+  that read, `ux0:` first) and decodes a file by its full path as it would
+  be saved (`PictureKey::File`: 128 px fitted box art, or a backdrop). The
+  file used is copied on the file thread (`Host::import_picture`, PNG
+  signature and 8 MB checked) to `art/` or `backdrops/` as
+  `<title id>-<CRC of the path>.png`, and the preview goes to the tile as
+  Find artwork's does. The folder is kept per kind in `folders.json`. **Not
+  yet run on hardware**: reading a device's root (`ux0:`, else `ux0:/`),
+  folder listing times on the card.
 - **Fetch artwork** (SELECT ▸ Games ▸ Artwork): one request at a time over a
   category or all titles but the system apps (whose names match unrelated
   games); busy replies (429) waited out five times, other failures halt the

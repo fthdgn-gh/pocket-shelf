@@ -186,6 +186,11 @@ impl App {
                         shelf.identified(host, &database, names);
                     }
                 }
+                Event::Folder(dir, entries) => {
+                    if let Some(shelf) = &mut self.shelf {
+                        shelf.folder_listed(host, &dir, entries);
+                    }
+                }
                 Event::AutoStart(setup) => {
                     if let Some(shelf) = &mut self.shelf {
                         shelf.autostart_event(host, setup);

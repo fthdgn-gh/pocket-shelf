@@ -717,6 +717,14 @@ impl Host for FakeHost {
             PictureKey::Backdrop { id, .. } => self.index(id).map(backdrop),
             // Pictures in memory come through `decode`.
             PictureKey::Memory { .. } => None,
+            // A file Browse found: a sample icon or backdrop, unless it
+            // stands for a damaged file.
+            PictureKey::File { path, .. } if path.contains("broken") => None,
+            PictureKey::File { path, as_: DecodeAs::Backdrop } => Some(backdrop(path.len() % 5)),
+            PictureKey::File { path, .. } => {
+                let name = path.rsplit('/').next().unwrap_or(path);
+                Some(icon(path.len() % 7 + 2, name.trim_end_matches(".png")))
+            }
         };
         self.later.push(Event::Picture(key, picture));
     }
@@ -798,6 +806,34 @@ impl Host for FakeHost {
 
     fn identify_stop(&mut self) {
         self.identifying = None;
+    }
+
+    /// Browse's memory card: a few folders with PNG files and others.
+    fn list_folder(&mut self, dir: &str) -> bool {
+        use shelf_core::host::FolderEntry;
+        let entry = |name: &str| FolderEntry { name: name.into(), folder: !name.contains('.') };
+        let names: Option<&[&str]> = match dir {
+            "" => Some(&["ux0:", "ur0:", "uma0:"]),
+            "ux0:" => Some(&["app", "data", "pictures", "tai", "id.dat"]),
+            "ux0:pictures" => Some(&["Box art", "Wallpapers", "screenshot.jpg", "Star Harbor.png"]),
+            "ux0:pictures/Box art" => Some(&["Gravity Daze.png", "Neon Drift.png", "Pixel Quest.png", "broken.png", "readme.txt"]),
+            "ux0:pictures/Wallpapers" => Some(&["Aurora.png", "Coast.png", "Night city.png"]),
+            "ux0:data" | "ux0:app" | "ux0:tai" | "ur0:" | "uma0:" => Some(&[]),
+            _ => None,
+        };
+        // The devices in the Vita host's order, the rest sorted as it does.
+        let entries = names.map(|names| {
+            let all: Vec<FolderEntry> = names.iter().map(|n| entry(n)).collect();
+            if dir.is_empty() { all } else { shelf_core::shelf::browse::sorted(all) }
+        });
+        self.later.push(Event::Folder(dir.to_string(), entries));
+        true
+    }
+
+    fn import_picture(&mut self, from: &str, to: &str, _fit: bool) -> bool {
+        self.log.push(format!("import {from} to {to}"));
+        self.files.insert(to.into(), b"PNG".to_vec());
+        true
     }
 
     /// The tai config's and AutoBoot's changes, done at once with the core's

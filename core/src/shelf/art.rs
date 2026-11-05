@@ -208,6 +208,15 @@ impl Art {
         self.keep(gfx, key, Some(loaded));
     }
 
+    /// A picture that is on its way through [`insert`](Art::insert) at the
+    /// next draw: not asked of the host meanwhile. Asked in the same update,
+    /// the host could read a file the file thread is still writing and the
+    /// tile would keep "no picture".
+    pub fn expect(&mut self, key: PictureKey) {
+        self.loaded.remove(&key);
+        self.requested.insert(key);
+    }
+
     /// Forget the art files that did not decode, after the art folder was
     /// read again: one may have been written since.
     pub fn forget_missing(&mut self) {

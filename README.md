@@ -60,7 +60,9 @@ the colored tiles with initials stand in for game icons.
 - **Long lists:** holding a direction speeds up, from one title at a time to
   twenty, so a tab of thousands of games can be crossed in seconds.
 - **Search** across every tab with the on-screen keyboard.
-- **Per-title changes:** name, category, icon, backdrop and favorite.
+- **Per-title changes:** name, category, icon, backdrop and favorite; box
+  art and backdrops from any folder of the memory card (title editor ▸
+  Browse...).
 - **Six themes:** Midnight, Aurora, Sakura, Ember, Daylight, and Dynamic, which
   takes its colors from the selected title.
 - **Five text sizes**, from Smaller to Larger (SELECT ▸ Appearance ▸ Text size).
@@ -221,7 +223,7 @@ saves its first picture), and copy files in with VitaShell (USB or FTP):
 **Box art is matched by file name.** A file named after the title id
 (`PCSA00069.png`) or the title (`Gravity Daze.png`) is used without any
 further step; letter case does not matter. With SELECT ▸ Appearance ▸
-Details set to Detailed, the shelf shows each title's id. Pocket Shelf reads
+Title line set to Detailed, the shelf shows each title's id. Pocket Shelf reads
 the `art/` folder at start, so restart it after copying, or open the
 title's Box art picker, which reads the folder again.
 
@@ -236,6 +238,15 @@ every file in the folder. **Default** goes back to the box art matched by
 name (else the title's icon) or to the title's own backdrop; **None** shows
 no backdrop, and **Game icon** shows the title's icon in place of matched
 box art.
+
+**Browse...** in either picker takes a PNG from any folder of the memory
+card (`ux0:`, `ur0:`, `uma0:` and the other storage there is). It opens on
+the folder you last took a box art (or a backdrop) from, kept in
+`folders.json`; ○ opens a folder, △ goes up one, and the highlighted file
+is shown on the left. The file you pick is copied to `art/` (shrunk to the
+tile's size) or `backdrops/` as `<title id>-<number>.png`, so the original
+can be moved or deleted afterwards. Only PNG files are listed: Pocket Shelf
+reads no JPEG.
 
 Files Pocket Shelf reads:
 
@@ -317,6 +328,7 @@ Everything Pocket Shelf saves is in `ux0:/data/PocketShelf/`:
 | `libretro/` | libretro's name lists, one per console, fetched once |
 | `gamedb/` | libretro's game databases as tables, the games' checksums, and what each title was identified as |
 | `wikidata/` | Wikidata's game details tables, one per console, the genre and mode names, and what each title was matched to |
+| `folders.json` | The folders Browse last took a box art and a backdrop from |
 | `autostart.txt`, `return.txt`, `boot-plugin.log` | The Console start settings the plugin reads, the mark a launch leaves for Return after a game, and the plugin's log of this console start |
 | `steamgriddb.txt` | Your SteamGridDB API key |
 | `update.json`, `update/` | The last update check; a downloaded update |

@@ -48,6 +48,10 @@ const EDITOR_VISIBLE: usize = 7;
 const VALUE_W: f32 = 320.0;
 /// Picker rows shown at once.
 const PICKER_ROWS: usize = 5;
+/// The picker's fixed rows: Default, Game icon (or None), Browse; the
+/// folder's files follow.
+pub(super) const PICKER_FIXED: usize = 3;
+const BROWSE_ROW: usize = 2;
 /// Frames the picker's highlight rests before its picture is loaded.
 const PREVIEW_DELAY: u32 = 8;
 /// Category manager rows shown at once.
@@ -60,7 +64,8 @@ pub struct Editor {
 }
 
 /// The art or backdrop picker: the fixed rows ("Default", then "Game icon"
-/// or "None"), then the PNG files of the folder.
+/// or "None", then "Browse...", `browse.rs`), then the PNG files of the
+/// folder.
 pub struct Picker {
     pub backdrop: bool,
     pub folder: Vec<String>,
@@ -411,7 +416,7 @@ impl Shelf {
 
     /// The file on a picker row (rows 0 and 1 are fixed).
     fn picker_file(&self, row: usize) -> Option<String> {
-        self.picker.as_ref().and_then(|p| p.listed.get(row.wrapping_sub(2)).cloned())
+        self.picker.as_ref().and_then(|p| p.listed.get(row.wrapping_sub(PICKER_FIXED)).cloned())
     }
 
     pub(super) fn picker_count(&self) -> usize {
@@ -448,13 +453,13 @@ impl Shelf {
         let fixed = if backdrop { game.backdrop.as_deref() == Some(NO_BACKDROP) } else { game.art_icon };
         let current = chosen.and_then(|c| files.iter().position(|f| *f == c));
         if let Some(picker) = &mut self.picker {
-            picker.row = if fixed { 1 } else { current.map_or(0, |i| i + 2) };
+            picker.row = if fixed { 1 } else { current.map_or(0, |i| i + PICKER_FIXED) };
         }
     }
 
     pub(super) fn picker_input(&mut self, host: &mut dyn Host, step: Option<super::navigation::Step>, confirm: bool, cancel: bool, triangle: bool) {
         use super::navigation::{Direction, Step as Nav};
-        let count = self.picker_count() + 2;
+        let count = self.picker_count() + PICKER_FIXED;
         let Some(picker) = &mut self.picker else { return };
         let before = picker.row;
         match step {
@@ -473,8 +478,8 @@ impl Shelf {
             if let Some(picker) = &mut self.picker {
                 let files = &picker.listed;
                 picker.row = match file.and_then(|f| files.iter().position(|x| *x == f)) {
-                    Some(i) => i + 2,
-                    None => picker.row.min(1),
+                    Some(i) => i + PICKER_FIXED,
+                    None => picker.row.min(PICKER_FIXED - 1),
                 };
             }
         }
@@ -504,7 +509,7 @@ impl Shelf {
 
     /// Highlight a picker row by touch, as the buttons would.
     pub(super) fn picker_focus(&mut self, row: usize) {
-        let count = self.picker_count() + 2;
+        let count = self.picker_count() + PICKER_FIXED;
         let Some(picker) = &mut self.picker else { return };
         let row = row.min(count - 1);
         if picker.row != row {
@@ -524,6 +529,10 @@ impl Shelf {
             return;
         }
         let (backdrop, row) = (picker.backdrop, picker.row);
+        // Browse has no picture of its own.
+        if row == BROWSE_ROW {
+            return;
+        }
         let Some(game) = self.editor_game() else { return };
         let file = self.picker_file(row);
         let key = if backdrop {
@@ -597,6 +606,10 @@ impl Shelf {
             }
         }
         let backdrop = picker.backdrop;
+        if row == BROWSE_ROW {
+            self.open_browser(host, backdrop);
+            return;
+        }
         let value = match row {
             0 => None,
             1 => Some(if backdrop { NO_BACKDROP } else { USE_ICON }.to_string()),
@@ -622,12 +635,13 @@ impl Shelf {
         let t = self.t();
         let theme = self.theme;
         // Only the rows shown are read from the list.
-        let total = count + 2;
+        let total = count + PICKER_FIXED;
         let entry = |i: usize| -> String {
             match i {
                 0 => t.standard.into(),
                 1 => (if backdrop { t.none } else { t.game_icon }).into(),
-                _ => self.picker.as_ref().map(|p| p.listed[i - 2].clone()).unwrap_or_default(),
+                BROWSE_ROW => t.browse.into(),
+                _ => self.picker.as_ref().map(|p| p.listed[i - PICKER_FIXED].clone()).unwrap_or_default(),
             }
         };
         let slide = self.drawer.at(self.now);

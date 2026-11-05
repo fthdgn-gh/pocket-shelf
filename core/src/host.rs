@@ -160,6 +160,16 @@ pub enum PictureKey {
     /// A picture decoded from memory with [`Host::decode`] (a Find artwork
     /// candidate): its number, and how it was decoded.
     Memory { id: u32, as_: DecodeAs },
+    /// A PNG anywhere on the memory card, by its full path (`ux0:pictures/a.png`),
+    /// decoded as the file it would be saved to (the title editor's Browse).
+    File { path: String, as_: DecodeAs },
+}
+
+/// A folder's entry, as [`Host::list_folder`] answers it.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct FolderEntry {
+    pub name: String,
+    pub folder: bool,
 }
 
 /// What a running scan is reading (`installed.rs`): one step per app
@@ -239,6 +249,10 @@ pub enum Event {
     /// SELECT ▸ System ▸ Console start: the tai config and plugins after
     /// [`Host::autostart`].
     AutoStart(crate::autostart::Setup),
+    /// A folder listed with [`Host::list_folder`]: its subfolders and PNG
+    /// files ([`browse::sorted`](crate::shelf::browse::sorted)); `None` when it
+    /// cannot be read.
+    Folder(String, Option<Vec<FolderEntry>>),
 }
 
 /// Whether Adrenaline loads Pocket Shelf's boot plugin, which starts a PSP
@@ -316,6 +330,7 @@ pub const SAVED_FILES: &[&str] = &[
     crate::updates::RECORD_FILE,
     crate::updates::UPDATE_VERSION_FILE,
     crate::autostart::AUTOSTART_FILE,
+    crate::library::settings::FOLDERS_FILE,
     crate::autostart::RETURN_FILE,
 ];
 
@@ -442,6 +457,19 @@ pub trait Host {
     /// off the frame; answered with [`Event::AutoStart`]. False when this
     /// host cannot.
     fn autostart(&mut self, _change: crate::autostart::Change) -> bool {
+        false
+    }
+    /// List a folder of the memory card by its full path (`ux0:`,
+    /// `ux0:pictures`), off the frame: a folder can hold thousands of files.
+    /// `""` lists the storage devices there are. Answered with
+    /// [`Event::Folder`]. False when this host cannot.
+    fn list_folder(&mut self, _dir: &str) -> bool {
+        false
+    }
+    /// Copy a PNG from anywhere on the memory card to `art/` or `backdrops/`
+    /// (fitted into a 128 px square first with `fit`), in order with the
+    /// other writes.
+    fn import_picture(&mut self, _from: &str, _to: &str, _fit: bool) -> bool {
         false
     }
 

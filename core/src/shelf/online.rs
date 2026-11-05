@@ -70,12 +70,13 @@ impl Shelf {
                             // the file may still be on its way to the card,
                             // and a read before it lands would cache "no
                             // picture" (the tile showed initials).
-                            if let Some(tex) = self.online_tex[0].take() {
-                                self.pending_art.push((PictureKey::Art(file.clone()), tex, self.online_accent, self.online_shown));
-                            }
                             // The new file has to be in the art index first.
                             self.library.add_art(&file);
                             self.art.forget_missing();
+                            if let Some(tex) = self.online_tex[0].take() {
+                                self.art.expect(PictureKey::Art(file.clone()));
+                                self.pending_art.push((PictureKey::Art(file.clone()), tex, self.online_accent, self.online_shown));
+                            }
                             self.library.patch(&id, |c| c.art = Some(file));
                         }
                         AssetKind::Backdrop => {

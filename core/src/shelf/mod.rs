@@ -4,6 +4,7 @@
 pub mod art;
 mod artwork;
 mod autostart;
+pub mod browse;
 pub mod chrome;
 mod editor;
 pub mod keyboard;
@@ -194,6 +195,10 @@ pub struct Shelf {
     before_search: Option<(String, Option<String>)>,
     editor: Option<editor::Editor>,
     picker: Option<editor::Picker>,
+    /// The title editor's Browse, over the picker.
+    browser: Option<browse::Browser>,
+    /// A Browse confirm that waited for its file's preview.
+    pending_browse: Option<String>,
     categories: Option<editor::Categories>,
     /// A picker confirm that waited for its file to decode, now due.
     pending_picker_confirm: bool,
@@ -288,6 +293,8 @@ impl Shelf {
             before_search: None,
             editor: None,
             picker: None,
+            browser: None,
+            pending_browse: None,
             categories: None,
             pending_picker_confirm: false,
             rescan: None,
@@ -402,6 +409,9 @@ impl Shelf {
     pub fn picture(&mut self, gfx: &mut Gfx, key: PictureKey, picture: Option<Picture>) {
         // The picker's preview: a backdrop is its own; an icon or box art
         // also goes to the art cache below.
+        if self.browser_picture(gfx, &key, &picture) {
+            return;
+        }
         if self.picker_picture(gfx, &key, &picture) {
             return;
         }
@@ -558,6 +568,8 @@ impl Shelf {
             self.database_input(host, pressed & confirm != 0, pressed & cancel != 0);
         } else if self.diagnostics.is_some() {
             self.diagnostics_input(step, pressed & cancel != 0);
+        } else if self.browser.is_some() {
+            self.browser_input(host, step, pressed & confirm != 0, pressed & cancel != 0, pressed & TRIANGLE != 0);
         } else if self.picker.is_some() {
             self.picker_input(host, step, pressed & confirm != 0, pressed & cancel != 0, pressed & TRIANGLE != 0);
         } else if self.editor.is_some() {
@@ -673,6 +685,7 @@ impl Shelf {
             self.picker_confirm(host);
         }
         self.picker_frame(host);
+        self.browser_frame(host);
         self.online_frame(host);
         self.request_icons(host);
         self.blend_dynamic();
@@ -1353,6 +1366,9 @@ impl Shelf {
         }
         if self.picker.is_some() {
             self.draw_picker(gfx);
+        }
+        if self.browser.is_some() {
+            self.draw_browser(gfx);
         }
         if self.update.open {
             self.draw_update(gfx);

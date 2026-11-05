@@ -71,8 +71,49 @@ fn picture(key: &PictureKey) -> Option<Picture> {
             }
             // Pictures in memory come with their bytes (`decode_memory`).
             PictureKey::Memory { .. } => None,
+            PictureKey::File { path, as_ } => read_png(path).and_then(|png| decode_memory(*as_, &png)),
         }
     }
+}
+
+/// A PNG anywhere on the memory card, up to the size the decoders take
+/// (8 MB); None for anything else.
+fn read_png(path: &str) -> Option<Vec<u8>> {
+    const PNG_MAX: u64 = 8 * 1024 * 1024;
+    if !shelf_core::shelf::browse::is_png(path) || fs::metadata(path).ok()?.len() > PNG_MAX {
+        return None;
+    }
+    let bytes = fs::read(path).ok()?;
+    bytes.starts_with(b"\x89PNG\r\n\x1a\n").then_some(bytes)
+}
+
+/// The storage devices Browse lists, those that read.
+const DEVICES: [&str; 6] = ["ux0:", "ur0:", "uma0:", "imc0:", "xmc0:", "grw0:"];
+
+/// A folder's subfolders and PNG files, for Browse (a thread of its own);
+/// `""` lists the devices. A device's root is read as `ux0:` and, failing
+/// that, `ux0:/`.
+fn list_folder(dir: &str) -> Option<Vec<shelf_core::host::FolderEntry>> {
+    use shelf_core::host::FolderEntry;
+    if dir.is_empty() {
+        let devices = DEVICES.iter().filter(|d| fs::read_dir(d).or_else(|_| fs::read_dir(format!("{d}/"))).is_ok());
+        return Some(devices.map(|d| FolderEntry { name: (*d).to_string(), folder: true }).collect());
+    }
+    let read = fs::read_dir(dir).or_else(|error| if dir.ends_with(':') { fs::read_dir(format!("{dir}/")) } else { Err(error) });
+    let entries = match read {
+        Ok(entries) => entries,
+        Err(error) => {
+            log_line(&format!("browse {dir}: {error}"));
+            return None;
+        }
+    };
+    let mut found = Vec::new();
+    for entry in entries.flatten().take(10_000) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let folder = entry.file_type().is_ok_and(|t| t.is_dir());
+        found.push(FolderEntry { name, folder });
+    }
+    Some(shelf_core::shelf::browse::sorted(found))
 }
 
 /// A change to the data folder, done in order on the file thread.
@@ -81,6 +122,9 @@ enum FileOp {
     /// A picture to `art/` or `backdrops/`, fitted into a square first.
     Picture(String, Vec<u8>, bool),
     Remove(String),
+    /// A PNG from anywhere on the memory card to `art/` or `backdrops/`,
+    /// fitted into a square first (Browse).
+    Import(String, String, bool),
     /// Answered once every earlier change is done.
     Flush(Sender<()>),
 }
@@ -127,6 +171,10 @@ fn file_op(op: FileOp) {
                 log_line(&format!("write {path}: {error}"));
             }
         }
+        FileOp::Import(from, to, fit) => match read_png(&from) {
+            Some(png) => file_op(FileOp::Picture(to, png, fit)),
+            None => log_line(&format!("import {from}: not a PNG of up to 8 MB")),
+        },
         FileOp::Remove(path) => match fs::remove_file(format!("{DATA}/{path}")) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -445,7 +493,9 @@ impl Host for VitaHost {
         if let Ok(mut waiting) = self.requests.waiting.lock() {
             match key {
                 // Only the newest backdrop matters.
-                PictureKey::Backdrop { .. } | PictureKey::Memory { as_: DecodeAs::Backdrop, .. } => waiting.backdrop = Some(key),
+                PictureKey::Backdrop { .. } | PictureKey::Memory { as_: DecodeAs::Backdrop, .. } | PictureKey::File { as_: DecodeAs::Backdrop, .. } => {
+                    waiting.backdrop = Some(key)
+                }
                 _ => waiting.icons.push_back(key),
             }
         }
@@ -533,5 +583,20 @@ impl Host for VitaHost {
 
     fn save_picture(&mut self, path: &str, png: Vec<u8>, fit: bool) -> bool {
         picture_path(path) && self.files.send(FileOp::Picture(path.into(), png, fit)).is_ok()
+    }
+
+    fn import_picture(&mut self, from: &str, to: &str, fit: bool) -> bool {
+        picture_path(to) && shelf_core::shelf::browse::is_png(from) && self.files.send(FileOp::Import(from.into(), to.into(), fit)).is_ok()
+    }
+
+    fn list_folder(&mut self, dir: &str) -> bool {
+        let (dir, sender) = (dir.to_string(), self.answer_sender.clone());
+        spawn("shelf-browse", move || {
+            let started = now_us();
+            let entries = list_folder(&dir);
+            log_line(&format!("browse {dir}: {} entries in {} ms", entries.as_ref().map_or(0, Vec::len), (now_us() - started) / 1000));
+            let _ = sender.send(Event::Folder(dir, entries));
+        });
+        true
     }
 }
