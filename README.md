@@ -27,6 +27,10 @@ its saved data.
 | --- | --- | --- |
 | ![The list view: title rows with small icons, the selected row highlighted.](./screenshots/list.png) | ![The Home view on a RetroArch console tab, SNES: a game from a RetroArch playlist with its year, genre, developer, publisher, players and region from libretro's database.](./screenshots/retroarch.png) | ![The SELECT menu's Appearance page as a floating card: theme, view, text size, title line, backdrop, icon box and status bar.](./screenshots/menu.png) |
 
+| Split | Spotlight |
+| --- | --- |
+| ![The Split view: title rows with small icons at the left, the selected title's box art, name, platform and category and its year, genre, developer, publisher and players at the right.](./screenshots/split.png) | ![The Spotlight view: the selected title's backdrop over the screen, its box art at the lower left, its name, platform and category, a row of its details and a Launch button beside it.](./screenshots/spotlight.png) |
+
 The screens are rendered on the desktop by `make shots` with sample titles;
 the colored tiles with initials stand in for game icons.
 
