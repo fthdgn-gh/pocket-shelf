@@ -6,9 +6,9 @@
 //! title's `sce_sys` folder and in the system's copy of it (see
 //! `installed::metadata_dirs`). The launcher draws the picture
 //! behind the selected title. The host decodes the file, crops it to the
-//! screen's 30:17 shape and averages it down to a 512x256 texture, the
-//! largest power-of-two size the core accepts; the guest stretches that back
-//! over the screen.
+//! screen's 30:17 shape and averages it down to at most 512x256 texels
+//! (480x272 for a 960x544 picture; `shrink.rs`); the guest stretches that
+//! back over the screen.
 //!
 //! Reading and decoding a picture takes long enough to drop frames, so it
 //! runs on a worker thread (host.rs).
@@ -17,21 +17,13 @@ use std::fs;
 use std::string::String;
 use std::vec::Vec;
 
-/// Width, height and RGBA pixels.
-type Pixels = (u32, u32, Vec<u8>);
+use super::shrink::Pixels;
 
 /// Largest file read, in bytes.
 const FILE_MAX: u64 = 8 * 1024 * 1024;
 /// Largest image decoded, in pixels (1920x1080). The decoded frame is held
 /// in memory, so this bounds it to 8 MiB of RGBA.
 const PIXELS_MAX: u64 = 2_097_152;
-const OUT_W: u32 = 512;
-const OUT_H: u32 = 256;
-/// Smallest texture produced for a small source image.
-const OUT_W_MIN: u32 = 64;
-/// Screen shape the picture is cropped to (480:272).
-const ASPECT_W: u64 = 30;
-const ASPECT_H: u64 = 17;
 
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -122,61 +114,13 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Pixels> {
         png::ColorType::Indexed => return None,
     };
 
-    // Largest centered 30:17 rectangle inside the picture.
-    let (crop_w, crop_h) = if width as u64 * ASPECT_H > height as u64 * ASPECT_W {
-        ((height as u64 * ASPECT_W / ASPECT_H) as u32, height)
-    } else {
-        (width, (width as u64 * ASPECT_H / ASPECT_W) as u32)
-    };
-    // The filter averages source pixels into each texel, so the texture is
-    // never larger than the cropped picture.
-    let (mut out_w, mut out_h) = (OUT_W, OUT_H);
-    while out_w > crop_w || out_h > crop_h {
-        out_w /= 2;
-        out_h /= 2;
-    }
-    if out_w < OUT_W_MIN {
-        return None;
-    }
-    let origin_x = (width - crop_w) / 2;
-    let origin_y = (height - crop_h) / 2;
-    let cells = (out_w * out_h) as usize;
-    let mut sums = vec![0u32; cells * 4];
-    let mut counts = vec![0u32; cells];
-    // Each source column's texel column, worked out once: a 64-bit division
-    // per pixel is a library call on the Vita's 32-bit CPU, and it was most
-    // of a backdrop's 0.5–1.4 s on hardware.
-    let columns: Vec<u32> = (0..crop_w).map(|x| (x as u64 * out_w as u64 / crop_w as u64) as u32).collect();
-    let row_bytes = crop_w as usize * channels;
-    for y in origin_y..origin_y + crop_h {
-        let start = y as usize * info.line_size + origin_x as usize * channels;
-        let row = buffer.get(start..start + row_bytes)?;
-        let base = ((y - origin_y) as u64 * out_h as u64 / crop_h as u64) as usize * out_w as usize;
-        for (pixel, &column) in row.chunks_exact(channels).zip(&columns) {
-            let (r, g, b) = if channels >= 3 { (pixel[0], pixel[1], pixel[2]) } else { (pixel[0], pixel[0], pixel[0]) };
-            let cell = base + column as usize;
-            let sum = &mut sums[cell * 4..cell * 4 + 3];
-            sum[0] += r as u32;
-            sum[1] += g as u32;
-            sum[2] += b as u32;
-            counts[cell] += 1;
-        }
-    }
-    // A background is drawn opaque, so the picture's own alpha is dropped.
-    let mut rgba = Vec::with_capacity(cells * 4);
-    for cell in 0..cells {
-        let count = counts[cell].max(1);
-        for channel in 0..3 {
-            rgba.push((sums[cell * 4 + channel] / count) as u8);
-        }
-        rgba.push(255);
-    }
+    let shrunk = super::shrink::shrink(&buffer, info.line_size, channels, width, height);
     crate::host::log_line(&format!(
         "backdrop {width}x{height}: decode {} ms, scale {} ms",
         (decoded - started) / 1000,
         (crate::host::now_us() - decoded) / 1000
     ));
-    Some((out_w, out_h, rgba))
+    shrunk
 }
 
 /// Path of a picture the user supplied: a plain `.png` name in the data

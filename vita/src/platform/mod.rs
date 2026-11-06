@@ -25,6 +25,7 @@ pub mod emu4vita;
 pub mod folders;
 pub mod retroarch;
 pub mod seplugins;
+pub mod shrink;
 pub mod update;
 pub mod wikidata;
 

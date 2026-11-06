@@ -17,3 +17,5 @@ pub mod iso;
 pub mod retroarch;
 #[path = "../../vita/src/platform/seplugins.rs"]
 pub mod seplugins;
+#[path = "../../vita/src/platform/shrink.rs"]
+pub mod shrink;
