@@ -231,6 +231,9 @@ impl Requests {
     }
 }
 
+/// An icon or box art taking this long is logged.
+const SLOW_PICTURE_MS: u64 = 250;
+
 /// A decoding thread: takes requests of its kind and answers them.
 fn decoder(requests: Arc<Requests>, sender: Sender<Event>, backdrops: bool) {
     while let Some((key, bytes)) = requests.next(backdrops) {
@@ -239,8 +242,13 @@ fn decoder(requests: Arc<Requests>, sender: Sender<Event>, backdrops: bool) {
             (PictureKey::Memory { as_, .. }, Some(png)) => decode_memory(*as_, &png),
             _ => picture(&key),
         };
+        let ms = (now_us() - started) / 1000;
+        let waiting = requests.waiting.lock().map_or((0, 0), |w| (w.icons.len(), w.ahead.len() + w.backdrop.is_some() as usize));
         if let (true, PictureKey::Backdrop { id, .. }) = (backdrops, &key) {
-            log_line(&format!("backdrop {id} in {} ms{}", (now_us() - started) / 1000, if picture.is_none() { " (none)" } else { "" }));
+            log_line(&format!("backdrop {id} in {ms} ms{}; waiting: {} icons, {} backdrops", if picture.is_none() { " (none)" } else { "" }, waiting.0, waiting.1));
+        } else if ms >= SLOW_PICTURE_MS {
+            // An icon or box art that kept the ones after it waiting.
+            log_line(&format!("slow picture {key:?} in {ms} ms; waiting: {} icons, {} backdrops", waiting.0, waiting.1));
         }
         if sender.send(Event::Picture(key, picture)).is_err() {
             return;

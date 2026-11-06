@@ -3,6 +3,7 @@
 
 mod backend;
 mod host;
+mod memory;
 mod platform;
 mod status;
 
@@ -14,6 +15,9 @@ use vita2d_sys::*;
 use vitasdk_sys::*;
 
 use host::{now_us, VitaHost};
+
+#[global_allocator]
+static ALLOCATOR: memory::Counting = memory::Counting;
 
 #[no_mangle]
 #[used]
@@ -198,11 +202,14 @@ fn main() {
             app.stats.push(cpu_us, frame_us);
         }
         last = (trace, cpu_us);
-        if frame == 600 || frame == 1800 {
+        // At 10 s, then every 30 s: a heap or texture total that keeps
+        // growing is a leak.
+        if frame == 600 || (frame > 600 && frame % 1800 == 0) {
             host.log(&format!(
-                "frame {frame}: {} titles, textures {} KB, {}",
+                "frame {frame}: {} titles, textures {} KB, {}, {}",
                 app.len(),
                 gfx.textures.live_bytes() / 1024,
+                memory::line(),
                 app.stats.line()
             ));
         }
