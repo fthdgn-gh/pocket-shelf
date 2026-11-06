@@ -1,4 +1,4 @@
-//! The five views: Home, Carousel, Grid, List and Cascade,
+//! The views: Home, Carousel, Grid, List, Cascade, Split and Spotlight,
 //! each drawing the tiles near the selection from the shelf's state, and
 //! the title's details under them.
 
@@ -30,6 +30,8 @@ const DETAILS_PITCH: f32 = 28.0;
 /// the details row.
 const DETAIL_TEXT: f32 = 30.0;
 const DETAIL_GAP: f32 = 28.0;
+/// The start button's height.
+const LAUNCH_H: f32 = 52.0;
 
 impl Shelf {
     /// Start over when the view, the details or the tab changed: tiles
@@ -45,7 +47,8 @@ impl Shelf {
             ViewMode::Home => 240,
             ViewMode::Cascade => 260,
             ViewMode::Carousel => 220,
-            ViewMode::Grid | ViewMode::List => 1,
+            ViewMode::Spotlight => 240,
+            ViewMode::Grid | ViewMode::List | ViewMode::Split => 1,
         };
         self.intro = super::Tween::new(0.0, ms);
         self.intro.set(1.0, self.now);
@@ -60,7 +63,7 @@ impl Shelf {
                 self.top_row = (self.selected / GRID_COLUMNS).saturating_sub(GRID_ROWS - 1);
                 self.strip = super::Tween::new(self.top_row as f32 * (tile + gap), 180);
             }
-            ViewMode::List => {
+            ViewMode::List | ViewMode::Split => {
                 self.top_row = self.selected.saturating_sub(LIST_ROWS - 1);
                 self.strip = super::Tween::new(self.top_row as f32 * (LIST_ROW_H + LIST_GAP), 150);
             }
@@ -92,6 +95,8 @@ impl Shelf {
             ViewMode::Grid => self.draw_grid(gfx),
             ViewMode::List => self.draw_list(gfx),
             ViewMode::Cascade => self.draw_cascade(gfx),
+            ViewMode::Split => self.draw_split(gfx),
+            ViewMode::Spotlight => self.draw_spotlight(gfx),
         }
     }
 
@@ -226,13 +231,15 @@ impl Shelf {
         }
     }
 
-    /// The details panel as one row centered on the screen, top at `y`:
-    /// the items that fit in `w`, in order.
-    fn draw_details_row(&mut self, gfx: &mut Gfx, game: &Game, y: f32, w: f32) {
+    /// The details panel as one row, top at `y`, from `left` or centered on
+    /// the screen: the items that fit in `w`, in order (with the publisher
+    /// at "Detailed").
+    fn draw_details_row(&mut self, gfx: &mut Gfx, game: &Game, y: f32, w: f32, left: Option<f32>) {
         let theme = self.theme;
         let mut items: Vec<(Icon, String, f32)> = Vec::new();
         let mut width = 0.0;
-        for (icon, text) in self.detail_items(game, false) {
+        let publisher = self.settings.detail == DetailLevel::Detailed;
+        for (icon, text) in self.detail_items(game, publisher) {
             let text = gfx.fit(Role::Small, &text, 260.0);
             let item = DETAIL_TEXT + gfx.measure(Role::Small, &text);
             let added = if items.is_empty() { item } else { DETAIL_GAP + item };
@@ -242,7 +249,7 @@ impl Shelf {
             width += added;
             items.push((icon, text, item));
         }
-        let mut x = ((W - width) / 2.0).round();
+        let mut x = left.unwrap_or(((W - width) / 2.0).round());
         let baseline = (y + 10.0 - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
         for (icon, text, item) in items {
             gfx.icon(icon, x, y, theme.accent);
@@ -294,7 +301,7 @@ impl Shelf {
         }
         let y = bottom + 12.0;
         if y + 20.0 <= H - FOOTER_H - 4.0 {
-            self.draw_details_row(gfx, &game, y, 880.0);
+            self.draw_details_row(gfx, &game, y, 880.0, None);
         }
     }
 
@@ -366,29 +373,42 @@ impl Shelf {
         let title = gfx.fit(Role::Display, &game.title, text_w);
         gfx.text_top(Role::Display, HOME_LEFT, y, theme.text, &title);
         y += gfx.line_height(Role::Display) + 8.0;
-        let genre = if game.console.is_some() { self.shown_id(&game) } else { game.platform.genre() };
-        let mut parts = vec![genre.to_string(), self.category_label(&game)];
-        if detail == DetailLevel::Detailed {
-            parts.push(self.shown_id(&game).to_string());
-        }
-        parts.extend(self.line_details(&game));
-        let first = parts[0].clone();
-        let line: Vec<String> = parts.into_iter().enumerate().filter(|(i, p)| *i == 0 || *p != first).map(|(_, p)| p).collect();
-        let line = gfx.fit(Role::Small, &line.join("  ·  "), text_w);
+        let line = self.info_line(gfx, &game, text_w);
         gfx.text_top(Role::Small, HOME_LEFT, y, theme.dim, &line);
         y += gfx.line_height(Role::Small) + 8.0 + 8.0 + 8.0;
-        // The start button: the confirm button and "Launch" on a pill in the
-        // text color.
+        self.draw_launch(gfx, HOME_LEFT, y);
+    }
+
+    /// The line under a title in Home and Spotlight: its console or kind
+    /// and category, at "Detailed" its id, and the year and genre when the
+    /// details panel does not show them; fitted to `width`.
+    fn info_line(&self, gfx: &mut Gfx, game: &Game, width: f32) -> String {
+        let genre = if game.console.is_some() { self.shown_id(game) } else { game.platform.genre() };
+        let mut parts = vec![genre.to_string(), self.category_label(game)];
+        if self.settings.detail == DetailLevel::Detailed {
+            parts.push(self.shown_id(game).to_string());
+        }
+        parts.extend(self.line_details(game));
+        let first = parts[0].clone();
+        let line: Vec<String> = parts.into_iter().enumerate().filter(|(i, p)| *i == 0 || *p != first).map(|(_, p)| p).collect();
+        gfx.fit(Role::Small, &line.join("  ·  "), width)
+    }
+
+    /// The start button with its top left at `(x, y)`: the confirm button
+    /// and "Launch" on a pill in the text color. Returns its height.
+    fn draw_launch(&mut self, gfx: &mut Gfx, x: f32, y: f32) -> f32 {
+        let theme = self.theme;
         let launch = self.t().launch;
         let label_w = gfx.measure(Role::BodyBold, launch);
-        let pill = Rect::new(HOME_LEFT, y, 12.0 + 32.0 + 12.0 + label_w + 28.0, 52.0);
-        gfx.round_rect(pill, 26.0, 0.0, theme.text);
+        let pill = Rect::new(x, y, 12.0 + 32.0 + 12.0 + label_w + 28.0, LAUNCH_H);
+        gfx.round_rect(pill, LAUNCH_H / 2.0, 0.0, theme.text);
         if let Some(bit) = Button::confirm(self.settings.confirm).bit() {
             gfx.hit(pill, Hit::Button(bit));
         }
         Button::confirm(self.settings.confirm).draw(gfx, pill.x + 12.0, y + 10.0);
-        let baseline = (y + 26.0 - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
+        let baseline = (y + LAUNCH_H / 2.0 - gfx.line_height(Role::BodyBold) / 2.0 + gfx.ascent(Role::BodyBold)).round();
         gfx.text(Role::BodyBold, pill.x + 56.0, baseline, theme.bg_bottom, launch);
+        LAUNCH_H
     }
 
     /// The Carousel: one row of tiles on a lit shelf,
@@ -468,6 +488,13 @@ impl Shelf {
     /// The List: a title per row, scrolling a row at a
     /// time.
     fn draw_list(&mut self, gfx: &mut Gfx) {
+        let detailed = self.settings.detail == DetailLevel::Detailed;
+        self.draw_rows(gfx, W - 2.0 * BAR_SIDE, detailed);
+    }
+
+    /// The list's rows from the left margin, `width` wide, each with the
+    /// title's id at the right with `ids`.
+    fn draw_rows(&mut self, gfx: &mut Gfx, width: f32, ids: bool) {
         let theme = self.theme;
         let pitch = LIST_ROW_H + LIST_GAP;
         if self.selected < self.top_row {
@@ -477,10 +504,11 @@ impl Shelf {
         }
         self.strip.set(self.top_row as f32 * pitch, self.now);
         let scroll = self.strip.at(self.now);
-        let area = Rect::new(BAR_SIDE, TOP + 8.0, W - 2.0 * BAR_SIDE, LIST_ROWS as f32 * pitch - LIST_GAP);
+        let area = Rect::new(BAR_SIDE, TOP + 8.0, width, LIST_ROWS as f32 * pitch - LIST_GAP);
         let from = self.top_row.saturating_sub(2);
         let to = (self.top_row + LIST_ROWS + 2).min(self.list.len());
-        let detailed = self.settings.detail == DetailLevel::Detailed;
+        let text_left = 24.0 + 44.0 + 16.0;
+        let title_w = if ids { 600.0 } else { width - text_left - 24.0 };
         gfx.clip(Some(area));
         for index in from..to {
             let y = area.y + index as f32 * pitch - scroll;
@@ -496,15 +524,105 @@ impl Shelf {
             let game = self.library.games()[self.list[index]].clone();
             self.art.draw(gfx, &game, Rect::new(row.x + 24.0, y + 8.0, 44.0, 44.0), 44.0, 1.0, self.settings.icon_box, true);
             let role = if selected { Role::BodyBold } else { Role::Body };
-            let title = gfx.fit(role, &game.title, 600.0);
+            let title = gfx.fit(role, &game.title, title_w);
             let baseline = (y + LIST_ROW_H / 2.0 - gfx.line_height(role) / 2.0 + gfx.ascent(role)).round();
-            gfx.text(role, row.x + 24.0 + 44.0 + 16.0, baseline, if selected { theme.text } else { theme.dim }, &title);
-            if detailed {
+            gfx.text(role, row.x + text_left, baseline, if selected { theme.text } else { theme.dim }, &title);
+            if ids {
                 let small = (y + LIST_ROW_H / 2.0 - gfx.line_height(Role::Small) / 2.0 + gfx.ascent(Role::Small)).round();
                 gfx.text_right(Role::Small, row.right() - 24.0, small, if selected { theme.dim } else { theme.faint }, self.shown_id(&game));
             }
         }
         gfx.clip(None);
+    }
+
+    /// The selected title's art at `rect`, with a shadow; a tap on it
+    /// launches like one on the selected tile.
+    fn draw_feature_art(&mut self, gfx: &mut Gfx, index: usize, rect: Rect, opacity: f32) {
+        let Some(&game_index) = self.list.get(index) else { return };
+        if opacity <= 0.0 {
+            return;
+        }
+        gfx.hit(rect, Hit::Tile(index));
+        let game = &self.library.games()[game_index];
+        let shown = self.art.shown(game, rect, gfx);
+        tile_shadow(gfx, shown, opacity);
+        self.art.draw(gfx, game, rect, rect.w, opacity, self.settings.icon_box, false);
+    }
+
+    /// Split: the List's rows at the left; at the right the selected
+    /// title's art, its name and line, and the details panel.
+    fn draw_split(&mut self, gfx: &mut Gfx) {
+        let detail = self.settings.detail;
+        self.draw_rows(gfx, SPLIT_LIST_W, false);
+        let side = split_art(detail);
+        let width = W - SPLIT_PANE_LEFT - BAR_SIDE;
+        let bottom = H - FOOTER_H - 8.0;
+        // At "Basic", the art alone, in the middle of the view's height.
+        let top = if detail == DetailLevel::Basic { (TOP + (VIEW_H - side) / 2.0).round() } else { TOP + 8.0 };
+        self.draw_feature_art(gfx, self.selected, Rect::new(SPLIT_PANE_LEFT, top, side, side), 1.0);
+        if detail == DetailLevel::Basic {
+            return;
+        }
+        let theme = self.theme;
+        let Some(game) = self.selected_game().cloned() else { return };
+        let mut y = top + side + 16.0;
+        let title = gfx.fit(Role::Title, &game.title, width);
+        gfx.text_top(Role::Title, SPLIT_PANE_LEFT, y, theme.text, &title);
+        y += gfx.line_height(Role::Title) + 4.0;
+        let line = self.info_line(gfx, &game, width);
+        gfx.text_top(Role::Small, SPLIT_PANE_LEFT, y, theme.dim, &line);
+        y += gfx.line_height(Role::Small) + 12.0;
+        if self.details_shown(&game) {
+            self.draw_details_column(gfx, &game, SPLIT_PANE_LEFT, y, width, bottom);
+        }
+    }
+
+    /// Spotlight: the selected title's backdrop over the screen, its art
+    /// at the lower left, sliding in from the side the selection moved
+    /// to, and its name, line, details and start button beside it.
+    fn draw_spotlight(&mut self, gfx: &mut Gfx) {
+        let detail = self.settings.detail;
+        let side = spotlight(detail);
+        let intro = self.intro.at(self.now);
+        let art_bottom = H - FOOTER_H - 16.0;
+        let art_top = art_bottom - side;
+        let from = self.selected.saturating_sub(1);
+        let to = (self.selected + 2).min(self.list.len());
+        self.keep_tiles(from, to);
+        for index in from..to {
+            let offset = index as f32 - self.selected as f32;
+            let opacity = if offset == 0.0 { 1.0 } else { 0.0 };
+            let slot = self.tile(index, Slot { x: SPOTLIGHT_LEFT + offset * SPOTLIGHT_SLIDE, opacity, ..Slot::default() }, 220);
+            let rect = Rect::new(slot.x - 32.0 * (1.0 - intro), art_top, side, side);
+            self.draw_feature_art(gfx, index, rect, slot.opacity * intro);
+        }
+        if detail == DetailLevel::Basic {
+            return;
+        }
+        let theme = self.theme;
+        let Some(game) = self.selected_game().cloned() else { return };
+        let left = SPOTLIGHT_LEFT + side + 32.0;
+        let width = W - left - SPOTLIGHT_LEFT;
+        // From the bottom up: the button level with the art's foot, the
+        // details row, the line and the name above them.
+        let title_h = gfx.line_height(Role::Display);
+        let line_h = gfx.line_height(Role::Small);
+        let details = self.details_shown(&game);
+        let block = |details: bool| title_h + 8.0 + line_h + if details { 16.0 + 20.0 } else { 0.0 } + 24.0 + LAUNCH_H;
+        let details = details && art_bottom - block(true) >= TOP + 16.0;
+        let mut y = (art_bottom - block(details)).max(TOP + 16.0);
+        let title = gfx.fit(Role::Display, &game.title, width);
+        gfx.text_top(Role::Display, left, y, theme.text.alpha(intro), &title);
+        y += title_h + 8.0;
+        let line = self.info_line(gfx, &game, width);
+        gfx.text_top(Role::Small, left, y, theme.dim.alpha(intro), &line);
+        y += line_h;
+        if details {
+            y += 16.0;
+            self.draw_details_row(gfx, &game, y, width, Some(left));
+            y += 20.0;
+        }
+        self.draw_launch(gfx, left, y + 24.0);
     }
 
     /// The Cascade, after the Xbox 360 dashboard: the

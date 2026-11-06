@@ -29,7 +29,15 @@ macro_rules! keyed {
 keyed!(Language { En = "en", Tr = "tr", De = "de", Fr = "fr", Es = "es" });
 keyed!(
     /// The shelf's views, in the View row's order.
-    ViewMode { Home = "home", Carousel = "carousel", Grid = "grid", List = "list", Cascade = "cascade" }
+    ViewMode {
+        Home = "home",
+        Carousel = "carousel",
+        Grid = "grid",
+        List = "list",
+        Cascade = "cascade",
+        Split = "split",
+        Spotlight = "spotlight",
+    }
 );
 keyed!(
     /// How much text each title shows.

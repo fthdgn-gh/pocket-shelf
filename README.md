@@ -36,10 +36,12 @@ the colored tiles with initials stand in for game icons.
   per RetroArch console, and System last. You can add your own categories,
   and rename, reorder or hide any of them. "Last Played" and "Favorites" fill
   themselves.
-- **Five views:** Home (the default), after the PS5 home screen: the selected
+- **Seven views:** Home (the default), after the PS5 home screen: the selected
   title large at the left, its name and a Launch button below; a carousel; a
-  five-column grid; a list; and a cascade after the Xbox 360 dashboard. Each
-  has three detail levels: Basic, Normal and Detailed.
+  five-column grid; a list; a cascade after the Xbox 360 dashboard; Split, the
+  list with the selected title's art and details beside it; and Spotlight, one
+  title at a time over its backdrop. Each has three detail levels: Basic,
+  Normal and Detailed.
 - **RetroArch games** from RetroArch's own playlists, one tab per console.
   Each game starts straight into the core its playlist names, without
   RetroArch's menu (see [RetroArch](#retroarch)).
@@ -373,8 +375,8 @@ counts as unused, and so does box art whose name matches no title.
 touch screen:
 
 - Tap a title to select it; tap the selected title to start it.
-- Drag along the row (Home, Carousel, Cascade) or up and down the Grid and
-  the List to move through the titles; a flick keeps going and slows down.
+- Drag along the row (Home, Carousel, Cascade, Spotlight) or up and down the
+  Grid, the List and Split to move through the titles; a flick keeps going and slows down.
 - Tap a tab name, or L or R, to change tabs, or drag along the tab names
   to move through them (a flick goes on through several).
 - Tap a button hint at the bottom of the screen (△ Edit, □ Search,

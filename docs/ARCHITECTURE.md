@@ -122,7 +122,7 @@ lookups and the hasher changed). The log has a
 
 `core/src/shelf/` draws the shelf from its state every frame:
 the top bar with the sliding tab names and the status items (`chrome.rs`),
-the five views at the three detail levels (`views.rs`), the art with its
+the seven views at the three detail levels (`views.rs`), the art with its
 icon box and initials (`art.rs`), backdrops with their wash, the tint wash,
 the Dynamic theme's blend, the footer, and drawers (`panel.rs`). Sizes and
 timings are 0.1's (`layout.rs`, `navigation.rs`); each moving value is a
@@ -282,8 +282,19 @@ sent after the title list; `Host::match_wikidata`), taken by
 first, from Wikidata's game when libretro's is empty. The
 details panel (Games ▸ Game details) is drawn by the views
 (`views.rs`): a column of symbol and text rows right of the title in Home
-and the Cascade, one centered row under the title in the Carousel and the
-Grid, nothing in the List.
+and the Cascade and under it in Split, one centered row under the title in
+the Carousel and the Grid, one row beside the art in Spotlight, nothing in
+the List.
+
+**Split** draws the List's rows in the left half (`SPLIT_LIST_W`) and the
+selected title's art, name, line and details column from `SPLIT_PANE_LEFT`.
+**Spotlight** draws the selected title's art at the lower left with its
+name, line, details row and start button beside it, over the clearest
+backdrop wash (top 25% opaque); the art of the titles before and after it
+waits `SPOTLIGHT_SLIDE` to either side at no opacity, so a move slides the
+old art out and the new one in. Both reuse the List's and Home's code
+(`draw_rows`, `info_line`, `draw_launch`). Spotlight draws at most three
+pictures, Split one beside the List's rows.
 
 **Text size** (Appearance ▸ Text size, saved in `text-size.json` for the
 same reason): five steps, Smaller ×0.85, Small ×0.92, Normal, Large ×1.12
@@ -303,7 +314,7 @@ On a first start (no `titles.tsv`), the scan page shows first: the mark,
 the name, a bar and the phase with its count, fed by `Event::Scan`, until the titles arrive and 8 frames after.
 
 Desktop shots: `02`–`06` Home (views and details are set through the menu), `10`–`13` Carousel, `20`–`22` Grid, `30`–`32`
-List, `40`–`42` Cascade, `50`–`53` tabs, `60`–`63` themes, `70`–`72` the scan
+List, `33`–`37` Split, `40`–`42` Cascade, `43`–`48` Spotlight, `50`–`53` tabs, `60`–`63` themes, `70`–`72` the scan
 page, `80`–`82` saved data, `90` test titles, `91` launching, `92`–`93` the
 Adrenaline drawer, `100`–`105` the SELECT menu, `110`–`115` the keyboard and
 search, `120`–`134` the editor, pickers and category manager, `140`–`152`

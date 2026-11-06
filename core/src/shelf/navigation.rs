@@ -20,7 +20,7 @@ pub const REPEAT_EVERY: u32 = 6;
 pub fn page_size(view: ViewMode) -> usize {
     match view {
         ViewMode::Grid => GRID_COLUMNS * GRID_ROWS,
-        ViewMode::List => LIST_ROWS,
+        ViewMode::List | ViewMode::Split => LIST_ROWS,
         _ => 1,
     }
 }
@@ -29,10 +29,11 @@ pub fn page_size(view: ViewMode) -> usize {
 pub fn icon_radius(view: ViewMode) -> usize {
     match view {
         ViewMode::Grid => GRID_COLUMNS * 2,
-        ViewMode::List => LIST_ROWS + 2,
+        ViewMode::List | ViewMode::Split => LIST_ROWS + 2,
         ViewMode::Cascade => CASCADE_DEPTH as usize + 1,
         ViewMode::Home => HOME_AFTER as usize,
         ViewMode::Carousel => 3,
+        ViewMode::Spotlight => 2,
     }
 }
 
@@ -46,8 +47,8 @@ pub fn move_selection(view: ViewMode, direction: Direction, index: usize, count:
     let (index, count, columns) = (index as i64, count as i64, GRID_COLUMNS as i64);
     let step = if back { -1 } else { 1 };
     let next = match view {
-        ViewMode::Carousel | ViewMode::Cascade | ViewMode::Home => horizontal.then_some(index + step),
-        ViewMode::List => (!horizontal).then_some(index + step),
+        ViewMode::Carousel | ViewMode::Cascade | ViewMode::Home | ViewMode::Spotlight => horizontal.then_some(index + step),
+        ViewMode::List | ViewMode::Split => (!horizontal).then_some(index + step),
         ViewMode::Grid if horizontal => Some(index + step),
         ViewMode::Grid => {
             let next = index + step * columns;
@@ -252,6 +253,16 @@ mod tests {
         assert_eq!(move_selection(Cascade, Right, 0, 3, false), Some(1));
         assert_eq!(move_selection(Cascade, Down, 0, 3, false), None);
         assert_eq!(move_selection(Cascade, Right, 2, 3, true), Some(0));
+    }
+
+    #[test]
+    fn split_moves_like_the_list_and_spotlight_like_the_shelf() {
+        assert_eq!(move_selection(Split, Down, 0, 3, false), Some(1));
+        assert_eq!(move_selection(Split, Right, 0, 3, false), None);
+        assert_eq!(move_selection(Spotlight, Right, 0, 3, false), Some(1));
+        assert_eq!(move_selection(Spotlight, Up, 1, 3, false), None);
+        assert_eq!(move_selection(Spotlight, Left, 0, 3, true), Some(2));
+        assert!(icon_radius(Split) >= LIST_ROWS);
     }
 
     #[test]

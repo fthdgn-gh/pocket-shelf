@@ -352,6 +352,8 @@ pub struct Views {
     pub list: &'static str,
     pub cascade: &'static str,
     pub home: &'static str,
+    pub split: &'static str,
+    pub spotlight: &'static str,
 }
 
 #[derive(Debug)]
@@ -450,6 +452,8 @@ impl Messages {
             ("views.list", self.views.list),
             ("views.cascade", self.views.cascade),
             ("views.home", self.views.home),
+            ("views.split", self.views.split),
+            ("views.spotlight", self.views.spotlight),
             ("detailLevels.basic", self.detail_levels.basic),
             ("detailLevels.normal", self.detail_levels.normal),
             ("detailLevels.detailed", self.detail_levels.detailed),
@@ -765,6 +769,8 @@ pub static EN: Messages = Messages {
         list: "List",
         cascade: "Cascade",
         home: "Home",
+        split: "Split",
+        spotlight: "Spotlight",
     },
     detail_levels: DetailLevels {
         basic: "Basic",
@@ -1093,6 +1099,8 @@ pub static TR: Messages = Messages {
         list: "Liste",
         cascade: "Kademe",
         home: "Ana ekran",
+        split: "Bölmeli",
+        spotlight: "Vitrin",
     },
     detail_levels: DetailLevels {
         basic: "Temel",
@@ -1421,6 +1429,8 @@ pub static DE: Messages = Messages {
         list: "Liste",
         cascade: "Kaskade",
         home: "Startseite",
+        split: "Geteilt",
+        spotlight: "Rampenlicht",
     },
     detail_levels: DetailLevels {
         basic: "Einfach",
@@ -1749,6 +1759,8 @@ pub static FR: Messages = Messages {
         list: "Liste",
         cascade: "Cascade",
         home: "Accueil",
+        split: "Deux volets",
+        spotlight: "À la une",
     },
     detail_levels: DetailLevels {
         basic: "Simple",
@@ -2077,6 +2089,8 @@ pub static ES: Messages = Messages {
         list: "Lista",
         cascade: "Cascada",
         home: "Inicio",
+        split: "Dividida",
+        spotlight: "Destacado",
     },
     detail_levels: DetailLevels {
         basic: "Básico",

@@ -82,6 +82,34 @@ pub const LIST_GAP: f32 = 8.0;
 /// Rows that fit in the list.
 pub const LIST_ROWS: usize = 6;
 
+/// The Split view: the list's rows in the left pane (`SPLIT_LIST_W`
+/// wide), the selected title's art from `SPLIT_PANE_LEFT`.
+pub const SPLIT_LIST_W: f32 = 472.0;
+pub const SPLIT_PANE_LEFT: f32 = 536.0;
+
+/// The Split view's art side per detail level: the larger with less text
+/// under it.
+pub fn split_art(detail: DetailLevel) -> f32 {
+    match detail {
+        DetailLevel::Basic => 288.0,
+        DetailLevel::Normal => 176.0,
+        DetailLevel::Detailed => 160.0,
+    }
+}
+
+/// Spotlight's art side per detail level, at `SPOTLIGHT_LEFT` and standing
+/// on the footer.
+pub fn spotlight(detail: DetailLevel) -> f32 {
+    match detail {
+        DetailLevel::Basic => 240.0,
+        DetailLevel::Normal => 192.0,
+        DetailLevel::Detailed => 176.0,
+    }
+}
+pub const SPOTLIGHT_LEFT: f32 = 40.0;
+/// How far the art slides when the selection moves a title.
+pub const SPOTLIGHT_SLIDE: f32 = 96.0;
+
 /// The Carousel's pitch and the x that centers a tile.
 pub fn carousel_layout(screen_w: f32, detail: DetailLevel) -> (f32, f32) {
     let ShelfRow { tile, gap, .. } = shelf(detail);

@@ -1346,7 +1346,7 @@ impl Shelf {
             t: self.t(),
             theme: &theme,
             settings: &self.settings,
-            own_launch: self.settings.view == ViewMode::Home && self.settings.detail != DetailLevel::Basic,
+            own_launch: matches!(self.settings.view, ViewMode::Home | ViewMode::Spotlight) && self.settings.detail != DetailLevel::Basic,
             search_term: &self.library.search_term,
             launching: self.launching.as_deref(),
             position: self.selected,
@@ -1622,6 +1622,8 @@ impl Shelf {
                     ViewMode::Grid => v.grid,
                     ViewMode::List => v.list,
                     ViewMode::Cascade => v.cascade,
+                    ViewMode::Split => v.split,
+                    ViewMode::Spotlight => v.spotlight,
                 };
                 (t.view, Some(name.into()), None, Both)
             }
@@ -1817,9 +1819,13 @@ impl Shelf {
         }
         if shown_any {
             // Views that leave most of the screen open get a wash clearest at
-            // the top; the grid and the list an even, darker one.
-            let open = matches!(self.settings.view, ViewMode::Carousel | ViewMode::Cascade | ViewMode::Home);
-            let colors = if open { (theme.bg_top.with_a(0x73), theme.bg_bottom.with_a(0xf2)) } else { (theme.bg_top.with_a(0xc7), theme.bg_bottom.with_a(0xf5)) };
+            // the top, Spotlight the clearest; the grid and the lists an
+            // even, darker one.
+            let colors = match self.settings.view {
+                ViewMode::Spotlight => (theme.bg_top.with_a(0x40), theme.bg_bottom.with_a(0xf2)),
+                ViewMode::Carousel | ViewMode::Cascade | ViewMode::Home => (theme.bg_top.with_a(0x73), theme.bg_bottom.with_a(0xf2)),
+                ViewMode::Grid | ViewMode::List | ViewMode::Split => (theme.bg_top.with_a(0xc7), theme.bg_bottom.with_a(0xf5)),
+            };
             let wash = match self.wash {
                 Some((c, tex)) if c == colors => tex,
                 old => {

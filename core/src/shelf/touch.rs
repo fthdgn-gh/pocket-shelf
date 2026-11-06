@@ -169,7 +169,9 @@ impl Shelf {
                 let (tile, gap) = grid(detail);
                 (moved.1, tile + gap, GRID_COLUMNS as i64)
             }
-            ViewMode::List => (moved.1, LIST_ROW_H + LIST_GAP, 1),
+            ViewMode::List | ViewMode::Split => (moved.1, LIST_ROW_H + LIST_GAP, 1),
+            // A step a third of the art's side.
+            ViewMode::Spotlight => (moved.0, super::layout::spotlight(detail) / 3.0, 1),
         }
     }
 
