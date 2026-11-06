@@ -23,7 +23,7 @@
   <frame id="frame4">
     <liveitem>
       <text align="left" text-align="left" word-wrap="off" ellipsis="on">
-        <str color="#ffffff" size="18" shadow="on">v0.6</str>
+        <str color="#ffffff" size="18" shadow="on">v0.6.1</str>
       </text>
     </liveitem>
   </frame>
