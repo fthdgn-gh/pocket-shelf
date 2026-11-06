@@ -31,6 +31,13 @@ an icon's corners are rounded in its RGBA data when it arrives. Text is
 Figtree through `fontdue`, one 1024×1024 glyph atlas, the roles of
 Pocket Shelf 0.1 at **about two steps smaller** (Body 22 px, Small 18; any
 size rasterizes, PocketJS stopped at 24) and a 16 px `Tiny`.
+**Consecutive commands share one draw call** (`gfx::batches`): fills, or
+images of one texture with one tint (a line of text), up to 1,024 quads,
+drawn with `vita2d_draw_array` and `vita2d_draw_array_textured` from
+vertices in vita2d's frame pool. The desktop shots average 393 commands in
+81 calls. The frame loop runs events, update and draw while the GPU renders
+the previous frame, and waits for it (`vita2d_wait_rendering_done`) before
+uploads and `vita2d_start_drawing`, which empties the pool.
 
 Textures: the app frees a texture it no longer draws (`Textures::free`); the
 Vita backend keeps released allocations for reuse up to 16 MB and drops a

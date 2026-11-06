@@ -472,9 +472,10 @@ fn main() {
         let path = out.join(format!("{}.png", shot.name));
         canvas.save_png(&path).expect("write png");
         println!(
-            "{} ({} commands, {} KB of textures, glyph atlas started over {} times)",
+            "{} ({} commands in {} draw calls, {} KB of textures, glyph atlas started over {} times)",
             path.display(),
             gfx.cmds.len(),
+            shelf_core::gfx::batches(&gfx.cmds).count(),
             gfx.textures.live_bytes() / 1024,
             gfx.atlas_resets()
         );

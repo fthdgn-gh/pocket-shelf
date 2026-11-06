@@ -92,12 +92,13 @@ impl FrameStats {
 /// phase, plus what the frame did that can cost time.
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Trace {
-    /// Waiting for the GPU to finish the previous frame.
-    pub wait: u32,
     pub events: u32,
     pub event_count: u32,
     pub update: u32,
     pub draw: u32,
+    /// Waiting for the GPU to finish the previous frame, which it renders
+    /// while events, update and draw run.
+    pub wait: u32,
     /// Texture uploads.
     pub sync: u32,
     pub uploads: u32,
@@ -105,6 +106,8 @@ pub struct Trace {
     /// Handing the commands to the GPU.
     pub submit: u32,
     pub commands: u32,
+    /// Draw calls the commands took (`gfx::batches`).
+    pub calls: u32,
     pub glyphs: u32,
     pub textures_added: u32,
 }
@@ -113,17 +116,18 @@ impl Trace {
     pub fn line(&self, frame: u64, frame_us: u32, cpu_us: u32) -> String {
         let ms = |us: u32| us as f32 / 1000.0;
         format!(
-            "slow frame {frame}: {:.1} ms (cpu {:.1}) | wait {:.1} events {:.1} ({}) update {:.1} draw {:.1} ({} cmds, {} glyphs, {} textures) sync {:.1} ({} uploads, {} KB) submit {:.1}",
+            "slow frame {frame}: {:.1} ms (cpu {:.1}) | events {:.1} ({}) update {:.1} draw {:.1} ({} cmds, {} calls, {} glyphs, {} textures) wait {:.1} sync {:.1} ({} uploads, {} KB) submit {:.1}",
             ms(frame_us),
             ms(cpu_us),
-            ms(self.wait),
             ms(self.events),
             self.event_count,
             ms(self.update),
             ms(self.draw),
             self.commands,
+            self.calls,
             self.glyphs,
             self.textures_added,
+            ms(self.wait),
             ms(self.sync),
             self.uploads,
             self.upload_kb,

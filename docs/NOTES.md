@@ -645,6 +645,14 @@ SELECT ▸ System: **Updates**, the channel (Stable, Beta, Nightly, Off), and
   two full-screen stencil passes. Clips are applied on the CPU now.
 - **Texture memory takes CPU writes at about 100 MB/s**; pictures upload
   through a queue at 256 KB a frame.
+- **Each vita2d call cost the GPU about 20 µs**: on 0.5.x hardware logs the
+  GPU took 15–17 ms for 500–709 commands, and the frame waited for it before
+  its CPU work, so frames ran at 26 ms (half the frames over 20 ms in one
+  session). Commands are now batched (about 5 to 1) and the CPU work
+  overlaps the GPU's; the slow-frame line shows `calls` and `wait`. **Not
+  yet measured on hardware.** If frames stay over 16.7 ms, the next step is
+  the GPU clock (`scePowerSetGpuClockFrequency`; the app leaves the
+  system's default).
 - **Writing a file in the frame cost 24–30 ms** on hardware; writes go
   through the file thread.
 - Measured on hardware with 5,905 titles: library loaded in 55 ms, first

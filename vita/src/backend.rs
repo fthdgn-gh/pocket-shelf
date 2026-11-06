@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use shelf_core::gfx::{Cmd, Color, Format, Texture, Textures};
+use shelf_core::gfx::{batches, Cmd, Color, Format, Texture, Textures};
 use vita2d_sys::*;
 
 #[derive(Clone, Copy)]
@@ -201,28 +201,88 @@ impl Backend {
     /// # Safety
     /// Call inside `vita2d_start_drawing` / `vita2d_end_drawing`, after `sync`.
     pub unsafe fn run(&self, cmds: &[Cmd]) {
-        for cmd in cmds {
-            match *cmd {
-                Cmd::Fill { rect, color } => vita2d_draw_rectangle(rect.x, rect.y, rect.w, rect.h, abgr(color)),
-                Cmd::Image { tex, src, dst, tint } => {
+        for range in batches(cmds) {
+            let run = &cmds[range];
+            match run[0] {
+                Cmd::Fill { .. } => self.fills(run),
+                Cmd::Image { tex, tint, .. } => {
                     let Some(Some(gpu)) = self.gpu.get(tex.0 as usize) else { continue };
                     if gpu.ptr.is_null() || !gpu.ready {
                         continue;
                     }
-                    vita2d_draw_texture_tint_part_scale(
-                        gpu.ptr,
-                        dst.x,
-                        dst.y,
-                        src.x,
-                        src.y,
-                        src.w,
-                        src.h,
-                        dst.w / src.w,
-                        dst.h / src.h,
-                        abgr(tint),
-                    );
+                    images(gpu.ptr, run, abgr(tint));
                 }
             }
         }
     }
+
+    /// Fills in one call; each vertex carries its color.
+    unsafe fn fills(&self, run: &[Cmd]) {
+        let Some(vertices) = vertices::<vita2d_color_vertex>(run.len()) else {
+            for cmd in run {
+                if let Cmd::Fill { rect, color } = *cmd {
+                    vita2d_draw_rectangle(rect.x, rect.y, rect.w, rect.h, abgr(color));
+                }
+            }
+            return;
+        };
+        for (cmd, quad) in run.iter().zip(vertices.chunks_exact_mut(6)) {
+            let Cmd::Fill { rect, color } = *cmd else { continue };
+            let color = abgr(color);
+            let corner = |x: f32, y: f32| vita2d_color_vertex { x, y, z: 0.5, color };
+            quad_corners(quad, rect.x, rect.y, rect.x + rect.w, rect.y + rect.h, corner);
+        }
+        vita2d_draw_array(SceGxmPrimitiveType_SCE_GXM_PRIMITIVE_TRIANGLES, vertices.as_ptr(), vertices.len());
+    }
+}
+
+/// Images of one texture with one tint in one call.
+unsafe fn images(ptr: *mut vita2d_texture, run: &[Cmd], tint: u32) {
+    let Some(vertices) = vertices::<vita2d_texture_vertex>(run.len()) else {
+        for cmd in run {
+            if let Cmd::Image { src, dst, .. } = *cmd {
+                vita2d_draw_texture_tint_part_scale(ptr, dst.x, dst.y, src.x, src.y, src.w, src.h, dst.w / src.w, dst.h / src.h, tint);
+            }
+        }
+        return;
+    };
+    let (tw, th) = (vita2d_texture_get_width(ptr) as f32, vita2d_texture_get_height(ptr) as f32);
+    for (cmd, quad) in run.iter().zip(vertices.chunks_exact_mut(6)) {
+        let Cmd::Image { src, dst, .. } = *cmd else { continue };
+        let (u0, v0, u1, v1) = (src.x / tw, src.y / th, (src.x + src.w) / tw, (src.y + src.h) / th);
+        let (x0, y0) = (dst.x, dst.y);
+        let corner = |x: f32, y: f32| vita2d_texture_vertex {
+            x,
+            y,
+            z: 0.5,
+            u: if x == x0 { u0 } else { u1 },
+            v: if y == y0 { v0 } else { v1 },
+        };
+        quad_corners(quad, x0, y0, dst.x + dst.w, dst.y + dst.h, corner);
+    }
+    vita2d_draw_array_textured(ptr, SceGxmPrimitiveType_SCE_GXM_PRIMITIVE_TRIANGLES, vertices.as_ptr(), vertices.len(), tint);
+}
+
+/// Two triangles in vita2d's own order for a rectangle (its strip
+/// 0-1-2-3 split as 0-1-2 and 2-1-3).
+fn quad_corners<V>(quad: &mut [V], x0: f32, y0: f32, x1: f32, y1: f32, corner: impl Fn(f32, f32) -> V) {
+    let [a, b, c, d, e, f] = quad else { return };
+    *a = corner(x0, y0);
+    *b = corner(x1, y0);
+    *c = corner(x0, y1);
+    *d = corner(x0, y1);
+    *e = corner(x1, y0);
+    *f = corner(x1, y1);
+}
+
+/// Vertex memory for `quads` quads in vita2d's frame pool, which the GPU
+/// reads and `vita2d_start_drawing` empties. None when the pool is full.
+unsafe fn vertices<V>(quads: usize) -> Option<&'static mut [V]> {
+    let count = quads * 6;
+    let ptr = vita2d_pool_memalign((count * core::mem::size_of::<V>()) as u32, core::mem::align_of::<V>().max(4) as u32) as *mut V;
+    if ptr.is_null() {
+        return None;
+    }
+    core::ptr::write_bytes(ptr, 0, count);
+    Some(core::slice::from_raw_parts_mut(ptr, count))
 }

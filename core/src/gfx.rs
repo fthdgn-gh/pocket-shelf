@@ -224,6 +224,35 @@ pub enum Cmd {
     Image { tex: TexId, src: Rect, dst: Rect, tint: Color },
 }
 
+/// Most quads one draw call takes (6 vertices each, under vita2d's 65,536
+/// linear indices).
+pub const BATCH_QUADS: usize = 1024;
+
+/// Consecutive commands that one draw call can take: fills (each vertex
+/// carries its color), or images of one texture with one tint. On hardware
+/// the GPU spent about 20 µs on each vita2d call, so a frame of 709 commands
+/// took 17 ms to render; the order of the commands is kept.
+pub fn batches(cmds: &[Cmd]) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
+    let joins = |a: &Cmd, b: &Cmd| match (a, b) {
+        (Cmd::Fill { .. }, Cmd::Fill { .. }) => true,
+        (Cmd::Image { tex: t1, tint: c1, .. }, Cmd::Image { tex: t2, tint: c2, .. }) => t1 == t2 && c1 == c2,
+        _ => false,
+    };
+    let mut start = 0;
+    std::iter::from_fn(move || {
+        if start >= cmds.len() {
+            return None;
+        }
+        let mut end = start + 1;
+        while end < cmds.len() && end - start < BATCH_QUADS && joins(&cmds[start], &cmds[end]) {
+            end += 1;
+        }
+        let range = start..end;
+        start = end;
+        Some(range)
+    })
+}
+
 /// What a frame did that can cost time, for the slow-frame log.
 #[derive(Clone, Copy, Default, Debug)]
 pub struct FrameWork {
@@ -368,5 +397,34 @@ impl Gfx {
     /// and the clipped top bar flickered on hardware).
     pub fn clip(&mut self, rect: Option<Rect>) {
         self.clip_px = rect.map(|r| r.round());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fill(color: u32) -> Cmd {
+        Cmd::Fill { rect: Rect::new(0.0, 0.0, 1.0, 1.0), color: Color::rgb(color) }
+    }
+
+    fn image(tex: u32, tint: u32) -> Cmd {
+        let r = Rect::new(0.0, 0.0, 1.0, 1.0);
+        Cmd::Image { tex: TexId(tex), src: r, dst: r, tint: Color::rgb(tint) }
+    }
+
+    #[test]
+    fn batches_join_fills_and_images_of_one_texture_and_tint() {
+        let cmds = [fill(1), fill(2), image(0, 1), image(0, 1), image(0, 2), image(1, 2), fill(1)];
+        let got: Vec<_> = batches(&cmds).collect();
+        assert_eq!(got, vec![0..2, 2..4, 4..5, 5..6, 6..7]);
+        assert_eq!(batches(&[]).count(), 0);
+    }
+
+    #[test]
+    fn batches_stop_at_the_quad_limit() {
+        let cmds = vec![fill(1); BATCH_QUADS * 2 + 1];
+        let got: Vec<_> = batches(&cmds).map(|r| r.len()).collect();
+        assert_eq!(got, vec![BATCH_QUADS, BATCH_QUADS, 1]);
     }
 }
