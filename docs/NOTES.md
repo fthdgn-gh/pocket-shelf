@@ -649,10 +649,29 @@ SELECT ▸ System: **Updates**, the channel (Stable, Beta, Nightly, Off), and
   GPU took 15–17 ms for 500–709 commands, and the frame waited for it before
   its CPU work, so frames ran at 26 ms (half the frames over 20 ms in one
   session). Commands are now batched (about 5 to 1) and the CPU work
-  overlaps the GPU's; the slow-frame line shows `calls` and `wait`. **Not
-  yet measured on hardware.** If frames stay over 16.7 ms, the next step is
-  the GPU clock (`scePowerSetGpuClockFrequency`; the app leaves the
-  system's default).
+  overlaps the GPU's; the slow-frame line shows `calls` and `wait`.
+  **Hardware, 0.6.1 build (2026-11-06): 33–65 calls a frame, CPU 1.8–2.5 ms
+  on average, frames at 16.7 ms**; 7–20 frames over 20 ms in a minute, all
+  in the first 3 s (the title list's library rebuild, 150 ms, and the
+  Wikidata match, 200–230 ms, both in `events`). Single 40–65 ms `draw`
+  frames with no new glyphs or textures are still unexplained (0.6.0 had
+  them too).
+- **Memory on hardware** (logged at 10 s and every 30 s since 0.6.1: heap,
+  free memory by kind): heap 9.6–9.7 MB, free user memory 218 MB, steady
+  over 77 s of browsing. Free CDRAM falls by up to about 30 MB as the
+  backend's pool of released textures fills (`POOL_BUDGET`, 16 MB) and
+  then levels off.
+- **Backdrops take 250–500 ms each on hardware**: a Vita title's
+  `pic0.png` read takes 300–450 ms, a PSP one's 20–90 ms; PNG decoding
+  30–120 ms. Scaling a 960x544 picture to 512x256 by per-pixel averaging
+  took 200–250 ms; since 0.6.1 a picture 1.5–2 times the texture's width
+  is halved in 2x2 blocks (`platform/shrink.rs`, 960x544 to 480x272;
+  **its hardware time is not yet logged**). 480x272 PSP pictures scale in
+  about 41 ms, 512x384 PlayStation screenshots in about 150 ms. One read of
+  53 KB took 17 s once with nothing else logged; it did not recur.
+- **PSP icons from ISO and CSO files take 260–650 ms each** (`slow
+  picture` lines), so a Split or Grid page of new PSP titles fills in over
+  1–2 s.
 - **Writing a file in the frame cost 24–30 ms** on hardware; writes go
   through the file thread.
 - Measured on hardware with 5,905 titles: library loaded in 55 ms, first
