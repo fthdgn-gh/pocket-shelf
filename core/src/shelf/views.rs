@@ -604,22 +604,27 @@ impl Shelf {
         let left = SPOTLIGHT_LEFT + side + 32.0;
         let width = W - left - SPOTLIGHT_LEFT;
         // From the bottom up: the button level with the art's foot, the
-        // details row, the line and the name above them.
+        // details row, the line and the name above them. The details row's
+        // place is kept for a title without details, so the name and the
+        // line stay put from title to title; at a text size that leaves no
+        // room for it, no title shows it.
         let title_h = gfx.line_height(Role::Display);
         let line_h = gfx.line_height(Role::Small);
-        let details = self.details_shown(&game);
         let block = |details: bool| title_h + 8.0 + line_h + if details { 16.0 + 20.0 } else { 0.0 } + 24.0 + LAUNCH_H;
-        let details = details && art_bottom - block(true) >= TOP + 16.0;
-        let mut y = (art_bottom - block(details)).max(TOP + 16.0);
+        let room = art_bottom - block(true) >= TOP + 16.0;
+        let details = room && self.details_shown(&game);
+        let mut y = (art_bottom - block(room)).max(TOP + 16.0);
         let title = gfx.fit(Role::Display, &game.title, width);
         gfx.text_top(Role::Display, left, y, theme.text.alpha(intro), &title);
         y += title_h + 8.0;
         let line = self.info_line(gfx, &game, width);
         gfx.text_top(Role::Small, left, y, theme.dim.alpha(intro), &line);
         y += line_h;
-        if details {
+        if room {
             y += 16.0;
-            self.draw_details_row(gfx, &game, y, width, Some(left));
+            if details {
+                self.draw_details_row(gfx, &game, y, width, Some(left));
+            }
             y += 20.0;
         }
         self.draw_launch(gfx, left, y + 24.0);
