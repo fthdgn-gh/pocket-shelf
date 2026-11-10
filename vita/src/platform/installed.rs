@@ -37,6 +37,10 @@ struct Title {
     /// A game in a disc image: the image's path under Adrenaline's memory
     /// stick (`ISO/<name>.cso`).
     image: Option<String>,
+    /// A PSP or PS1 game's `EBOOT.PBP` outside its own `PSP/GAME/<title id>`
+    /// folder (a category folder's game, or a folder named otherwise): its
+    /// path under the memory stick.
+    eboot: Option<String>,
     /// A game from a RetroArch playlist (`retroarch.rs`), platform `retro`.
     retro: Option<Retro>,
 }
@@ -281,6 +285,7 @@ fn add_emulator_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu
             platform: "retro",
             adrenaline: false,
             image: None,
+            eboot: None,
             retro: Some(Retro {
                 console: game.console,
                 core: game.core,
@@ -329,6 +334,7 @@ fn add_scummvm_games(titles: &mut Vec<Title>, installed: u8) {
             platform: "retro",
             adrenaline: false,
             image: None,
+            eboot: None,
             retro: Some(Retro {
                 console: String::from("ScummVM"),
                 core: String::new(),
@@ -390,7 +396,7 @@ fn scan_parts(mut titles: Vec<Title>, parts: Parts) -> Vec<Title> {
         if parts.psm {
             for (title_id, title) in unsafe { crate::platform::psm::scan(rows.as_deref()) } {
                 if title_id != SELF_TITLE_ID && !titles.iter().any(|item| item.title_id == title_id) {
-                    titles.push(Title { title_id, title, platform: "psm", adrenaline: false, image: None, retro: None });
+                    titles.push(Title { title_id, title, platform: "psm", adrenaline: false, image: None, eboot: None, retro: None });
                 }
             }
             scan_step();
@@ -404,6 +410,7 @@ fn scan_parts(mut titles: Vec<Title>, parts: Parts) -> Vec<Title> {
                     platform: item.platform,
                     adrenaline: !item.bubble,
                     image: item.image,
+                    eboot: item.eboot,
                     retro: None,
                 });
             }
@@ -425,6 +432,7 @@ fn scan_parts(mut titles: Vec<Title>, parts: Parts) -> Vec<Title> {
                 platform: "retro",
                 adrenaline: false,
                 image: None,
+                eboot: None,
                 retro: Some(Retro {
                     console: game.console,
                     core: game.core,
@@ -479,6 +487,7 @@ fn add_folder_games(titles: &mut Vec<Title>, emu: Option<&crate::platform::emu4v
             platform: "retro",
             adrenaline: false,
             image: None,
+            eboot: None,
             retro: Some(Retro {
                 console: game.console,
                 core: game.core,
@@ -535,6 +544,7 @@ fn scan_root(root: &str, titles: &mut Vec<Title>) {
             platform: "vita",
             adrenaline: false,
             image: None,
+            eboot: None,
             retro: None,
         });
     }
@@ -617,6 +627,7 @@ fn with_favourites(mut titles: Vec<Title>) -> Vec<Title> {
             platform: "retro",
             adrenaline: false,
             image: None,
+            eboot: None,
             retro: Some(Retro {
                 console: favourite.console,
                 core,
@@ -651,6 +662,9 @@ fn with_favourites(mut titles: Vec<Title>) -> Vec<Title> {
 /// version 7 the Emu4Vita++ core column; an older list is scanned over. A
 /// folder category's game has the launch `folder` and a playlist game's
 /// columns; a release before folder categories scans over a list with one.
+/// A PSP or PS1 game outside its own `PSP/GAME/<title id>` folder has the
+/// launch `pbp` and its PBP's path; a release before 0.6.2 scans over a list
+/// with one.
 #[cfg(feature = "data-fs")]
 const LIST_HEADER: &str = "pocket-shelf titles 7";
 
@@ -662,9 +676,10 @@ fn list_path() -> String {
 
 /// The saved list: the header, then one
 /// `<title id><TAB><platform><TAB><launch><TAB><path><TAB><console><TAB><core><TAB><emu core><TAB><title>`
-/// line per title in scan order. Launch is `uri`, `adrenaline` or `retroarch`
-/// (a playlist game). Path is a disc image's path under the memory stick, or
-/// a playlist game's content path, else empty. Console, core (RetroArch's)
+/// line per title in scan order. Launch is `uri`, `adrenaline`, `pbp` (through
+/// Adrenaline, from a PBP elsewhere in `PSP/GAME`) or `retroarch` (a playlist
+/// game). Path is a disc image's or a `pbp` title's PBP's path under the
+/// memory stick, or a playlist game's content path, else empty. Console, core (RetroArch's)
 /// and emu core (Emu4Vita++'s) are a playlist game's, else empty; such a
 /// game has at least one of the two cores. None when there is no usable
 /// file.
@@ -689,9 +704,14 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
         if !valid_title_id(id) || title.is_empty() {
             return None;
         }
+        let mut eboot = None;
         let (adrenaline, image, retro) = match launch {
             "uri" => (false, path, None),
             "adrenaline" => (true, path, None),
+            "pbp" => {
+                eboot = Some(path?);
+                (true, None, None)
+            }
             "scummvm" => {
                 // The core column holds the target.
                 let path = path?;
@@ -739,6 +759,7 @@ fn parse_list(text: &str) -> Option<Vec<Title>> {
             platform,
             adrenaline,
             image,
+            eboot,
             retro,
         });
     }
@@ -772,7 +793,10 @@ fn save_list(titles: &[Title]) {
                 if retro.target.is_empty() { retro.core.as_str() } else { retro.target.as_str() },
                 retro.emu.as_str(),
             ),
-            (None, true) => ("adrenaline", item.image.as_deref().unwrap_or(""), "", "", ""),
+            (None, true) => match &item.eboot {
+                Some(eboot) => ("pbp", eboot.as_str(), "", "", ""),
+                None => ("adrenaline", item.image.as_deref().unwrap_or(""), "", "", ""),
+            },
             (None, false) => ("uri", item.image.as_deref().unwrap_or(""), "", "", ""),
         };
         for field in [launch, path, console, core, emu] {
@@ -1048,7 +1072,7 @@ pub unsafe fn classic_files(title_id: &str) -> Option<crate::platform::pspemu::F
     let item = find(title_id).filter(|item| item.adrenaline)?;
     Some(match &item.image {
         Some(path) => crate::platform::pspemu::Files::Image(path.clone()),
-        None => crate::platform::pspemu::Files::Pbp(String::from(title_id)),
+        None => crate::platform::pspemu::Files::Pbp(item.eboot.clone().unwrap_or_else(|| crate::platform::pspemu::eboot_path(title_id))),
     })
 }
 
@@ -1159,7 +1183,7 @@ pub unsafe fn launch(title_id: &str, with: Option<shelf_core::host::Emulator>, c
     let pbp = Some(listed).filter(|item| item.adrenaline);
     let adrenaline = pbp.is_some();
     if let Some(item) = pbp {
-        if !crate::platform::pspemu::request_boot(title_id, item.platform, item.image.as_deref()) {
+        if !crate::platform::pspemu::request_boot(title_id, item.platform, item.image.as_deref(), item.eboot.as_deref()) {
             return false;
         }
     }

@@ -30,7 +30,7 @@
  * Request file `ms0:/PocketShelf/boot.txt`:
  *   <UTC tick in microseconds when written, as sceRtcGetCurrentTick gives>
  *   <psp, psx or iso>
- *   <ms0:/PSP/GAME/<title id>/EBOOT.PBP, or ms0:/ISO/...(.iso|.cso)>
+ *   <ms0:/PSP/GAME/[<category>/]<folder>/EBOOT.PBP, or ms0:/ISO/...(.iso|.cso)>
  *   <EBOOT.BIN or EBOOT.OLD, for iso only>
  *   <BOOT.BIN when the image has one, else "-"; for iso only>
  *
@@ -211,8 +211,9 @@ static int ends_with_ignoring_case(const char *text, const char *suffix) {
 	return 1;
 }
 
-/* A path under ms0:/PSP/GAME/ that ends in /EBOOT.PBP, one folder deep, with
- * nothing that could leave that folder. */
+/* A path under ms0:/PSP/GAME/ that ends in /EBOOT.PBP, one folder deep or two
+ * (a game in a category folder, as Game Categories Lite keeps them), with no
+ * "." or ".." step, no device and no control characters. */
 static int valid_eboot_path(const char *text) {
 	size_t length = strlen(text);
 	size_t prefix = sizeof(GAME_PREFIX) - 1;
@@ -223,9 +224,21 @@ static int valid_eboot_path(const char *text) {
 	if (!starts_with(text, GAME_PREFIX) || strcmp(text + length - suffix, EBOOT_SUFFIX) != 0) {
 		return 0;
 	}
-	for (size_t at = prefix; at < length - suffix; at++) {
-		char c = text[at];
-		if (c == '/' || c == '\\' || c == ':' || c == '.' || c < ' ') {
+	size_t end = length - suffix;
+	int folders = 1;
+	size_t step = prefix;
+	for (size_t at = prefix; at <= end; at++) {
+		char c = at < end ? text[at] : '/';
+		if (c == '/') {
+			size_t size = at - step;
+			if (size == 0 || (text[step] == '.' && (size == 1 || (size == 2 && text[step + 1] == '.')))) {
+				return 0;
+			}
+			if (at < end && ++folders > 2) {
+				return 0;
+			}
+			step = at + 1;
+		} else if (c == '\\' || c == ':' || c < ' ') {
 			return 0;
 		}
 	}

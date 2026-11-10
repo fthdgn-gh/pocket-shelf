@@ -54,7 +54,9 @@ the colored tiles with initials stand in for game icons.
   apps can open start in the one you choose, for all games or per game (see
   [Emu4Vita++](#emu4vita)).
 - **PSP and PS1 games through Adrenaline.** This covers EBOOTs in
-  `PSP/GAME` and ISO and CSO images in `ISO`. Pocket Shelf boots the game with
+  `PSP/GAME` (also in category folders such as Game Categories Lite's
+  `CAT_` folders, and in folders named after the game) and ISO and CSO images
+  in `ISO`. Pocket Shelf boots the game with
   its own small VSH plugin, so you don't have to pick it in the XMB. Before it
   installs or turns on the plugin, Pocket Shelf asks you.
 - **Artwork from [SteamGridDB](https://www.steamgriddb.com/) or libretro's

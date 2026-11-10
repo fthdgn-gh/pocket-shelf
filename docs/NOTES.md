@@ -140,7 +140,14 @@ taiHEN plugins (Console start), and NEON results (below).
   128x128 DXT1, unswizzled; `dds.rs`). Confirmed on hardware with four titles:
   names, icons, backdrops, launch.
 - **PSP and PS1** (`pspemu.rs`, `iso.rs`): EBOOTs in `PSP/GAME/<id>/`
-  (`CATEGORY` `ME` is PS1, called PSX everywhere), and `.iso`/`.cso` images in
+  (`CATEGORY` `ME` is PS1, called PSX everywhere). **A folder with no
+  `EBOOT.PBP` is a category folder** (Game Categories Lite's `CAT_<name>`, or
+  any name with its prefix setting off) and its folders are read one level
+  down; **a folder not named by a title id is listed by its `DISC_ID`** when
+  its `CATEGORY` is `ME`, `EG` or `UG` (homebrew, `MG`, stays out). Such a
+  title keeps its PBP's path (launch `pbp` in `titles.tsv`) and the plugin
+  accepts a path two folders deep; found in Vita3K with sample PBPs, launch
+  not yet confirmed on hardware. Disc images: `.iso`/`.cso` files in
   `ISO` and one level of subfolders (CSO v1 and v2 deflate; LZ4, ZSO, DAX
   and JSO are reported, not read). With a bubble in `app.db` a title starts
   with `psgm:play`; without one (the user's games) it starts through

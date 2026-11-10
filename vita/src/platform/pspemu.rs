@@ -12,6 +12,13 @@
 //! through Adrenaline. The `CATEGORY` in the `PARAM.SFO` tells a PS1 title
 //! (`ME`) from a PSP one.
 //!
+//! Adrenaline boots a PBP from any folder name, and plugins such as Game
+//! Categories Lite group games in category folders (`PSP/GAME/CAT_RPG/<game>/`).
+//! So a folder in `PSP/GAME` with no `EBOOT.PBP` is read one level deeper, and
+//! a folder not named by a title id is listed when its `PARAM.SFO` is a game's
+//! (`CATEGORY` `ME`, `EG` or `UG`), by its `DISC_ID`. Such a title keeps its
+//! PBP's path (`Classic::eboot`); homebrew (`MG`) in such a folder is left out.
+//!
 //! PSP games in disc images (`ux0:/pspemu/ISO`, `.iso` and `.cso`, and one
 //! level of subfolders) are listed too, by the `DISC_ID` and `TITLE` of the
 //! image's `PSP_GAME/PARAM.SFO` (`iso.rs`), and started through Adrenaline.
@@ -70,11 +77,16 @@ pub struct Classic {
     /// A disc image's path under Adrenaline's memory stick (`ISO/<name>.cso`);
     /// None for a title in `PSP/GAME`.
     pub image: Option<String>,
+    /// The `EBOOT.PBP`'s path under the memory stick when it is not
+    /// `PSP/GAME/<title id>/EBOOT.PBP`: in a category folder, or in a folder
+    /// named otherwise.
+    pub eboot: Option<String>,
 }
 
 /// Where a title without a bubble keeps its icon and picture.
 pub enum Files {
-    /// `PSP/GAME/<title id>/EBOOT.PBP`.
+    /// An `EBOOT.PBP`, by its path under the memory stick
+    /// (`PSP/GAME/<title id>/EBOOT.PBP`, `eboot_path`).
     Pbp(String),
     /// A disc image, by its path under the memory stick (`ISO/<name>.iso`).
     Image(String),
@@ -103,11 +115,11 @@ fn pbp_section(path: &str, index: usize, max: u32) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-/// The `PARAM.SFO` of a folder's `EBOOT.PBP`, or why there is none, for the
-/// scan report: `noEboot`, `short`, `notPbp <first bytes>`, `sfoSpan
-/// <start>-<end>`, `sfoRead` or `notSfo`.
-fn read_sfo(title_id: &str) -> Result<Vec<u8>, String> {
-    let mut file = fs::File::open(eboot_path(title_id)).map_err(|_| String::from("noEboot"))?;
+/// The `PARAM.SFO` of an `EBOOT.PBP` (its path under the memory stick), or
+/// why there is none, for the scan report: `noEboot`, `short`, `notPbp
+/// <first bytes>`, `sfoSpan <start>-<end>`, `sfoRead` or `notSfo`.
+fn read_sfo(eboot: &str) -> Result<Vec<u8>, String> {
+    let mut file = fs::File::open(on_stick(eboot)).map_err(|_| String::from("noEboot"))?;
     let mut header = [0u8; 40];
     file.read_exact(&mut header).map_err(|_| String::from("short"))?;
     if &header[..4] != b"\0PBP" {
@@ -128,20 +140,23 @@ fn read_sfo(title_id: &str) -> Result<Vec<u8>, String> {
     Ok(sfo)
 }
 
-fn eboot_path(title_id: &str) -> String {
-    on_stick(&format!("PSP/GAME/{title_id}/EBOOT.PBP"))
+/// Where a title in its own `PSP/GAME` folder keeps its PBP, under the
+/// memory stick.
+pub fn eboot_path(title_id: &str) -> String {
+    format!("{GAME_DIR}/{title_id}/EBOOT.PBP")
 }
 
-/// The game's path as Adrenaline sees it: `ms0:` is `ux0:/pspemu`.
-pub fn ms0_eboot_path(title_id: &str) -> String {
-    format!("ms0:/PSP/GAME/{title_id}/EBOOT.PBP")
-}
+/// Folder of installed PSP and PS1 games under the memory stick.
+const GAME_DIR: &str = "PSP/GAME";
+/// `CATEGORY` values of games: PS1, PSP from the store, PSP from a disc.
+/// A folder not named by a title id is listed only with one of these.
+const GAME_CATEGORIES: [&str; 3] = ["ME", "EG", "UG"];
 
 /// The picture a title without a bubble shows behind the list: the PBP's or
 /// the disc's `PIC1.PNG`. Callable from any thread.
 pub fn picture(files: &Files) -> Option<Vec<u8>> {
     match files {
-        Files::Pbp(title_id) => pbp_section(&eboot_path(title_id), SECTION_PIC1, PNG_MAX),
+        Files::Pbp(eboot) => pbp_section(&on_stick(eboot), SECTION_PIC1, PNG_MAX),
         Files::Image(path) => crate::platform::iso::picture(&on_stick(path), "PIC1.PNG"),
     }
 }
@@ -151,7 +166,7 @@ pub fn picture(files: &Files) -> Option<Vec<u8>> {
 /// square texture with clear bars, as RGBA. Callable from any thread.
 pub fn icon(files: &Files) -> Option<(u32, u32, Vec<u8>)> {
     let bytes = match files {
-        Files::Pbp(title_id) => pbp_section(&eboot_path(title_id), SECTION_ICON0, PNG_MAX)?,
+        Files::Pbp(eboot) => pbp_section(&on_stick(eboot), SECTION_ICON0, PNG_MAX)?,
         Files::Image(path) => crate::platform::iso::picture(&on_stick(path), "ICON0.PNG")?,
     };
     fit_png(&bytes)
@@ -226,11 +241,9 @@ pub(crate) fn fit_square(pixels: &[u8], width: u32, height: u32, line_size: usiz
     Some(rgba)
 }
 
-/// The PSP and PS1 titles to list. `rows` is the home screen's database (None
-/// when it could not be read: then every title counts as having no bubble);
-/// `known` holds the ids already listed.
-pub unsafe fn scan(rows: Option<&[appdb::Bubble]>, known: &[String]) -> Vec<Classic> {
-    let mut folders: Vec<String> = fs::read_dir(on_stick("PSP/GAME"))
+/// The folders in a folder under the memory stick, sorted by name.
+fn subfolders(folder: &str) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(on_stick(folder))
         .map(|entries| {
             entries
                 .flatten()
@@ -239,53 +252,138 @@ pub unsafe fn scan(rows: Option<&[appdb::Bubble]>, known: &[String]) -> Vec<Clas
                 .collect()
         })
         .unwrap_or_default();
-    folders.sort();
-    // Folders not named by a title id (homebrew) are left out.
-    let (ids, other_names): (Vec<String>, Vec<String>) =
-        folders.into_iter().partition(|name| crate::platform::installed::valid_title_id(name));
+    names.sort();
+    names
+}
+
+/// A PBP path that cannot go into the list file (one line, tab-separated)
+/// or the boot request, or that the plugin would refuse (`psp-boot/main.c`).
+fn unusable_path(path: &str) -> bool {
+    path.len() > 200 || path.contains(['\t', '\n', '\r', '\\', ':']) || path.split('/').any(|step| step == "." || step == "..")
+}
+
+/// The PSP and PS1 titles to list. `rows` is the home screen's database (None
+/// when it could not be read: then every title counts as having no bubble);
+/// `known` holds the ids already listed.
+pub unsafe fn scan(rows: Option<&[appdb::Bubble]>, known: &[String]) -> Vec<Classic> {
+    let folders = subfolders(GAME_DIR);
     let mut found = Vec::new();
     let mut without_bubble = Vec::new();
-    // Folders left out, with the reason, for the report.
+    // Folders left out, with the reason, for the report; the first's files
+    // are listed too.
     let mut skipped: Vec<(String, String)> = Vec::new();
+    // Folders left out for their name and category (homebrew).
+    let mut other_names: Vec<String> = Vec::new();
+    // Games found in a category folder, and in a folder named otherwise.
+    let (mut nested, mut by_disc_id) = (0, 0);
+    let mut categories = 0;
     crate::platform::installed::scan_phase("psp");
-    for id in &ids {
+    for name in &folders {
         crate::platform::installed::scan_step();
-        if known.contains(id) {
-            skipped.push((id.clone(), String::from("listedElsewhere")));
-            continue;
-        }
-        // A folder with no readable PBP (an update or DLC folder, a
-        // half-copied game) is not a title.
-        let sfo = match read_sfo(id) {
-            Ok(sfo) => sfo,
+        let folder = format!("{GAME_DIR}/{name}");
+        // The PBPs this folder holds: its own, else its folders' (a
+        // category folder).
+        let mut pbps: Vec<(String, String, Vec<u8>)> = Vec::new();
+        match read_sfo(&format!("{folder}/EBOOT.PBP")) {
+            Ok(sfo) => pbps.push((name.clone(), folder, sfo)),
+            Err(reason) if reason == "noEboot" => {
+                for inner in subfolders(&folder) {
+                    let path = format!("{folder}/{inner}");
+                    match read_sfo(&format!("{path}/EBOOT.PBP")) {
+                        Ok(sfo) => pbps.push((inner, path, sfo)),
+                        Err(reason) if reason == "noEboot" => {}
+                        Err(reason) => skipped.push((path, reason)),
+                    }
+                }
+                if pbps.is_empty() {
+                    // An update or DLC folder, a half-copied game, or an
+                    // empty category.
+                    skipped.push((folder, reason));
+                    continue;
+                }
+                categories += 1;
+            }
             Err(reason) => {
-                skipped.push((id.clone(), reason));
+                skipped.push((folder, reason));
                 continue;
             }
-        };
-        let row = rows.and_then(|rows| rows.iter().find(|row| &row.title_id == id));
-        if row.is_none() {
-            without_bubble.push(id.clone());
         }
-        let title = row
-            .map(|row| row.title.clone())
-            .filter(|title| !title.is_empty())
-            .or_else(|| crate::platform::installed::sfo_string(&sfo, "TITLE").map(|title| appdb::one_line(&title)))
-            .filter(|title| !title.is_empty())
-            .unwrap_or_else(|| id.clone());
-        let category = crate::platform::installed::sfo_string(&sfo, "CATEGORY");
-        let platform = if category.as_deref() == Some("ME") { "psx" } else { "psp" };
-        found.push(Classic { title_id: id.clone(), title, platform, bubble: row.is_some(), image: None });
+        for (name, folder, sfo) in pbps {
+            let top = folder.matches('/').count() == 2;
+            let category = crate::platform::installed::sfo_string(&sfo, "CATEGORY");
+            let named = crate::platform::installed::valid_title_id(&name);
+            let id = if named {
+                name.clone()
+            } else if category.as_deref().is_some_and(|category| GAME_CATEGORIES.contains(&category)) {
+                match crate::platform::installed::sfo_string(&sfo, "DISC_ID").filter(|id| crate::platform::installed::valid_title_id(id)) {
+                    Some(id) => id,
+                    None => {
+                        skipped.push((folder, String::from("noDiscId")));
+                        continue;
+                    }
+                }
+            } else {
+                other_names.push(folder);
+                continue;
+            };
+            if known.contains(&id) {
+                skipped.push((folder, String::from("listedElsewhere")));
+                continue;
+            }
+            if found.iter().any(|item: &Classic| item.title_id == id) {
+                skipped.push((folder, format!("duplicate {id}")));
+                continue;
+            }
+            let eboot = format!("{folder}/EBOOT.PBP");
+            if unusable_path(&eboot) {
+                skipped.push((folder, String::from("name")));
+                continue;
+            }
+            // Only a title in its own `PSP/GAME/<id>` folder has a bubble:
+            // the system installs there.
+            let own = top && named;
+            let row = rows.filter(|_| own).and_then(|rows| rows.iter().find(|row| row.title_id == id));
+            if row.is_none() {
+                without_bubble.push(id.clone());
+            }
+            let title = row
+                .map(|row| row.title.clone())
+                .filter(|title| !title.is_empty())
+                .or_else(|| crate::platform::installed::sfo_string(&sfo, "TITLE").map(|title| appdb::one_line(&title)))
+                .filter(|title| !title.is_empty())
+                .unwrap_or_else(|| id.clone());
+            let platform = if category.as_deref() == Some("ME") { "psx" } else { "psp" };
+            if !top {
+                nested += 1;
+            }
+            if !named {
+                by_disc_id += 1;
+            }
+            found.push(Classic {
+                title_id: id,
+                title,
+                platform,
+                bubble: row.is_some(),
+                image: None,
+                eboot: (!own).then_some(eboot),
+            });
+        }
     }
     let psx = found.iter().filter(|item| item.platform == "psx").count();
     REPORT = format!(
         "PSP stick={},PSP folders={},PSP titles={},PSP psx={psx},PSP psp={},PSP noBubble={}",
         report_value(ms0()),
-        ids.len(),
+        folders.len(),
         found.len(),
         found.len() - psx,
         without_bubble.len()
     );
+    if categories > 0 {
+        REPORT.push_str(&format!(",PSP categories={categories},PSP inCategories={nested}"));
+    }
+    if by_disc_id > 0 {
+        REPORT.push_str(&format!(",PSP byDiscId={by_disc_id}"));
+    }
     if rows.is_none() {
         REPORT.push_str(",PSP source=none");
     }
@@ -299,10 +397,10 @@ pub unsafe fn scan(rows: Option<&[appdb::Bubble]>, known: &[String]) -> Vec<Clas
     // one, which show what it holds in place of an EBOOT.PBP.
     if !skipped.is_empty() {
         REPORT.push_str(&format!(",PSP skipped={}", skipped.len()));
-        for (id, reason) in skipped.iter().take(SKIPPED_SHOWN) {
-            REPORT.push_str(&format!(",PSP skip={} {}", report_value(id), report_value(reason)));
+        for (folder, reason) in skipped.iter().take(SKIPPED_SHOWN) {
+            REPORT.push_str(&format!(",PSP skip={} {}", report_value(folder), report_value(reason)));
         }
-        let files = appdb::folder_files(&on_stick(&format!("PSP/GAME/{}", skipped[0].0)));
+        let files = appdb::folder_files(&on_stick(&skipped[0].0));
         for (name, size) in files.iter().take(FILES_SHOWN) {
             REPORT.push_str(&format!(",PSP file={} {}", report_value(name), report_value(size)));
         }
@@ -323,19 +421,11 @@ pub unsafe fn scan(rows: Option<&[appdb::Bubble]>, known: &[String]) -> Vec<Clas
     found
 }
 
-/// How many steps the PSP and PS1 part of a scan takes: one per title-id
-/// folder in `PSP/GAME` and one per file under `ISO`, as `scan` counts them.
+/// How many steps the PSP and PS1 part of a scan takes: one per folder in
+/// `PSP/GAME` and one per file under `ISO`, as `scan` counts them. A
+/// category folder's games take no steps of their own.
 pub fn item_count() -> u32 {
-    let folders = fs::read_dir(on_stick("PSP/GAME"))
-        .map(|entries| {
-            entries
-                .flatten()
-                .filter(|entry| entry.metadata().is_ok_and(|meta| meta.is_dir()))
-                .filter(|entry| entry.file_name().to_str().is_some_and(crate::platform::installed::valid_title_id))
-                .count()
-        })
-        .unwrap_or(0);
-    (folders + image_files().len()) as u32
+    (subfolders(GAME_DIR).len() + image_files().len()) as u32
 }
 
 /// Folder of disc images under the memory stick; its subfolders are read too,
@@ -422,7 +512,7 @@ unsafe fn scan_images(known: &[String], found: &mut Vec<Classic>) {
             .map(|title| appdb::one_line(&title))
             .filter(|title| !title.is_empty())
             .unwrap_or_else(|| id.clone());
-        found.push(Classic { title_id: id, title, platform: "psp", bubble: false, image: Some(path) });
+        found.push(Classic { title_id: id, title, platform: "psp", bubble: false, image: Some(path), eboot: None });
     }
     let listed = found.iter().filter(|item| item.image.is_some()).count();
     REPORT.push_str(&format!(",ISO files={images},ISO titles={listed}"));
@@ -534,9 +624,10 @@ pub fn enable_plugin() -> bool {
 
 /// Write the request for this title, once the plugin is on (`plugin_state`).
 /// `platform` is `psp` or `psx`; `image` is a disc image's path under the
-/// memory stick, for a game in one. Called once the launch is accepted, before the frame that
+/// memory stick, for a game in one; `eboot` the PBP's path under it, for a
+/// game outside its own `PSP/GAME/<title id>` folder. Called once the launch is accepted, before the frame that
 /// shows it; the request goes to Adrenaline in `installed::finish_launch`.
-pub unsafe fn request_boot(title_id: &str, platform: &str, image: Option<&str>) -> bool {
+pub unsafe fn request_boot(title_id: &str, platform: &str, image: Option<&str>, eboot: Option<&str>) -> bool {
     if plugin_state() != "on" {
         return false;
     }
@@ -560,7 +651,10 @@ pub unsafe fn request_boot(title_id: &str, platform: &str, image: Option<&str>) 
                 if boot_bin { "BOOT.BIN" } else { "-" }
             )
         }
-        None => format!("{}\n{platform}\n{}\n", tick.tick, ms0_eboot_path(title_id)),
+        None => {
+            let eboot = eboot.map(String::from).unwrap_or_else(|| eboot_path(title_id));
+            format!("{}\n{platform}\nms0:/{eboot}\n", tick.tick)
+        }
     };
     let written = fs::create_dir_all(on_stick(REQUEST_DIR)).and_then(|_| fs::write(on_stick(REQUEST_FILE), request));
     if let Err(error) = written {
