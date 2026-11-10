@@ -663,7 +663,7 @@ fn with_favourites(mut titles: Vec<Title>) -> Vec<Title> {
 /// folder category's game has the launch `folder` and a playlist game's
 /// columns; a release before folder categories scans over a list with one.
 /// A PSP or PS1 game outside its own `PSP/GAME/<title id>` folder has the
-/// launch `pbp` and its PBP's path; a release before 0.6.2 scans over a list
+/// launch `pbp` and its PBP's path; a release before 0.6.1-beta.2 scans over a list
 /// with one.
 #[cfg(feature = "data-fs")]
 const LIST_HEADER: &str = "pocket-shelf titles 7";

@@ -1,6 +1,6 @@
 # Repository Instructions
 
-Pocket Shelf is a PS Vita launcher written in Rust (`POCKTSHLF`; latest release 0.6.1-beta.1). Read [`docs/NOTES.md`](docs/NOTES.md) first: what the hardware, the firmware, Adrenaline and RetroArch do, what has been verified where, and how to test. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) describes the crates and the drawing model; [`docs/PLAN.md`](docs/PLAN.md) records the port from PocketJS and lists the open follow-ups.
+Pocket Shelf is a PS Vita launcher written in Rust (`POCKTSHLF`; latest release 0.6.1-beta.2). Read [`docs/NOTES.md`](docs/NOTES.md) first: what the hardware, the firmware, Adrenaline and RetroArch do, what has been verified where, and how to test. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) describes the crates and the drawing model; [`docs/PLAN.md`](docs/PLAN.md) records the port from PocketJS and lists the open follow-ups.
 
 ## Working here
 
