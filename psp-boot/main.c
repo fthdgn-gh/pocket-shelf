@@ -17,6 +17,9 @@
  * then up, as when the user picks a game from it; it shows for a moment).
  * The boot itself is done the way the XMB does it:
  *   - a PSP EBOOT: apitype 0x141, key "game";
+ *   - a PSP EBOOT holding a PSN disc image (DATA.PSAR starts "NPUMDIMG"):
+ *     apitype 0x123 (0x124 with a PBOOT.PBP), key "umdemu", argument
+ *     disc0:/PSP_GAME/SYSDIR/EBOOT.BIN, the firmware's NP9660;
  *   - a PS1 EBOOT: apitype 0x144, key "pops";
  *   - a disc image (ISO, CSO): the image set as the UMD file, the ISO
  *     driver the user chose in Adrenaline's settings (NP9660 when they cannot
@@ -77,12 +80,16 @@ StartModuleHandler sctrlHENSetStartModuleHandler(StartModuleHandler handler);
 
 #define APITYPE_DISC 0x120
 #define APITYPE_DISC_EMU_MS1 0x123
+/* A PSN disc image with a PBOOT.PBP update (PSP_INIT_APITYPE_UMD_EMU_MS2). */
+#define APITYPE_DISC_EMU_MS2 0x124
 #define APITYPE_MS_GAME 0x141
 /* PSP_INIT_APITYPE_MS_PS1 in the PSP SDK. */
 #define APITYPE_MS_PSX 0x144
 /* sctrlSESetBootConfFileIndex: NP9660 is 3 in both Adrenalines; the others
  * differ (see iso_driver). */
 #define BOOT_NP9660 3
+/* The firmware's own boot config, 0 in both Adrenalines. */
+#define BOOT_NORMAL 0
 #define UMD_TYPE_GAME 0x10
 
 /* Name-hash NIDs (the first four bytes of the name's SHA-1, little endian). */
@@ -362,7 +369,77 @@ static int boot_image(const char *boot_file, int has_boot_bin) {
 	return sctrlKernelLoadExecVSHWithApitype(apitype, boot_path, &param);
 }
 
+/* Whether the EBOOT.PBP at `path` carries a PSN disc image: its DATA.PSAR
+ * (offset at byte 0x24 of the PBP header) starts with "NPUMDIMG". PSN games
+ * and the PBPs ISO-to-EBOOT tools make are of this kind; homebrew is not. */
+static int is_psn_image(void) {
+	SceUID fd = sceIoOpen(path, PSP_O_RDONLY, 0);
+	if (fd < 0) {
+		return 0;
+	}
+	unsigned char header[0x28];
+	char magic[8];
+	int found = 0;
+	if (sceIoRead(fd, header, sizeof(header)) == (int)sizeof(header) && memcmp(header, "\0PBP", 4) == 0) {
+		unsigned int psar = header[0x24] | header[0x25] << 8 | header[0x26] << 16 | (unsigned int)header[0x27] << 24;
+		if (sceIoLseek32(fd, (int)psar, PSP_SEEK_SET) == (int)psar && sceIoRead(fd, magic, sizeof(magic)) == (int)sizeof(magic)) {
+			found = memcmp(magic, "NPUMDIMG", 8) == 0;
+		}
+	}
+	sceIoClose(fd);
+	return found;
+}
+
+/* Boot a PSN disc image as the system does (apitype 0x123, "NP-9660 game on
+ * Memory Stick", or 0x124 with a PBOOT.PBP update next to it): the PBP is
+ * the file, disc0:/PSP_GAME/SYSDIR/EBOOT.BIN (or the PBOOT.PBP) the
+ * argument, key "umdemu", the normal boot config and no UMD file, so the
+ * firmware's own NP9660 reads the image. As ARK-4's launcher does
+ * (`Eboot::executePSN`). Booted as homebrew (0x141), such a game went back
+ * to the XMB on a user's console; isage's Adrenaline also forces the user's
+ * ISO driver on 0x141. */
+static int boot_psn(void) {
+	void (*set_umd_file)(const char *) = system_control(NID_SET_UMD_FILE);
+	int (*set_boot_conf)(int) = system_control(NID_SET_BOOT_CONF);
+	if (set_umd_file) {
+		set_umd_file("");
+	}
+	if (set_boot_conf) {
+		set_boot_conf(BOOT_NORMAL);
+	}
+	int apitype = APITYPE_DISC_EMU_MS1;
+	boot_path[0] = 0;
+	append(boot_path, sizeof(boot_path), DISC_SYSDIR "EBOOT.BIN");
+	char *argument = boot_path;
+	/* The update sits next to the EBOOT: the path with its file name changed. */
+	static char pboot[256];
+	pboot[0] = 0;
+	append(pboot, sizeof(pboot), path);
+	size_t length = strlen(pboot);
+	size_t suffix = sizeof(EBOOT_SUFFIX) - 1;
+	if (length > suffix) {
+		pboot[length - suffix] = 0;
+		append(pboot, sizeof(pboot), "/PBOOT.PBP");
+		SceIoStat stat;
+		if (sceIoGetstat(pboot, &stat) >= 0) {
+			apitype = APITYPE_DISC_EMU_MS2;
+			argument = pboot;
+		}
+	}
+	log_line(apitype == APITYPE_DISC_EMU_MS2 ? "psn image with PBOOT.PBP" : "psn image");
+	struct SceKernelLoadExecVSHParam param;
+	memset(&param, 0, sizeof(param));
+	param.size = sizeof(param);
+	param.args = strlen(argument) + 1;
+	param.argp = argument;
+	param.key = "umdemu";
+	return sctrlKernelLoadExecVSHWithApitype(apitype, path, &param);
+}
+
 static int boot_eboot(int psx) {
+	if (!psx && is_psn_image()) {
+		return boot_psn();
+	}
 	struct SceKernelLoadExecVSHParam param;
 	memset(&param, 0, sizeof(param));
 	param.size = sizeof(param);

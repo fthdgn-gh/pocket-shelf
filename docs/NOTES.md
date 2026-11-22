@@ -185,7 +185,13 @@ taiHEN plugins (Console start), and NEON results (below).
   `ux0:/data/EMU4VITAPLUS/<short name>/favourite.ini` (SimpleIni: `path`
   folder, `name` file, `rom_name`); they are read at every start, after the
   list (`with_favourites`), not saved in `titles.tsv`, and never written.
-  `finish_launch` closes a running Emu4Vita++ first. **Not yet confirmed on
+  `finish_launch` closes a running Emu4Vita++ first. **Archives:** the URI
+  passes `--rom` alone, and a core unpacks a `.zip` or `.7z` only when also
+  given `--entry_name` and `--crc32` (`LoadRom` in
+  `frontend/source/emu/emulator.cpp`), so a zipped SNES or Mega Drive game
+  gave a black screen (a user's report). Such a game opens in RetroArch when
+  RetroArch can start it (`emu4vita::cannot_open`; the arcade cores and
+  DOSBox Pure read zips themselves and keep Emu4Vita++). **Not yet confirmed on
   hardware**: the launch URI, the favourites and the box art Emu4Vita++
   downloads (`cache/thumbnails/<console>/<rom_name>.png`).
 - **Which app opens a game** both can open: SELECT ▸ Games ▸ Open games
