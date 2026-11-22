@@ -300,6 +300,15 @@ stick at each launch when it differs.
   `ms0:/PSP/GAME/` or `ms0:/ISO/`, and boots it (`0x141` game, `0x144` PS1;
   an image via `SetUmdFile` and the user's ISO driver setting, as each
   Adrenaline's vshctrl does).
+- **PSN EBOOTs** (a `DATA.PSAR` that starts with `NPUMDIMG`: PSN games and
+  the PBPs ISO-to-EBOOT tools make, which need npdrm_free) boot as the
+  firmware boots them: apitype `0x123` (`0x124` with a `PBOOT.PBP` next to
+  the EBOOT, which becomes the argument), key `umdemu`, argument
+  `disc0:/PSP_GAME/SYSDIR/EBOOT.BIN`, the normal boot config (0 in both
+  Adrenalines) and no UMD file, as ARK-4's `Eboot::executePSN`. Booted as
+  `0x141`, a user's PSN EBOOTs went back to the XMB and the Vita needed a
+  hard reset; isage's Adrenaline also forces the ISO driver on `0x141`.
+  `boot.log` says `psn image`. **Not yet confirmed on hardware.**
 - **When the plugin boots.** From a thread at `module_start`, the first
   launches worked and then one hung on a black screen until the Vita was
   restarted (it raced the XMB's modules). From the start-module handler at

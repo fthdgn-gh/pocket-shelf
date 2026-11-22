@@ -1087,9 +1087,12 @@ pub unsafe fn infos() -> Vec<shelf_core::host::TitleInfo> {
             platform: String::from(item.platform),
             adrenaline: item.adrenaline,
             console: item.retro.as_ref().map(|retro| retro.console.clone()),
+            // A game in an archive Emu4Vita++'s core cannot open from its
+            // launch URI opens in RetroArch when RetroArch can start it.
             opens: item.retro.as_ref().map_or_else(Default::default, |retro| shelf_core::host::Emulators {
                 retroarch: !retro.core.is_empty(),
-                emu4vita: !retro.emu.is_empty(),
+                emu4vita: !retro.emu.is_empty()
+                    && (retro.core.is_empty() || !crate::platform::emu4vita::cannot_open(&retro.emu, &retro.path)),
                 standalone: standalone_for(&retro.console, installed, &retro.path),
             }),
             emu_favorite: item.retro.as_ref().is_some_and(|retro| retro.favourite),

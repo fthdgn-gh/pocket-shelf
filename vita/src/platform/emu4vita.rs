@@ -261,6 +261,31 @@ pub fn launch_uri(core: &str, path: &str) -> String {
     format!("psgm:play?titleid={EMU4VITA_ID}&core={core}&rom={}", escape(path))
 }
 
+/// Emu4Vita++'s cores that read a `.zip` themselves: the arcade cores (a
+/// ROM set is a zip) and DOSBox Pure.
+const READS_ARCHIVES: &[&str] = &[
+    "fba_lite",
+    "fbalpha2012",
+    "fbneo",
+    "km_fbneo_xtreme_amped",
+    "mame2000",
+    "mame2003",
+    "mame2003_plus",
+    "km_mame2003_xtreme_amped",
+    "dosbox_pure",
+];
+
+/// Whether `core` started through the launch URI cannot open `path`: a
+/// `.zip` or `.7z` for a core that does not read archives. The URI passes
+/// `--rom` alone; a core unpacks an archive only when also given
+/// `--entry_name` and `--crc32` (`frontend/source/emu/emulator.cpp`,
+/// `LoadRom`), which the URI does not carry, so the core gets the archive
+/// and shows a black screen.
+pub fn cannot_open(core: &str, path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    (lower.ends_with(".zip") || lower.ends_with(".7z")) && !READS_ARCHIVES.contains(&core)
+}
+
 /// `%`, `&` and `+` as `%XX`: Emu4Vita++ ends a value at `&` and decodes
 /// `%XX` and `+` (a space) in it.
 fn escape(path: &str) -> String {
@@ -576,6 +601,18 @@ mod tests {
         assert_eq!(found[1].art, "");
         assert_eq!(found[2].art, format!("{}/cache/thumbnails/GBC/A_B.png", install.roots.data));
         assert_eq!(report, "Emu4Vita cores=2,Emu4Vita favourites=3,Emu4Vita favouritesMissing=1");
+    }
+
+    #[test]
+    fn archives_only_for_cores_that_read_them() {
+        assert!(cannot_open("snes9x", "ux0:/roms/snes/A.zip"));
+        assert!(cannot_open("genesis_plus_gx", "ux0:/roms/md/A.7Z"));
+        assert!(!cannot_open("snes9x", "ux0:/roms/snes/A.sfc"));
+        assert!(!cannot_open("fbneo", "ux0:/roms/arcade/mslug.zip"));
+        assert!(!cannot_open("dosbox_pure", "ux0:/roms/dos/doom.zip"));
+        for core in READS_ARCHIVES {
+            assert!(CORES.iter().any(|(name, _, _)| name == core), "{core}");
+        }
     }
 
     #[test]
